@@ -126,12 +126,21 @@ class Policy:
 
     # -- Entscheidung ------------------------------------------------------
 
+    #: Anhebung, wenn fremder Inhalt im Kontext steht.
+    _ESCALATION: dict[ApprovalLevel, ApprovalLevel] = {
+        ApprovalLevel.AUTO: ApprovalLevel.AUTO,
+        ApprovalLevel.NOTIFY: ApprovalLevel.CONFIRM,
+        ApprovalLevel.CONFIRM: ApprovalLevel.CONFIRM_STRICT,
+        ApprovalLevel.CONFIRM_STRICT: ApprovalLevel.CONFIRM_STRICT,
+    }
+
     def decide(
         self,
         tool: str,
         action_class: ActionClass,
         arguments: dict[str, Any],
         constraints: list[str] | None = None,
+        tainted: bool = False,
     ) -> Decision:
         reasons: list[str] = []
         level = self._overrides.get(tool, self._levels[action_class])
@@ -147,6 +156,19 @@ class Policy:
                     action_class,
                     [f"Verstößt gegen eine gesetzte Grenze: {constraint!r}"],
                 )
+
+        # Nach fremdem Inhalt ist nicht mehr feststellbar, ob eine Absicht vom
+        # Nutzer stammt oder aus dem gelesenen Text. Reines Lesen bleibt frei —
+        # alles mit Wirkung wird vorgelegt. Diese Ebene verlässt sich nicht
+        # darauf, dass das Modell den Angriff erkennt.
+        if tainted and action_class is not ActionClass.READ:
+            escalated = self._ESCALATION[level]
+            if escalated is not level:
+                reasons.append(
+                    "Zuvor wurden fremde Inhalte gelesen. Solange die im Kontext "
+                    "stehen, wird jede wirksame Aktion vorgelegt."
+                )
+                level = escalated
 
         return Decision(level, action_class, reasons)
 

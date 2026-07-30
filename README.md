@@ -11,8 +11,9 @@ server, no setup.
 
 > **Status: early, but end-to-end.** You can talk to it, it remembers with
 > provenance, it reaches for current information, and nothing leaves your
-> machine without you confirming exactly what goes out. Missing: real mail and
-> calendar channels, computer-use, and memory consolidation.
+> machine without you confirming exactly what goes out. It defends against
+> prompt injection, keeps keys in the OS keychain, and backs itself up.
+> Missing: real mail and calendar channels, computer-use, memory consolidation.
 
 Detailed documentation is in German under [`docs/`](docs/).
 
@@ -49,6 +50,12 @@ flowchart LR
 writes report afterwards, and anything leaving your machine requires you to
 retype the recipient. Every outcome is logged — including the refusals.
 
+**Untrusted input is contained.** Web pages and files are fetched into confined
+paths, framed as data rather than instructions, and — the layer that actually
+holds — once foreign content is in context, every consequential action gets
+escalated to an approval. That last one does not rely on the model spotting the
+attack. See [`docs/05-sicherheit.md`](docs/05-sicherheit.md).
+
 **Two stores, deliberately.** The authoritative record lives in SQLite: exact,
 addressable by ID, readable without invoking a model. cognee is only the
 semantic index — hits are always resolved against the record, so the graph can
@@ -63,7 +70,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 50 tests: memory rules, policy, audit, agent loop
+make test            # 84 tests: memory, policy, audit, agent, security, backup
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -94,14 +101,39 @@ make app-build       # bundles the sidecar and builds the app
 ```
 
 `make app-build` produces a `.dmg` and `.app` on macOS. It must run **on** macOS
-— a Mac bundle cannot be built from Linux or Windows. Shipping to users also
-needs signing and notarisation; see [ADR 0006](docs/adr/0006-tauri-desktop.md).
+— a Mac bundle cannot be built from Linux or Windows.
+
+For releases, [`.github/workflows/build-macos.yml`](.github/workflows/build-macos.yml)
+does this on a macOS runner, signs and notarises the result, and verifies with
+`spctl` that Gatekeeper would actually let it through. Without Apple secrets it
+still builds, marks the artifact unsigned, and warns — so you can get to a first
+artifact before you have a developer account.
 
 ## Verifying
 
 ```bash
 make check           # tests + schema validation + cargo check
 ```
+
+84 tests, no network and no model required — including a test that plays out a
+full prompt-injection attack and asserts nothing escaped.
+
+## Keeping it safe
+
+```bash
+make secrets-migrate  # move API keys from .env into the OS keychain
+make backup           # consistent snapshot of the self-model
+```
+
+File access is off unless you grant it explicitly:
+
+```bash
+export ICARUS_FILE_ROOTS="$HOME/Documents/icarus"
+```
+
+Empty means no file access at all. There is deliberately no default like your
+home directory — that would be the convenience setting that removes the
+protection.
 
 ## Repository layout
 
@@ -116,11 +148,16 @@ sidecar/             Python: memory, policy, agent
     providers.py     OpenAI-compatible and Anthropic, one interface
     tools.py         Web, files, time, memory, outward actions
     agent.py         Ties it together; proposes, never executes directly
+    security.py      Path confinement, SSRF guard, untrusted-input handling
+    secrets.py       OS keychain: macOS, Windows DPAPI, secret-tool
+    backup.py        Snapshots, restore, encrypted export
     server.py        Loopback-only HTTP API for the app
-  tests/             50 tests, no network and no model required
+  tests/             84 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
+packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
-docs/                Architecture, self-model, delegation, roadmap, ADRs
+docs/                Architecture, self-model, delegation, security, roadmap, ADRs
+.github/workflows/   CI, and a signed + notarised macOS build
 ```
 
 ## Decisions

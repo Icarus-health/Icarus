@@ -23,14 +23,18 @@ from pydantic import BaseModel, Field
 from .agent import Agent
 from .audit import AuditLog
 from .backends import CogneeBackend
+from .backup import BackupError, export_model, import_model, list_snapshots, snapshot
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
 from .policy import Policy, PolicyError
 from .providers import from_env as provider_from_env
+from .secrets import Keychain, load_into_env
+from .security import file_roots_from_env
 from .store import ConflictError, SelfModelStore
 from .tools import build_registry
 
 TOKEN_ENV = "ICARUS_SIDECAR_TOKEN"
 DATA_ENV = "ICARUS_DATA_DIR"
+ROOTS_ENV = "ICARUS_FILE_ROOTS"
 
 
 def _data_dir() -> Path:
@@ -78,6 +82,15 @@ class ResolveIn(BaseModel):
     confirmation: str | None = None
 
 
+class ExportIn(BaseModel):
+    passphrase: str | None = None
+
+
+class VerifyIn(BaseModel):
+    path: str
+    passphrase: str | None = None
+
+
 def create_app(
     store: SelfModelStore | None = None,
     agent: Agent | None = None,
@@ -96,11 +109,14 @@ def create_app(
     app.state.audit = audit
 
     if agent is None:
+        # Schlüssel aus dem Schlüsselbund holen, bevor der Anbieter gebaut wird.
+        app.state.keychain = Keychain()
+        app.state.loaded_secrets = load_into_env(app.state.keychain)
         agent = Agent(
             store=store,
             policy=Policy(),
             audit=audit,
-            tools=build_registry(store),
+            tools=build_registry(store, file_roots=file_roots_from_env(os.environ.get(ROOTS_ENV))),
             provider=provider_from_env(),
         )
     app.state.agent = agent
@@ -130,6 +146,10 @@ def create_app(
             "chat": provider is not None,
             "provider": getattr(provider, "name", None),
             "model": getattr(provider, "model", None),
+            # Sicherheitsrelevanter Zustand, damit die Oberfläche ihn zeigen
+            # kann, statt dass der Nutzer ihn erraten muss.
+            "keychain": getattr(getattr(app.state, "keychain", None), "backend", "none"),
+            "file_roots": [str(p) for p in file_roots_from_env(os.environ.get(ROOTS_ENV))],
         }
 
     # -- Assistent ---------------------------------------------------------
@@ -230,6 +250,51 @@ def create_app(
     @app.get("/export", dependencies=guard)
     def export() -> dict[str, Any]:
         return app.state.store.export().to_dict()
+
+    # -- Sicherung ---------------------------------------------------------
+
+    @app.get("/backups", dependencies=guard)
+    def backups() -> list[dict[str, Any]]:
+        return list_snapshots(_data_dir() / "sicherungen")
+
+    @app.post("/backups", dependencies=guard, status_code=201)
+    def create_backup() -> dict[str, Any]:
+        try:
+            path = snapshot(_data_dir() / "self-model.sqlite3", _data_dir() / "sicherungen")
+        except BackupError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"path": str(path), "name": path.name}
+
+    @app.post("/export/file", dependencies=guard)
+    def export_file(body: ExportIn) -> dict[str, Any]:
+        """Schreibt einen Export, optional verschlüsselt.
+
+        Ohne Passphrase entsteht lesbares JSON — das ist gewollt, weil ein
+        Format, das nur dieses Programm lesen kann, in zehn Jahren wertlos ist.
+        """
+        payload = export_model(app.state.store.export().to_dict(), body.passphrase)
+        target = _data_dir() / "exporte"
+        target.mkdir(parents=True, exist_ok=True)
+        suffix = "icarus" if body.passphrase else "json"
+        path = target / f"selbstmodell-{datetime.now():%Y%m%dT%H%M%S}.{suffix}"
+        path.write_text(payload, encoding="utf-8")
+        return {"path": str(path), "encrypted": bool(body.passphrase)}
+
+    @app.post("/export/verify", dependencies=guard)
+    def verify_export(body: VerifyIn) -> dict[str, Any]:
+        """Prüft, ob ein Export lesbar ist — bevor man sich darauf verlässt.
+
+        Eine Sicherung, die niemand je zurückgelesen hat, ist keine Sicherung.
+        """
+        try:
+            document = import_model(Path(body.path).read_text(encoding="utf-8"), body.passphrase)
+        except (BackupError, OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {
+            "ok": True,
+            "schema_version": document.get("schema_version"),
+            "assertions": len(document.get("assertions", [])),
+        }
 
     return app
 

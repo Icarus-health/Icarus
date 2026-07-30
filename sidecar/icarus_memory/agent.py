@@ -87,6 +87,13 @@ class Agent:
         self._max_sensitivity = max_sensitivity
         self._max_rounds = max_rounds
         self._history: list[dict[str, Any]] = []
+        self._tainted = False
+        """Steht fremder Inhalt im Kontext dieser Runde?
+
+        Wird gesetzt, sobald ein Werkzeug Text aus fremder Quelle geliefert hat,
+        und beim nächsten Nutzerbeitrag zurückgesetzt. Alles, was danach in
+        derselben Runde passiert, gilt als möglicherweise fremdgesteuert.
+        """
 
     @property
     def provider(self) -> Provider | None:
@@ -143,6 +150,9 @@ class Agent:
                 )
             )
 
+        # Ein neuer Beitrag des Nutzers ist eine vertrauenswürdige Absicht und
+        # hebt die Kontamination der vorigen Runde auf.
+        self._tainted = False
         self._history.append({"role": "user", "content": message})
         turn = Turn()
         schemas = [t.schema() for t in self._tools.values()]
@@ -208,6 +218,9 @@ class Agent:
             tool.action_class,
             call.arguments,
             constraints_from_store(self._store),
+            # Sobald fremder Text im Kontext steht, ist jede folgende Absicht
+            # womöglich von dort diktiert. Die Policy hebt dann die Stufe an.
+            tainted=self._tainted,
         )
 
         if decision.denied:
@@ -231,7 +244,10 @@ class Agent:
             turn.approvals.append(approval)
             return "Wartet auf Freigabe durch den Nutzer."
 
-        return self._execute(tool, call.arguments, decision.level, turn, model_name)
+        result = self._execute(tool, call.arguments, decision.level, turn, model_name)
+        if tool.returns_untrusted:
+            self._tainted = True
+        return result
 
     def _execute(
         self,

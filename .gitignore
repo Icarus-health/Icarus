@@ -3,10 +3,13 @@
 .env.*
 !.env.example
 
-# Laufzeitdaten des Selbstmodells
+# Laufzeitdaten des Selbstmodells — niemals committen
 .icarus-data/
 *.sqlite3
 *.log
+sicherungen/
+exporte/
+*.icarus
 
 # Python
 __pycache__/

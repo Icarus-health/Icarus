@@ -57,14 +57,33 @@ app-dev: ## App im Entwicklungsmodus starten (braucht sidecar-dev auf dem PATH)
 
 sidecar-binary: ## Sidecar zu einer eigenständigen Binary bündeln
 	$(BIN)/pip install --quiet pyinstaller
-	$(BIN)/pyinstaller --onefile --name icarus-sidecar \
+	$(BIN)/pyinstaller packaging/icarus-sidecar.spec \
 		--distpath app/src-tauri/binaries \
-		--specpath build --workpath build/pyinstaller \
-		sidecar/icarus_memory/server.py
+		--workpath build/pyinstaller --noconfirm
 	@echo "Binary liegt in app/src-tauri/binaries/icarus-sidecar"
+	@echo "Semantische Suche mitliefern: ICARUS_BUNDLE_COGNEE=1 make sidecar-binary"
 
 app-build: sidecar-binary ## App bündeln (auf macOS: .dmg und .app)
 	cd app && npm run tauri build
+
+# -- Sicherheit und Sicherung ----------------------------------------------
+
+secrets-migrate: ## Schlüssel aus .env in den Schlüsselbund übernehmen
+	@$(BIN)/python -c "\
+from pathlib import Path; \
+from icarus_memory.secrets import Keychain, migrate_env_file; \
+kc = Keychain(); \
+print('Schlüsselspeicher:', kc.backend); \
+migrated = migrate_env_file(Path('.env'), kc); \
+print('Übernommen:', ', '.join(migrated) or 'nichts'); \
+print('Die .env kann nun bereinigt werden.') if migrated else None"
+
+backup: ## Snapshot des Selbstmodells anlegen
+	@$(BIN)/python -c "\
+import os; from pathlib import Path; \
+from icarus_memory.backup import snapshot; \
+d = Path(os.environ.get('ICARUS_DATA_DIR', './.icarus-data')); \
+print('Snapshot:', snapshot(d / 'self-model.sqlite3', d / 'sicherungen'))"
 
 clean: ## Build-Artefakte entfernen
 	rm -rf build $(VENV) app/src-tauri/target app/src-tauri/binaries/icarus-sidecar

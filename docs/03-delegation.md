@@ -76,6 +76,10 @@ Wenn die Schicht steht, ist Agent Zero der stärkste offene Kandidat: echter Lin
 
 Die Anbindung erfolgt dann **hinter** der Policy-Schicht, nie direkt an der Oberfläche. Praktisch: Der Computer-Use-Container bekommt keinen eigenen Zugang zu Konnektoren und Secrets, sondern stellt Anträge, die dieselbe Klassifikation durchlaufen wie alles andere.
 
+## Fremde Inhalte
+
+Werkzeuge, die Text aus fremder Quelle liefern, machen die Runde *kontaminiert*: Danach wird jede Aktion mit Wirkung eine Stufe höher eingestuft. Der Grund und die beiden anderen Schutzebenen stehen in [05-sicherheit.md](05-sicherheit.md).
+
 ## Was noch fehlt
 
 - **Keine echten Kanäle.** `mail_senden` existiert samt Freigabeweg, aber ohne angebundenen Versand. Eine erteilte Freigabe endet dann im Protokoll als `failed` mit Begründung — nicht als stiller Erfolg.

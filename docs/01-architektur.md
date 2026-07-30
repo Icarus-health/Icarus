@@ -10,8 +10,8 @@ Aus dieser These folgen vier Säulen. Jeder Baustein wird daran gemessen, nicht 
 |---|---|---|
 | 1 | Überprüfbares Selbstmodell | **Gebaut, im Kern.** Provenienz, Ersetzung, Ablauf und kaskadierender Widerruf laufen und sind getestet. |
 | 2 | Anbieterunabhängiges Gedächtnis | **Gebaut, im Kern.** Der Bestand liegt in lokalem SQLite und überlebt einen Wechsel der Memory-Bibliothek. |
-| 3 | Aktuelle Informationen | **Offen.** Konnektoren für Mail, Kalender, Dateien und Web fehlen. |
-| 4 | Kontrollierte Delegation | **Spezifiziert, nicht gebaut.** Siehe [03-delegation.md](03-delegation.md). |
+| 3 | Aktuelle Informationen | **Teilweise.** Web-Abruf, Dateien und Zeit sind angebunden; Mail und Kalender fehlen. |
+| 4 | Kontrollierte Delegation | **Gebaut.** Aktionsklassen, Freigabestufen, Trockenlauf, anhängendes Audit-Log. |
 
 ## Betriebsform: eine App, kein Stack
 
@@ -23,37 +23,34 @@ Das war nicht immer so. Die erste Fassung dieser Architektur setzte auf einen Do
 
 ```mermaid
 flowchart TD
-    U[Nutzer] --> UI[Tauri-App<br/>System-WebView]
+    U[Nutzer] --> UI["Tauri-App<br/>Gespräch · Gedächtnis · Protokoll"]
+    UI -->|"HTTP auf 127.0.0.1<br/>Token je Start"| AG[Agent]
 
-    UI -->|"HTTP auf 127.0.0.1<br/>Token je Start"| SC[Python-Sidecar]
+    AG -->|"Kontext: nur Gültiges,<br/>gefiltert nach Schutzbedarf"| MODEL["Modell<br/>OpenAI · Anthropic · Ollama"]
+    MODEL -->|"möchte Werkzeug nutzen"| POL[Policy]
 
-    subgraph SC [Sidecar]
-        direction TB
-        LOGIC[Selbstmodell-Logik<br/>Ersetzung · Ablauf · Widerruf]
-        LOGIC --> SQL[(SQLite<br/>verbindlicher Bestand)]
-        LOGIC -.->|nur Suche| COG[cognee<br/>semantischer Index]
-        COG -.-> FILES[(LanceDB · KuzuDB<br/>dateibasiert)]
-    end
+    POL -->|"lesend"| RUN[Ausführung]
+    POL -->|"schreibend"| RUN
+    POL -->|"außenwirksam"| ASK{{"Freigabe<br/>mit Trockenlauf"}}
+    POL -->|"verstößt gegen Grenze"| NO[Abgelehnt]
+    ASK -->|"bestätigt"| RUN
+    ASK -->|"abgelehnt"| NO
 
-    COG -.->|Einordnen, Einbetten| LLM[Modell<br/>OpenAI · Anthropic · Ollama]
+    RUN --> TOOLS["Werkzeuge<br/>Web · Dateien · Zeit · Gedächtnis · Mail"]
+    RUN --> LOG[(Audit-Log<br/>anhängend)]
+    NO --> LOG
 
-    subgraph offen [Noch nicht gebaut]
-        direction TB
-        POL[Policy- und Approval-Layer]
-        CONN[Konnektoren<br/>Mail · Kalender · Dateien]
-        ACT[Computer-Use]
-    end
-
-    UI -.-> POL
-    POL -.-> CONN
-    POL -.-> ACT
-    CONN -.-> LOGIC
+    TOOLS --> LOGIC["Selbstmodell<br/>Ersetzung · Ablauf · Widerruf"]
+    LOGIC --> SQL[(SQLite<br/>verbindlicher Bestand)]
+    LOGIC -.->|nur Suche| COG["cognee<br/>semantischer Index"]
 
     classDef gebaut fill:#dff5e1,stroke:#3b7a4b,color:#14311d
-    classDef fehlt fill:#f5f0dd,stroke:#9a8b3b,color:#3a3316,stroke-dasharray:4 3
-    class UI,LOGIC,SQL,COG,FILES gebaut
-    class POL,CONN,ACT,LLM fehlt
+    classDef tor fill:#f7ecd5,stroke:#a8621f,color:#3a2a12
+    class UI,AG,POL,RUN,TOOLS,LOG,LOGIC,SQL,COG,MODEL gebaut
+    class ASK,NO tor
 ```
+
+Der wichtigste Pfad in diesem Bild ist der, der **nicht** direkt durchgeht: Das Modell kann Werkzeuge vorschlagen, aber nichts auslösen. Zwischen Vorschlag und Ausführung sitzt die Policy, und alles landet im Protokoll — auch das Abgelehnte.
 
 ## Die zwei Speicher, und warum es zwei sind
 
@@ -76,7 +73,21 @@ Die App startet den Python-Sidecar als Kindprozess:
 - Gebunden wird ausschließlich an `127.0.0.1`. Es gibt bewusst keine Option, den Sidecar zu öffnen.
 - Beim Beenden der App wird der Kindprozess terminiert, sonst hält er die Datenbank offen.
 
-Die Schnittstelle ist bewusst klein: Aussagen aufnehmen, verwendbare lesen, suchen, Kette einer Aussage anzeigen, bestätigen, widerrufen, exportieren.
+Die Schnittstelle ist bewusst klein: Aussagen aufnehmen, verwendbare lesen, suchen, Kette anzeigen, bestätigen, widerrufen, exportieren — dazu Gespräch, Freigaben, Protokoll und `/context`.
+
+## Was das Modell zu sehen bekommt
+
+`Agent.context()` baut den Wissensblock, und zwar aus `usable()` — nichts Ersetztes, nichts Abgelaufenes, nichts Widerrufenes. Hier zahlt sich das Selbstmodell konkret aus: Ein flacher Faktenspeicher würde „Wohnt in Hamburg" munter mitliefern, obwohl der Umzug längst erfasst ist.
+
+Zusätzlich greift der Schutzbedarf. Aussagen mit `special_category` gehen **nicht** an ein externes Modell. Dem Modell wird stattdessen gesagt, dass etwas zurückgehalten wurde — eine verschwiegene Lücke wäre schlimmer als eine benannte, weil das Modell sonst aus dem Fehlen falsche Schlüsse zieht.
+
+Der Endpunkt `/context` gibt diesen Block wörtlich aus, und die Oberfläche zeigt ihn unter „Gedächtnis". Der Nutzer soll nachlesen können, was übermittelt wird, statt es glauben zu müssen.
+
+## Anbieter sind austauschbar
+
+Zwei Formen decken praktisch das Feld ab: **OpenAI-kompatibel** — was auch Ollama, LM Studio, vLLM und llama.cpp einschließt — und **Anthropic**. Ein vollständig lokaler Betrieb ist damit eine Frage der Basis-URL, keine Sonderbehandlung.
+
+Der Rest des Systems kennt nur `Provider`, `Reply` und `ToolCall` und weiß nicht, wer antwortet. Das ist Säule 2 auf der Modellseite: Das Gedächtnis liegt ohnehin lokal, und der Anbieter davor lässt sich wechseln, ohne dass die Person dabei verloren geht.
 
 ## Warum die Oberfläche Eigenarbeit ist
 
@@ -88,12 +99,12 @@ Der Report benennt UX-Vereinfachung als größten Zeitfresser und zugleich als e
 
 ## Bewusst offene Stellen
 
-**Policy- und Approval-Layer.** Muss vor jeder Form von Ausführung existieren, nicht danach. Spezifikation in [03-delegation.md](03-delegation.md).
+**Mail und Kalender.** Der Freigabeweg für außenwirksame Aktionen steht und ist geprüft, aber es hängt kein echter Kanal daran. Eine erteilte Freigabe endet heute im Protokoll als `failed` mit Begründung — nicht als stiller Erfolg. Was fehlt, ist die Anbindung samt OAuth, nicht die Kontrolle darüber.
 
-**Konnektoren.** Mail, Kalender, Dateien und Web sind Säule 3. Sobald sie schreibend werden, hängen sie am Approval-Layer.
-
-**Computer-Use.** Agent Zero bleibt der stärkste offene Kandidat, kommt aber erst nach Säule 4. Ein Assistent mit Desktop-Zugriff ohne Freigabemodell ist kein Feature, sondern ein Risiko.
-
-**Gesprächsführung.** Es gibt noch keinen Chat. Die App kann heute Aussagen aufnehmen, anzeigen und widerrufen — sie ist der Gedächtniskern mit Oberfläche, nicht der Assistent.
+**Computer-Use.** Agent Zero bleibt der stärkste Kandidat. Jetzt, wo die Policy steht, ist der Weg dafür frei: Die Anbindung erfolgt hinter der Freigabeschicht, nie direkt an der Oberfläche.
 
 **Verdichtung.** Reflexionen über viele Episoden hinweg — die Ebene, die aus Erinnerungen ein Selbstbild macht — fehlen. Siehe [02-selbstmodell.md](02-selbstmodell.md).
+
+**Grenzen greifen wörtlich.** Ein `constraint` trifft über Werkzeugnamen und Inhaltswörter. Das ist nachvollziehbar und bewusst nicht per Modell ausgelegt — bei harten Grenzen will man keine Auslegung —, aber es erkennt keine Umschreibungen.
+
+**Secrets liegen in `.env`.** Ein Schlüsselbund-Zugriff ist nicht gebaut.

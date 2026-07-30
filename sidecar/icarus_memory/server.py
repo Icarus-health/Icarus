@@ -20,9 +20,14 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from .agent import Agent
+from .audit import AuditLog
 from .backends import CogneeBackend
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
+from .policy import Policy, PolicyError
+from .providers import from_env as provider_from_env
 from .store import ConflictError, SelfModelStore
+from .tools import build_registry
 
 TOKEN_ENV = "ICARUS_SIDECAR_TOKEN"
 DATA_ENV = "ICARUS_DATA_DIR"
@@ -64,14 +69,41 @@ class RedactIn(BaseModel):
     reason: RedactionReason = RedactionReason.USER_REQUEST
 
 
-def create_app(store: SelfModelStore | None = None) -> FastAPI:
-    app = FastAPI(title="Icarus Selbstmodell", version="0.1.0")
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1)
+
+
+class ResolveIn(BaseModel):
+    granted: bool
+    confirmation: str | None = None
+
+
+def create_app(
+    store: SelfModelStore | None = None,
+    agent: Agent | None = None,
+    audit: AuditLog | None = None,
+) -> FastAPI:
+    app = FastAPI(title="Icarus", version="0.1.0")
 
     if store is None:
         backend = CogneeBackend(_data_dir() / "self-model.sqlite3")
         store = SelfModelStore(backend, subject_id="local")
         app.state.backend = backend
     app.state.store = store
+
+    if audit is None:
+        audit = AuditLog(_data_dir() / "audit.sqlite3")
+    app.state.audit = audit
+
+    if agent is None:
+        agent = Agent(
+            store=store,
+            policy=Policy(),
+            audit=audit,
+            tools=build_registry(store),
+            provider=provider_from_env(),
+        )
+    app.state.agent = agent
 
     expected = os.environ.get(TOKEN_ENV)
 
@@ -88,11 +120,57 @@ def create_app(store: SelfModelStore | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, Any]:
         backend = getattr(app.state, "backend", None)
+        provider = app.state.agent.provider
         return {
             "status": "ok",
             "semantic_search": not getattr(backend, "degraded", False),
             "detail": getattr(backend, "degraded_reason", None),
+            # Ohne Modell bleibt der Gedächtniskern voll nutzbar — die
+            # Oberfläche sagt das, statt einen kaputten Chat anzubieten.
+            "chat": provider is not None,
+            "provider": getattr(provider, "name", None),
+            "model": getattr(provider, "model", None),
         }
+
+    # -- Assistent ---------------------------------------------------------
+
+    @app.post("/chat", dependencies=guard)
+    def chat(body: ChatIn) -> dict[str, Any]:
+        return app.state.agent.send(body.message).to_dict()
+
+    @app.get("/context", dependencies=guard)
+    def context() -> dict[str, str]:
+        """Was das Modell über den Nutzer zu sehen bekommt — wörtlich.
+
+        Der Nutzer soll nachlesen können, was übermittelt wird, statt es
+        glauben zu müssen.
+        """
+        return {"context": app.state.agent.context()}
+
+    @app.post("/chat/reset", dependencies=guard, status_code=204)
+    def reset() -> None:
+        app.state.agent.reset()
+
+    # -- Freigaben ---------------------------------------------------------
+
+    @app.get("/approvals", dependencies=guard)
+    def approvals() -> list[dict[str, Any]]:
+        return [a.to_dict() for a in app.state.agent.policy.pending()]
+
+    @app.post("/approvals/{approval_id}", dependencies=guard)
+    def resolve(approval_id: str, body: ResolveIn) -> dict[str, Any]:
+        try:
+            return app.state.agent.resolve(
+                approval_id, body.granted, body.confirmation
+            ).to_dict()
+        except PolicyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # -- Audit -------------------------------------------------------------
+
+    @app.get("/audit", dependencies=guard)
+    def audit_entries(limit: int = 50) -> list[dict[str, Any]]:
+        return app.state.audit.entries(limit)
 
     @app.post("/assertions", dependencies=guard, status_code=201)
     def record(body: RecordIn) -> dict[str, Any]:

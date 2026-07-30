@@ -9,11 +9,10 @@ delegates or performs digital work under explicit control.
 It is a **downloadable desktop app** — macOS first, Windows after. No Docker, no
 server, no setup.
 
-> **Status: early.** The memory core works and is tested: every statement
-> carries its origin, changes supersede rather than overwrite, and revoking a
-> statement takes everything derived from it with it. There is no chat yet, no
-> connectors, and no approval layer. What exists is the part nobody else
-> provides; what's missing is the part everybody else already has.
+> **Status: early, but end-to-end.** You can talk to it, it remembers with
+> provenance, it reaches for current information, and nothing leaves your
+> machine without you confirming exactly what goes out. Missing: real mail and
+> calendar channels, computer-use, and memory consolidation.
 
 Detailed documentation is in German under [`docs/`](docs/).
 
@@ -21,23 +20,34 @@ Detailed documentation is in German under [`docs/`](docs/).
 
 | # | Pillar | Status |
 |---|---|---|
-| 1 | Verifiable self-model — provenance, versioning, revocation | **Core built.** See [`sidecar/`](sidecar/) |
-| 2 | Vendor-independent memory | **Core built.** Authoritative record in local SQLite |
-| 3 | Current information — mail, calendar, files, web | **Open** |
-| 4 | Controlled delegation and execution | **Specified**, see [`docs/03-delegation.md`](docs/03-delegation.md) |
+| 1 | Verifiable self-model — provenance, versioning, revocation | **Built.** Record, supersede, expire, revoke with cascade |
+| 2 | Vendor-independent memory | **Built.** Local SQLite record; OpenAI-compatible, Anthropic or Ollama in front |
+| 3 | Current information | **Partial.** Web fetch, files, time; mail and calendar missing |
+| 4 | Controlled delegation and execution | **Built.** Action classes, dry-run approvals, append-only audit |
 
 ## How it is put together
 
 ```mermaid
 flowchart LR
-    U[User] --> UI[Tauri app<br/>system WebView]
-    UI -->|"127.0.0.1, per-start token"| SC[Python sidecar]
-    SC --> SQL[(SQLite<br/>authoritative record)]
-    SC -.->|search only| COG[cognee<br/>semantic index]
+    U[User] --> UI[Tauri app]
+    UI --> AG[Agent]
+    AG -->|"only valid, sensitivity-filtered"| M[Model]
+    M -->|"wants a tool"| P[Policy]
+    P -->|read, write| R[Execute]
+    P -->|outward| A{{"Approve<br/>with dry-run"}}
+    A -->|confirmed| R
+    R --> L[(Audit log)]
+    R --> SQL[(SQLite record)]
 
     classDef built fill:#dff5e1,stroke:#3b7a4b,color:#14311d
-    class UI,SC,SQL,COG built
+    classDef gate fill:#f7ecd5,stroke:#a8621f,color:#3a2a12
+    class UI,AG,M,P,R,L,SQL built
+    class A gate
 ```
+
+**The model cannot act.** It proposes tools; the policy layer decides. Reads run,
+writes report afterwards, and anything leaving your machine requires you to
+retype the recipient. Every outcome is logged — including the refusals.
 
 **Two stores, deliberately.** The authoritative record lives in SQLite: exact,
 addressable by ID, readable without invoking a model. cognee is only the
@@ -53,16 +63,27 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 27 tests covering the self-model rules
+make test            # 50 tests: memory rules, policy, audit, agent loop
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
 The memory core needs **no API key and no model**. Recording, superseding,
-revoking and exporting all work offline. Only semantic search needs a provider:
+revoking and exporting all work offline; the app says so rather than offering a
+broken chat.
+
+For conversation, point it at any provider — including a fully local one:
+
+```bash
+cp .env.example .env
+# OpenAI:    OPENAI_API_KEY=...
+# Anthropic: ANTHROPIC_API_KEY=...
+# Ollama:    ICARUS_PROVIDER=ollama   (nothing else needed)
+```
+
+For semantic search across your memory:
 
 ```bash
 make sidecar-full    # adds cognee (~950 MB, see ADR 0005)
-cp .env.example .env # then set LLM_API_KEY
 ```
 
 ### Running the app
@@ -85,13 +106,18 @@ make check           # tests + schema validation + cargo check
 ## Repository layout
 
 ```
-sidecar/             Python: the self-model. Logic, storage, local HTTP API
+sidecar/             Python: memory, policy, agent
   icarus_memory/
     model.py         Data model, mirrors schema/self-model.schema.json
     store.py         The rules: supersession, expiry, cascading revocation
     backends.py      SQLite (record) + cognee (semantic index)
+    policy.py        Action classes, approval levels, constraints
+    audit.py         Append-only log, enforced by SQLite triggers
+    providers.py     OpenAI-compatible and Anthropic, one interface
+    tools.py         Web, files, time, memory, outward actions
+    agent.py         Ties it together; proposes, never executes directly
     server.py        Loopback-only HTTP API for the app
-  tests/             27 tests, no network and no model required
+  tests/             50 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, roadmap, ADRs

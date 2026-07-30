@@ -2,9 +2,16 @@
 
 ## Ausgangspunkt
 
-Der Gedächtniskern steht und ist getestet: Provenienz, Ersetzung statt Überschreiben, zeitliche Gültigkeit, kaskadierender Widerruf, Export gegen das Schema. Dazu eine Tauri-Hülle, die den Sidecar startet und den Bestand anzeigt.
+Alle vier Säulen sind angefasst, zwei davon tragen:
 
-Das ist bewusst die ungewöhnliche Reihenfolge. Üblich wäre, mit dem Chat anzufangen und das Gedächtnis später nachzurüsten. Genau das geht bei Provenienz aber nicht: Herkunft nachträglich zu ergänzen ist unmöglich, weil sie dann nirgends mehr existiert. Deshalb zuerst der Teil, den niemand sonst liefert — und danach der Teil, den alle schon haben.
+- **Selbstmodell** — Provenienz, Ersetzung, Ablauf, kaskadierender Widerruf, Export gegen das Schema.
+- **Anbieterunabhängigkeit** — Bestand lokal in SQLite, davor OpenAI-kompatibel, Anthropic oder Ollama.
+- **Aktuelle Informationen** — Web-Abruf, Dateien, Zeit. Mail und Kalender fehlen.
+- **Kontrollierte Delegation** — Aktionsklassen, Freigabe mit Trockenlauf, anhängendes Audit-Log.
+
+Dazu ein Assistent, der beides verbindet: Er sieht nur gültige, nach Schutzbedarf gefilterte Aussagen und kann nichts ausführen, ohne durch die Policy zu gehen.
+
+Die Reihenfolge war bewusst ungewöhnlich. Üblich wäre, mit dem Chat anzufangen und Gedächtnis und Kontrolle später nachzurüsten. Bei Provenienz geht das nicht — Herkunft nachträglich zu ergänzen ist unmöglich, weil sie dann nirgends mehr existiert. Und ein Freigabemodell nachzurüsten heißt, es gegen bereits gewachsene Bequemlichkeit durchzusetzen.
 
 ## Was in welcher Reihenfolge
 
@@ -14,43 +21,40 @@ gantt
     dateFormat  YYYY-MM-DD
     axisFormat  %d.%m.
 
-    section Fundament
-    Gedächtniskern und App-Gerüst (erledigt) :done,    f1, 2026-07-28, 3d
-    Sidecar auf macOS bündeln und signieren  :active,  f2, 2026-08-03, 14d
-    cognee-Suche im Betrieb verifizieren     :         f3, after f2, 7d
+    section Erledigt
+    Gedächtniskern und Selbstmodell          :done,    f1, 2026-07-28, 2d
+    Assistent, Policy, Audit, Oberfläche     :done,    f2, 2026-07-30, 1d
 
-    section Säule 1 — Selbstmodell
-    Konsolidierung und Verdichtung           :crit,    s1, after f3, 14d
-    Widersprüche erkennen und vorlegen       :crit,    s2, after s1, 14d
-    Export, Reimport und Migration belegen   :         s3, after s2, 7d
-
-    section Assistent
-    Chat mit Modellauswahl                   :         c1, after f3, 14d
-    Aussagen aus Gesprächen vorschlagen      :crit,    c2, after c1, 14d
-
-    section Säule 4 — Delegation
-    Aktionsklassen und Policy-Modell         :crit,    d1, after c1, 10d
-    Freigabe-UI und Trockenlauf              :crit,    d2, after d1, 14d
-    Audit-Log                                :         d3, after d2, 7d
+    section Ausliefern
+    Sidecar bündeln (PyInstaller)            :active,  p1, 2026-08-03, 10d
+    Signieren und notarisieren               :crit,    p2, after p1, 10d
+    cognee-Suche im Betrieb verifizieren     :         p3, after p1, 7d
 
     section Säule 3 — Aktualität
-    Konnektoren lesend (Mail, Kalender)      :         a1, after d1, 14d
-    Konnektoren schreibend                   :         a2, after d2, 10d
+    Mail und Kalender lesend (OAuth)         :         a1, after p2, 14d
+    Mail und Kalender schreibend             :         a2, after a1, 10d
+
+    section Säule 1 — Verdichtung
+    Konsolidierung und Reflexion             :crit,    s1, after p3, 14d
+    Widersprüche erkennen und vorlegen       :crit,    s2, after s1, 14d
+
+    section Vertrauen
+    Aussagen aus Gesprächen vorschlagen      :crit,    c2, after s1, 14d
+    Benannte Dauerregeln für Freigaben       :         d4, after a1, 10d
+    Secrets in den Schlüsselbund             :         d5, after a1, 7d
 
     section Erlebnis
-    Onboarding für Nicht-Techniker           :         e1, after c2, 14d
-    Alltagstest mit 2–3 echten Nutzern       :         e3, after d3, 14d
+    Onboarding für Nicht-Techniker           :         e1, after p2, 14d
+    Alltagstest mit 2–3 echten Nutzern       :         e3, after a2, 14d
 ```
 
-Vier Dinge an diesem Plan sind Absicht:
+Drei Dinge an diesem Plan sind Absicht:
 
-**Signierung kommt sofort.** Eine nicht notarisierte Mac-App lässt sich nicht verteilen. Das später zu klären heißt, monatelang nichts ausliefern zu können.
+**Ausliefern kommt vor Funktionen.** Eine nicht notarisierte Mac-App lässt sich nicht verteilen. Solange das offen ist, hat niemand etwas von neuen Features — und die Bündelung eines Python-Sidecars mit nativen Erweiterungen ist der wahrscheinlichste Ort für böse Überraschungen.
 
-**Aussagen aus Gesprächen vorschlagen, nicht speichern.** Der Schritt ist als kritisch markiert, weil hier die Überprüfbarkeit kippen kann. Extrahiert das System stillschweigend Fakten aus dem Chat, entsteht wieder ein Gedächtnis, dem niemand zusehen kann.
+**Aussagen aus Gesprächen vorschlagen, nicht speichern.** Als kritisch markiert, weil hier die Überprüfbarkeit kippen kann. Extrahiert das System stillschweigend Fakten aus dem Chat, entsteht wieder ein Gedächtnis, dem niemand zusehen kann. Heute schreibt der Assistent nur, wenn er das Werkzeug `merken` benutzt — und das meldet sich hinterher.
 
-**Schreibende Konnektoren hängen an der Freigabe-UI.** Lesender Zugriff darf früh kommen; senden und ändern erst mit Trockenlauf.
-
-**Der Alltagstest kommt nach dem Audit-Log.** Vorher weiß man bei Problemen nicht, was das System getan hat.
+**Der Alltagstest kommt zum Schluss.** Erst wenn Mail und Kalender wirklich angebunden sind, zeigt sich, ob die Freigaben im Alltag tragen oder nur nerven.
 
 ## Aufwand
 
@@ -58,7 +62,7 @@ Zwei erfahrene Full-Stack-/AI-Engineers plus etwas Design- und Produktarbeit.
 
 | Ausbaustufe | Umfang | Dauer | Aufwand |
 |---|---|---|---|
-| **MVP** | Signierte Mac-App, Chat mit Modellauswahl, Selbstmodell mit Provenienz und Verdichtung, Mail/Kalender lesend, Freigaben mit Trockenlauf, Audit-Log | 10–16 Wochen | 6–10 Personenmonate |
+| **MVP** | Signierte Mac-App, Mail und Kalender lesend, Verdichtung des Gedächtnisses, Onboarding | 8–12 Wochen | 4–7 Personenmonate |
 | **Mittlere Version** | Windows, Mail und Kalender schreibend, Aufgaben- und Projektebene, mehr Konnektoren, erstes Computer-Use hinter Policy, belastbares Onboarding | 6–9 Monate | 20–30 Personenmonate |
 | **Vollvision** | Versionierte Identität über Jahre, Zeitleiste, Gedächtniskonsolidierung, Konfliktauflösung, Löschpfade, Multi-Agent-Delegation, Oberfläche für Nicht-Techniker | 12–24 Monate | Plattformprodukt |
 
@@ -75,6 +79,8 @@ Fünf Fragen, die den Plan umwerfen können.
 **Hält cognee, was die Suche verspricht?** Es gibt keinen veröffentlichten LongMemEval-Wert. Die Qualität muss am eigenen Bestand gemessen werden, nicht anhand fremder Vergleichstabellen.
 
 **Wie viel Reibung erzeugt sichtbare Provenienz?** Die Wette des Projekts ist, dass Nachvollziehbarkeit Vertrauen schafft. Möglich ist auch, dass sie als Lärm empfunden wird. Das entscheidet der Alltagstest, nicht die Architektur.
+
+**Nerven die Freigaben?** `confirm_strict` verlangt bei außenwirksamen Aktionen, den Empfänger abzutippen. Das ist absichtlich unbequem. Ob es als Schutz oder als Schikane empfunden wird, zeigt erst der Betrieb mit echten Mails — und davon hängt ab, ob die Vorgabe so streng bleibt.
 
 **Reicht eine Eigenentwicklung der Oberfläche?** AnythingLLM bleibt die Ausweichoption. Der Wechsel wird teurer, je mehr Oberfläche entsteht — die Frage gehört früh gestellt, nicht spät.
 

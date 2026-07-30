@@ -1,0 +1,35 @@
+[project]
+name = "icarus-memory"
+version = "0.1.0"
+description = "Überprüfbares Selbstmodell für Icarus — Provenienz, Ersetzung, Widerruf"
+requires-python = ">=3.10,<3.15"
+license = "Apache-2.0"
+
+# Der Kern ist absichtlich schlank: das Datenmodell und die Selbstmodell-Logik
+# brauchen weder cognee noch ein LLM. Nur die HTTP-Schnittstelle für die App
+# braucht FastAPI.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "pydantic>=2.10",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Semantische Suche. Zieht ~950 MB nach — siehe docs/adr/0005-cognee-statt-mem0.md.
+cognee = ["cognee>=1.4.0"]
+dev = ["pytest>=8.0", "jsonschema>=4.20", "httpx>=0.27"]
+
+[project.scripts]
+icarus-sidecar = "icarus_memory.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["icarus_memory"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

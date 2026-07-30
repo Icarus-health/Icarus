@@ -1,0 +1,149 @@
+# Baut Icarus für macOS als signiertes und notarisiertes .dmg.
+#
+# Ohne Notarisierung blockt Gatekeeper eine heruntergeladene App — sie ist dann
+# faktisch nicht verteilbar. Deshalb gehört das in die Pipeline, nicht in eine
+# Anleitung, die jemand von Hand befolgt.
+#
+# Ohne hinterlegte Secrets läuft der Workflow trotzdem durch: Er baut dann
+# unsigniert und sagt es deutlich. Das hält den Weg zum ersten Artefakt offen,
+# bevor ein Apple-Developer-Konto existiert.
+#
+# Benötigte Repository-Secrets für den signierten Weg:
+#   APPLE_CERTIFICATE           Developer-ID-Zertifikat als base64-p12
+#   APPLE_CERTIFICATE_PASSWORD  Passwort dieses p12
+#   APPLE_SIGNING_IDENTITY      z. B. "Developer ID Application: Name (TEAMID)"
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   für die Notarisierung
+
+name: macOS-Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      bundle_cognee:
+        description: "Semantische Suche mitliefern (macht das Bündel ~1 GB größer)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    # Auf Job-Ebene, damit `if:` der Schritte sie sehen kann. Ein `env:` am
+    # Schritt selbst steht dessen eigener `if:`-Bedingung noch nicht zur
+    # Verfügung — der Signierschritt würde sonst immer übersprungen.
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - name: Sidecar-Abhängigkeiten
+        run: |
+          python -m pip install --upgrade pip
+          pip install ./sidecar pyinstaller
+          if [ "${{ inputs.bundle_cognee }}" = "true" ]; then
+            pip install "cognee>=1.4.0"
+          fi
+
+      - name: Tests
+        run: |
+          pip install pytest jsonschema
+          python -m pytest sidecar/tests -q
+
+      - name: Sidecar bündeln
+        env:
+          ICARUS_BUNDLE_COGNEE: ${{ inputs.bundle_cognee && '1' || '0' }}
+        run: |
+          mkdir -p app/src-tauri/binaries
+          pyinstaller packaging/icarus-sidecar.spec \
+            --distpath app/src-tauri/binaries \
+            --workpath build/pyinstaller \
+            --noconfirm
+          ls -lh app/src-tauri/binaries/
+
+      - name: Sidecar startet überhaupt
+        # Ein Bündel, das baut, aber nicht startet, ist der häufigste
+        # PyInstaller-Fehler. Lieber hier auffallen als beim Nutzer.
+        run: |
+          ICARUS_SIDECAR_PORT=8901 \
+          ICARUS_DATA_DIR="$RUNNER_TEMP/icarus" \
+            ./app/src-tauri/binaries/icarus-sidecar &
+          for i in $(seq 1 40); do
+            curl -fsS localhost:8901/health && break || sleep 0.5
+          done
+          curl -fsS localhost:8901/health | tee /dev/stderr | grep -q '"status":"ok"'
+
+      - name: Signaturzertifikat einrichten
+        id: signing
+        if: env.APPLE_CERTIFICATE != ''
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          PASSWORD=$(openssl rand -base64 24)
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: App bauen
+        working-directory: app
+        env:
+          # Sind die Secrets leer, baut Tauri unsigniert weiter.
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          npm install
+          npx tauri build --target universal-apple-darwin
+
+      - name: Signatur und Notarisierung prüfen
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          APP=$(find app/src-tauri/target -name "Icarus.app" -maxdepth 5 | head -1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Der eigentliche Test: Würde Gatekeeper die App durchlassen?
+          spctl --assess --type execute --verbose "$APP"
+
+      - name: Unsignierten Build kennzeichnen
+        if: steps.signing.outputs.signed != 'true'
+        run: |
+          echo "::warning title=Unsigniert::Ohne Apple-Secrets gebaut. Gatekeeper wird diese App auf fremden Rechnern blockieren."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icarus-macos${{ steps.signing.outputs.signed == 'true' && '' || '-unsigniert' }}
+          path: |
+            app/src-tauri/target/**/release/bundle/dmg/*.dmg
+            app/src-tauri/target/**/release/bundle/macos/*.app
+          if-no-files-found: error
+          retention-days: 14

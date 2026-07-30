@@ -1,0 +1,38 @@
+# Lokale Konfiguration mit Secrets — niemals committen
+.env
+.env.*
+!.env.example
+
+# Laufzeitdaten des Selbstmodells — niemals committen
+.icarus-data/
+*.sqlite3
+*.log
+sicherungen/
+exporte/
+*.icarus
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Rust / Tauri
+app/src-tauri/target/
+app/src-tauri/gen/
+build/
+
+# Gebündelter Sidecar — Build-Artefakt, rund ein Gigabyte
+app/src-tauri/binaries/*
+!app/src-tauri/binaries/README.md
+
+# Node
+node_modules/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

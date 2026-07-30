@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Icarus</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <nav>
+      <strong>Icarus</strong>
+      <button data-view="chat" class="tab active">Gespräch</button>
+      <button data-view="memory" class="tab">Gedächtnis</button>
+      <button data-view="audit" class="tab">Protokoll</button>
+      <span id="status" class="status">Verbinde…</span>
+    </nav>
+
+    <main>
+      <!-- Gespräch -->
+      <section id="view-chat" class="view">
+        <div id="messages" class="messages"></div>
+
+        <!-- Freigaben. Solange hier etwas steht, wartet eine Aktion. -->
+        <div id="approvals"></div>
+
+        <form id="chat-form">
+          <input id="chat-input" type="text" placeholder="Schreib etwas…" autocomplete="off" />
+          <button type="submit">Senden</button>
+        </form>
+      </section>
+
+      <!-- Gedächtnis -->
+      <section id="view-memory" class="view" hidden>
+        <form id="record-form">
+          <input id="statement" type="text" placeholder="Was soll ich mir merken?" autocomplete="off" required />
+          <select id="kind" aria-label="Art">
+            <option value="state">Zustand</option>
+            <option value="identity">Identität</option>
+            <option value="preference">Vorliebe</option>
+            <option value="goal">Ziel</option>
+            <option value="constraint">Grenze</option>
+          </select>
+          <button type="submit">Merken</button>
+        </form>
+
+        <details id="context-box">
+          <summary>Was das Modell über dich zu sehen bekommt</summary>
+          <pre id="context"></pre>
+        </details>
+
+        <ul id="assertions"></ul>
+        <p id="empty" class="muted">Noch nichts gespeichert.</p>
+      </section>
+
+      <!-- Protokoll -->
+      <section id="view-audit" class="view" hidden>
+        <p class="muted">
+          Jede Aktion, die durch die Freigabeprüfung ging. Einträge lassen sich
+          nicht ändern und nicht löschen.
+        </p>
+        <ul id="audit"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

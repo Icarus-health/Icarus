@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Icarus-health/Icarus/schema/self-model.schema.json",
+  "title": "Icarus Selbstmodell",
+  "description": "Speicherunabhängiges Format für das überprüfbare digitale Modell einer Person. Jede Aussage trägt ihre Herkunft, ihre zeitliche Gültigkeit und ihren Widerrufspfad mit sich. Das Format ist bewusst nicht an Mem0 oder eine andere Ablage gebunden: die Ablage darf ausgetauscht werden, das Modell überlebt sie.",
+  "type": "object",
+  "required": ["schema_version", "subject_id", "created_at", "assertions"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {
+      "description": "Version dieses Schemas, nicht der Daten. Erlaubt Migrationen über Jahre.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "subject_id": {
+      "description": "Stabile, interne Kennung der Person. Bewusst kein Name und keine E-Mail — identifizierende Angaben sind selbst Aussagen und gehören nach assertions.",
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "description": "Zeitpunkt, zu dem dieses Modell erstmals angelegt wurde.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "exported_at": {
+      "description": "Zeitpunkt dieses Exports. Gesetzt beim Herausschreiben, nicht Teil des Modells selbst.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "assertions": {
+      "description": "Alle Aussagen über die Person. Eine flache Liste, weil Beziehungen über supersedes/derived_from ausgedrückt werden und nicht über Verschachtelung.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/assertion" }
+    }
+  },
+
+  "$defs": {
+    "assertion": {
+      "type": "object",
+      "required": ["id", "kind", "statement", "provenance", "recorded_at", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Eindeutige, stabile Kennung dieser Aussage. Wird von supersedes und derived_from referenziert.",
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "description": "Zeitliche Natur der Aussage. Die Unterscheidung ist der Kern der Überprüfbarkeit: ein System, das 'wohnt in Berlin' und 'ist heute erkältet' gleich behandelt, erzeugt Widersprüche statt Wissen.",
+          "type": "string",
+          "enum": [
+            "identity",
+            "preference",
+            "state",
+            "episode",
+            "goal",
+            "relationship",
+            "skill",
+            "constraint"
+          ]
+        },
+        "statement": {
+          "description": "Die Aussage in natürlicher Sprache, aus Sicht des Systems über die Person formuliert.",
+          "type": "string",
+          "minLength": 1
+        },
+        "structured": {
+          "description": "Optionale maschinenlesbare Form derselben Aussage. Bewusst offen gehalten — die Verdichtung zu Tripeln ist ein späterer Schritt und darf das Format nicht vorab einschränken.",
+          "type": "object"
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "confidence": {
+          "description": "Wie sicher das System sich ist. Direkt bestätigte Angaben liegen bei 1.0, abgeleitete darunter.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recorded_at": {
+          "description": "Wann die Aussage ins Modell aufgenommen wurde.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_from": {
+          "description": "Ab wann die Aussage inhaltlich gilt. Kann vor recorded_at liegen, wenn die Person Vergangenes berichtet.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "description": "Ab wann die Aussage nicht mehr ungeprüft verwendet werden darf. Für kind=state fast immer zu setzen.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_confirmed_at": {
+          "description": "Wann die Aussage zuletzt bestätigt wurde. Trennt 'seit Jahren unwidersprochen' von 'gerade eben verifiziert'.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "description": "Lebenszyklus der Aussage. Nichts wird gelöscht, sondern überführt — ausgenommen 'redacted', das den ausgeübten Widerruf markiert.",
+          "type": "string",
+          "enum": ["active", "superseded", "expired", "retracted", "redacted"]
+        },
+        "supersedes": {
+          "description": "IDs der Aussagen, die durch diese ersetzt werden. Macht Wissensupdates nachvollziehbar, statt den alten Wert zu überschreiben.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "superseded_by": {
+          "description": "ID der Aussage, die diese ersetzt hat. Gegenstück zu supersedes; Pflicht bei status=superseded.",
+          "type": "string"
+        },
+        "redaction": { "$ref": "#/$defs/redaction" },
+        "derived_from": {
+          "description": "IDs der Aussagen, aus denen diese abgeleitet wurde. Entscheidend für den Widerruf: wird eine Quelle gelöscht, müssen alle davon abgeleiteten Aussagen mitgelöscht oder neu begründet werden.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sensitivity": {
+          "description": "Schutzbedarf. Steuert, ob eine Aussage an externe Modelle übergeben werden darf.",
+          "type": "string",
+          "enum": ["normal", "sensitive", "special_category"],
+          "default": "normal"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+
+      "allOf": [
+        {
+          "description": "Eine ersetzte Aussage muss benennen, wodurch sie ersetzt wurde — sonst ist die Kette nicht nachvollziehbar.",
+          "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+          "then": { "required": ["superseded_by"] }
+        },
+        {
+          "description": "Eine abgelaufene Aussage braucht ein Ablaufdatum.",
+          "if": { "properties": { "status": { "const": "expired" } }, "required": ["status"] },
+          "then": { "required": ["expires_at"] }
+        },
+        {
+          "description": "Ein Widerruf muss dokumentiert sein, sonst ist er nicht prüfbar.",
+          "if": { "properties": { "status": { "const": "redacted" } }, "required": ["status"] },
+          "then": { "required": ["redaction"] }
+        }
+      ]
+    },
+
+    "provenance": {
+      "description": "Woher die Aussage stammt. Ohne dieses Feld ist eine Aussage nicht überprüfbar und darf nicht ins Modell.",
+      "type": "object",
+      "required": ["source_type"],
+      "additionalProperties": false,
+      "properties": {
+        "source_type": {
+          "description": "Art der Quelle. 'inference' markiert Aussagen, die das System selbst gebildet hat — sie sind nie so belastbar wie berichtete.",
+          "type": "string",
+          "enum": [
+            "user_stated",
+            "chat",
+            "email",
+            "calendar",
+            "document",
+            "web",
+            "tool_output",
+            "inference",
+            "manual_correction"
+          ]
+        },
+        "source_ref": {
+          "description": "Verweis auf das konkrete Original (Nachrichten-ID, Datei-Hash, URL). Erlaubt das Nachschlagen Jahre später.",
+          "type": "string"
+        },
+        "captured_at": {
+          "description": "Zeitpunkt des Originalereignisses, nicht der Verarbeitung.",
+          "type": "string",
+          "format": "date-time"
+        },
+        "extracted_by": {
+          "description": "Welches Modell bzw. welcher Prozess die Aussage extrahiert hat. Macht Fehler einer bestimmten Modellgeneration im Nachhinein auffindbar.",
+          "type": "string"
+        },
+        "verbatim": {
+          "description": "Wörtlicher Ausschnitt der Quelle, auf dem die Aussage beruht.",
+          "type": "string"
+        }
+      }
+    },
+
+    "redaction": {
+      "description": "Dokumentierter Widerruf. Der Eintrag bleibt als Grabstein bestehen, der Inhalt ist entfernt.",
+      "type": "object",
+      "required": ["redacted_at", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "redacted_at": { "type": "string", "format": "date-time" },
+        "reason": {
+          "type": "string",
+          "enum": ["user_request", "retention_policy", "correction", "legal"]
+        },
+        "cascade": {
+          "description": "IDs der Aussagen, die als Folge mitgelöscht wurden, weil sie hierauf beruhten.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

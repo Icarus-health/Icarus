@@ -1,0 +1,221 @@
+:root {
+  --bg: #fbfaf8;
+  --panel: #ffffff;
+  --fg: #1b1a18;
+  --muted: #6d6a64;
+  --line: #e3e0d9;
+  --accent: #3b6ea5;
+  --warn: #a8621f;
+  --danger: #b4483c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171614;
+    --panel: #201e1c;
+    --fg: #ece9e3;
+    --muted: #9a958c;
+    --line: #302e2a;
+    --accent: #7aa7d9;
+    --warn: #d9a05f;
+    --danger: #d97b6f;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* -- Navigation ---------------------------------------------------------- */
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+nav strong { margin-right: 0.5rem; }
+
+.tab {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tab:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.tab.active { color: var(--fg); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+.status {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.status.ready { color: var(--accent); }
+.status.error { color: var(--danger); }
+
+main { max-width: 46rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+
+/* -- Formulare ----------------------------------------------------------- */
+
+form { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+input, select, button, textarea {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--panel);
+  color: inherit;
+}
+
+input { flex: 1 1 16rem; }
+input:disabled { opacity: 0.6; }
+
+button {
+  cursor: pointer;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+button.ghost { border-color: var(--line); color: var(--muted); }
+button.ghost:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
+button.small { padding: 0.3rem 0.55rem; font-size: 0.8125rem; }
+
+.row { display: flex; gap: 0.5rem; width: 100%; }
+
+/* -- Gespräch ------------------------------------------------------------ */
+
+.messages { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1rem; }
+
+.msg {
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.75rem;
+  max-width: 85%;
+  white-space: pre-wrap;
+}
+
+.msg.user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+.msg.error { align-self: flex-start; color: var(--danger); border: 1px solid var(--danger); }
+
+/* Was ohne Rückfrage lief — sichtbar, aber zurückhaltend. */
+.notice {
+  align-self: flex-start;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+  padding-left: 0.6rem;
+  white-space: pre-wrap;
+}
+
+/* -- Freigaben ----------------------------------------------------------- */
+
+.approval {
+  display: block;
+  border: 1px solid var(--warn);
+  border-radius: 0.75rem;
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+  background: color-mix(in srgb, var(--warn) 7%, var(--panel));
+}
+
+.approval h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: var(--warn); }
+
+/* Der Trockenlauf ist der wichtigste Teil der Karte: vollständig und
+   monospaced, damit Empfänger und Inhalt exakt lesbar sind. */
+.dry-run {
+  margin: 0.5rem 0;
+  padding: 0.7rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.confirm { display: block; font-size: 0.8125rem; color: var(--muted); margin: 0.6rem 0; }
+.confirm input { width: 100%; margin-top: 0.3rem; }
+
+.approval .error { color: var(--danger); font-size: 0.8125rem; margin: 0.5rem 0 0; }
+
+/* -- Listen -------------------------------------------------------------- */
+
+ul { list-style: none; margin: 1rem 0 0; padding: 0; }
+
+li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.statement { margin: 0; grid-column: 1; }
+
+.meta {
+  margin: 0;
+  grid-column: 1;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.meta.inferred::before { content: "≈ "; }
+
+li > button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+
+/* -- Protokoll ----------------------------------------------------------- */
+
+.audit { border-left: 3px solid var(--line); padding-left: 0.7rem; }
+.audit.executed { border-left-color: var(--accent); }
+.audit.denied, .audit.refused { border-left-color: var(--danger); }
+.audit.failed { border-left-color: var(--warn); }
+
+.args {
+  grid-column: 1 / -1;
+  margin: 0.35rem 0 0;
+  font: 0.75rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* -- Sonstiges ----------------------------------------------------------- */
+
+details { margin: 1rem 0; }
+summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
+
+#context {
+  margin: 0.5rem 0 0;
+  padding: 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.muted { color: var(--muted); }

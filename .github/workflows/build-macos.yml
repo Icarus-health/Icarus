@@ -34,6 +34,13 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
 
+    # Auf Job-Ebene, damit `if:` der Schritte sie sehen kann. Ein `env:` am
+    # Schritt selbst steht dessen eigener `if:`-Bedingung noch nicht zur
+    # Verfügung — der Signierschritt würde sonst immer übersprungen.
+    env:
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -92,9 +99,6 @@ jobs:
       - name: Signaturzertifikat einrichten
         id: signing
         if: env.APPLE_CERTIFICATE != ''
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           KEYCHAIN="$RUNNER_TEMP/build.keychain"
           PASSWORD=$(openssl rand -base64 24)

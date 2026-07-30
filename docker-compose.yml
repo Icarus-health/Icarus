@@ -1,0 +1,115 @@
+# Icarus — Compose-Skelett
+#
+# Default-Stack (`make up`):
+#   postgres    Datenraum (pgvector) — nicht nach außen veröffentlicht
+#   mem0        Memory-Schicht, REST/OpenAPI auf http://localhost:8888/docs
+#   open-webui  Bedienoberfläche auf http://localhost:3000
+#
+# Optionales Profil:
+#   dashboard   Mem0-Dashboard auf http://localhost:3001
+#
+# Alle Referenzen sind gepinnt. Kein :latest, kein :main — siehe docs/adr/0002.
+
+name: icarus
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      # Pflicht — ohne gesetztes Passwort startet der Stack nicht.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt. Bitte .env aus .env.example anlegen.}
+      APP_DB_NAME: ${APP_DB_NAME:-mem0_app}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # Postgres ist absichtlich nicht nach außen veröffentlicht: erreichbar nur
+    # innerhalb des Compose-Netzes. Für Debugging mit einem externen Client
+    # die folgenden zwei Zeilen einkommentieren (kein zweiter Service — zwei
+    # Container auf demselben Volume würden die Datenbank beschädigen).
+    # ports:
+    #   - "${POSTGRES_HOST_PORT:-8432}:5432"
+    networks:
+      - icarus
+
+  mem0:
+    # Gebaut aus dem Mem0-Repo, Subdirectory `server` als Build-Context.
+    # Grund: das veröffentlichte Image mem0/mem0-api-server ist arm64-only.
+    # `server/Dockerfile` ist self-contained — es zieht mem0ai von PyPI und
+    # braucht das Repo-Root nicht (anders als server/dev.Dockerfile).
+    #
+    # Caveats (siehe docs/adr/0002):
+    #   - Mem0s server/requirements.txt pinnt `mem0ai>=0.1.48` nur nach unten;
+    #     der Build ist damit nicht vollständig reproduzierbar.
+    #   - Das Upstream-Dockerfile startet uvicorn mit --reload (Dev-Default).
+    build:
+      context: https://github.com/mem0ai/mem0.git#760dca6f391277d79c3c7d2096c1bf1d037526c3:server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${MEM0_HOST_PORT:-8888}:8000"
+    env_file:
+      - .env
+    environment:
+      # Innerhalb des Compose-Netzes wird Postgres unter dem Servicenamen erreicht,
+      # unabhängig davon, was in .env für lokale Tools steht.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - icarus
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.11.0
+    restart: unless-stopped
+    ports:
+      - "${OPEN_WEBUI_HOST_PORT:-3000}:8080"
+    environment:
+      # Mem0 ist NICHT automatisch als Memory-Backend verdrahtet. Die Anbindung
+      # erfolgt manuell über Settings -> Tools -> Add Connection gegen
+      # http://mem0:8000/openapi.json. Siehe docs/01-architektur.md.
+      MEM0_BASE_URL: http://mem0:8000
+      WEBUI_AUTH: ${WEBUI_AUTH:-true}
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      - mem0
+    networks:
+      - icarus
+
+  mem0-dashboard:
+    # Optional: docker compose --profile dashboard up -d
+    # Läuft bewusst auf 3001 — 3000 gehört Open WebUI.
+    build:
+      context: https://github.com/mem0ai/mem0.git#760dca6f391277d79c3c7d2096c1bf1d037526c3:dashboard
+      dockerfile: Dockerfile
+    profiles: ["dashboard"]
+    restart: unless-stopped
+    ports:
+      - "${MEM0_DASHBOARD_HOST_PORT:-3001}:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${MEM0_HOST_PORT:-8888}
+      API_INTERNAL_URL: http://mem0:8000
+      NEXT_PUBLIC_INSTANCE_NAME: Icarus
+    depends_on:
+      - mem0
+    networks:
+      - icarus
+
+networks:
+  icarus:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  open_webui_data:

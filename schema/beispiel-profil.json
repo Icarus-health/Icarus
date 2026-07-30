@@ -1,0 +1,146 @@
+{
+  "schema_version": "0.1.0",
+  "subject_id": "subject-7f3a1c",
+  "created_at": "2026-02-14T09:12:00Z",
+  "exported_at": "2026-07-30T18:00:00Z",
+  "assertions": [
+    {
+      "id": "a-0001",
+      "kind": "identity",
+      "statement": "Arbeitet als selbstständiger Berater im Gesundheitswesen.",
+      "provenance": {
+        "source_type": "user_stated",
+        "captured_at": "2026-02-14T09:12:00Z",
+        "extracted_by": "manuelle Ersterfassung",
+        "verbatim": "Ich bin selbstständiger Berater, Schwerpunkt Gesundheitswesen."
+      },
+      "confidence": 1.0,
+      "recorded_at": "2026-02-14T09:12:00Z",
+      "valid_from": "2026-02-14T09:12:00Z",
+      "last_confirmed_at": "2026-06-02T11:30:00Z",
+      "status": "active",
+      "tags": ["beruf"]
+    },
+    {
+      "id": "a-0002",
+      "kind": "preference",
+      "statement": "Möchte Antworten knapp und ohne einleitende Zusammenfassung.",
+      "provenance": {
+        "source_type": "chat",
+        "source_ref": "chat:2026-03-08#msg-41",
+        "captured_at": "2026-03-08T20:05:00Z",
+        "extracted_by": "mem0/gpt-4.1-nano-2025-04-14"
+      },
+      "confidence": 0.9,
+      "recorded_at": "2026-03-08T20:06:00Z",
+      "status": "active",
+      "tags": ["arbeitsweise"]
+    },
+    {
+      "id": "a-0003",
+      "kind": "state",
+      "statement": "Wohnt in Hamburg.",
+      "provenance": {
+        "source_type": "chat",
+        "source_ref": "chat:2026-02-20#msg-12",
+        "captured_at": "2026-02-20T18:44:00Z",
+        "extracted_by": "mem0/gpt-4.1-nano-2025-04-14"
+      },
+      "confidence": 0.95,
+      "recorded_at": "2026-02-20T18:45:00Z",
+      "valid_from": "2026-02-20T18:44:00Z",
+      "status": "superseded",
+      "superseded_by": "a-0004",
+      "tags": ["wohnort"]
+    },
+    {
+      "id": "a-0004",
+      "kind": "state",
+      "statement": "Wohnt in Leipzig.",
+      "provenance": {
+        "source_type": "email",
+        "source_ref": "mail:<CAF9x1@mail.example>",
+        "captured_at": "2026-05-11T07:20:00Z",
+        "extracted_by": "mem0/gpt-4.1-nano-2025-04-14",
+        "verbatim": "…ab Juni erreichst du mich unter der neuen Adresse in Leipzig."
+      },
+      "confidence": 0.85,
+      "recorded_at": "2026-05-11T07:25:00Z",
+      "valid_from": "2026-06-01T00:00:00Z",
+      "status": "active",
+      "supersedes": ["a-0003"],
+      "tags": ["wohnort"]
+    },
+    {
+      "id": "a-0005",
+      "kind": "state",
+      "statement": "Ist diese Woche krankgeschrieben.",
+      "provenance": {
+        "source_type": "chat",
+        "source_ref": "chat:2026-04-13#msg-3",
+        "captured_at": "2026-04-13T08:02:00Z",
+        "extracted_by": "mem0/gpt-4.1-nano-2025-04-14"
+      },
+      "confidence": 1.0,
+      "recorded_at": "2026-04-13T08:03:00Z",
+      "valid_from": "2026-04-13T00:00:00Z",
+      "expires_at": "2026-04-20T00:00:00Z",
+      "status": "expired",
+      "sensitivity": "special_category",
+      "tags": ["gesundheit", "temporaer"]
+    },
+    {
+      "id": "a-0006",
+      "kind": "goal",
+      "statement": "Will bis Ende 2026 ein persönliches KI-Betriebssystem als MVP fertigstellen.",
+      "structured": {
+        "objective": "MVP persönliches KI-OS",
+        "due": "2026-12-31"
+      },
+      "provenance": {
+        "source_type": "document",
+        "source_ref": "sha256:9b1c…e4a2 (Projektnotiz.md)",
+        "captured_at": "2026-07-01T13:00:00Z",
+        "extracted_by": "mem0/gpt-4.1-nano-2025-04-14"
+      },
+      "confidence": 0.8,
+      "recorded_at": "2026-07-01T13:05:00Z",
+      "status": "active",
+      "tags": ["projekt"]
+    },
+    {
+      "id": "a-0007",
+      "kind": "preference",
+      "statement": "Bevorzugt vermutlich selbst gehostete Werkzeuge gegenüber Cloud-Diensten.",
+      "provenance": {
+        "source_type": "inference",
+        "captured_at": "2026-07-01T13:06:00Z",
+        "extracted_by": "icarus/reflexion-v0"
+      },
+      "confidence": 0.55,
+      "recorded_at": "2026-07-01T13:06:00Z",
+      "status": "active",
+      "derived_from": ["a-0006", "a-0001"],
+      "tags": ["arbeitsweise", "abgeleitet"]
+    },
+    {
+      "id": "a-0008",
+      "kind": "relationship",
+      "statement": "Entfernt auf Wunsch der Person.",
+      "provenance": {
+        "source_type": "chat",
+        "source_ref": "chat:2026-03-30#msg-77",
+        "captured_at": "2026-03-30T21:15:00Z",
+        "extracted_by": "mem0/gpt-4.1-nano-2025-04-14"
+      },
+      "recorded_at": "2026-03-30T21:16:00Z",
+      "status": "redacted",
+      "sensitivity": "sensitive",
+      "redaction": {
+        "redacted_at": "2026-07-12T10:00:00Z",
+        "reason": "user_request",
+        "cascade": ["a-0009"]
+      }
+    }
+  ]
+}

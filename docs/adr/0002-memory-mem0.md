@@ -1,6 +1,10 @@
 # ADR 0002: Mem0 als Memory-Schicht
 
-**Status:** akzeptiert · **Datum:** 2026-07-30
+**Status:** ABGELÖST durch [ADR 0005](0005-cognee-statt-mem0.md) · **Datum:** 2026-07-30
+
+> Mem0s Server braucht Postgres mit pgvector, also Docker. Für eine App, die
+> ein Nicht-Techniker herunterlädt und startet, ist das die falsche
+> Betriebsform. Das Dokument bleibt als Begründung erhalten.
 
 ## Kontext
 

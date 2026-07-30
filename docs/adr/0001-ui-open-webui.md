@@ -1,6 +1,11 @@
 # ADR 0001: Open WebUI als Bedienoberfläche
 
-**Status:** akzeptiert · **Datum:** 2026-07-30
+**Status:** ABGELÖST durch [ADR 0006](0006-tauri-desktop.md) · **Datum:** 2026-07-30
+
+> Diese Entscheidung galt für einen selbst gehosteten Server-Stack. Mit der
+> Festlegung auf eine downloadbare Desktop-App ist Open WebUI die falsche
+> Betriebsform — es setzt Docker voraus. Das Dokument bleibt als Begründung
+> erhalten, warum die Wahl damals so fiel.
 
 ## Kontext
 

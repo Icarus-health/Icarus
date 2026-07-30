@@ -58,10 +58,10 @@ Zwei Verbindungen zu [Säule 1](02-selbstmodell.md), die die Policy-Schicht durc
 
 Zugangsdaten für Mail, Kalender und Konnektoren gehören nicht in Prompts und nicht ins Gedächtnis. Sie liegen außerhalb des Modellkontexts, und Werkzeuge bekommen sie zur Laufzeit — nicht als Text, den ein Modell sieht und im schlechtesten Fall wiedergibt.
 
-Im Skelett heißt das vorerst nur: `.env` ist in `.gitignore`, und `AUTH_DISABLED` bleibt `false`. Das ist das Minimum, nicht die Lösung.
+Heute heißt das nur: `.env` ist in `.gitignore`, und der Sidecar verlangt ein Token, das die App bei jedem Start neu erzeugt. Das ist das Minimum, nicht die Lösung.
 
 ## Erst danach: Computer-Use
 
-Wenn die Schicht steht, ist Agent Zero der stärkste offene Kandidat: echter Linux-Desktop in einer beobachtbaren Umgebung, Browser mit DOM-Annotation, Dokumentenarbeit, Multi-Agenten. Open Interpreter und Open WebUIs eigene Computer-Erweiterung sind die Alternativen.
+Wenn die Schicht steht, ist Agent Zero der stärkste offene Kandidat: echter Linux-Desktop in einer beobachtbaren Umgebung, Browser mit DOM-Annotation, Dokumentenarbeit, Multi-Agenten. Open Interpreter ist die Alternative.
 
 Die Anbindung erfolgt dann **hinter** der Policy-Schicht, nie direkt an der Oberfläche. Praktisch: Der Computer-Use-Container bekommt keinen eigenen Zugang zu Konnektoren und Secrets, sondern stellt Anträge, die dieselbe Klassifikation durchlaufen wie alles andere.

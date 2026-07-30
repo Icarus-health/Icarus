@@ -1,0 +1,13 @@
+{
+  "name": "icarus-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Icarus — persönliches KI-Betriebssystem",
+  "license": "Apache-2.0",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

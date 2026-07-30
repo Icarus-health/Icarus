@@ -3,6 +3,10 @@
 > **Stand der Erhebung: Juli 2026.** Alle Stern- und Reifeangaben sind Momentaufnahmen und altern schnell.
 >
 > Dieses Dokument hält die Ausgangsrecherche fest. Die daraus abgeleiteten Entscheidungen stehen in den [ADRs](adr/); die tatsächlich gebaute Architektur in [01-architektur.md](01-architektur.md). Wo Recherche und Entscheidung auseinandergehen, gilt die ADR.
+>
+> **Zwei Empfehlungen dieses Reports wurden inzwischen revidiert.** Letta entfiel nach Prüfung der Primärquellen ([ADR 0003](adr/0003-kein-letta.md)). Mem0 und Open WebUI entfielen mit der Festlegung auf eine downloadbare Desktop-App: beide setzen Docker voraus ([ADR 0005](adr/0005-cognee-statt-mem0.md), [ADR 0006](adr/0006-tauri-desktop.md)). Gebaut wird auf **cognee** in einer **Tauri-App**.
+>
+> Der Report bleibt unverändert erhalten. Eine Recherche, die man nachträglich an das Ergebnis anpasst, ist als Beleg wertlos — dasselbe Prinzip, das das Selbstmodell auf seine eigenen Daten anwendet.
 
 ## Kurzfassung
 
@@ -97,6 +101,8 @@ Die ursprüngliche Fassung dieses Dokuments enthielt maschinenlesbare Zitatmarke
 |---|---|
 | Open WebUI | https://github.com/open-webui/open-webui · https://docs.openwebui.com |
 | Mem0 | https://github.com/mem0ai/mem0 · https://docs.mem0.ai |
+| cognee (gewählt) | https://github.com/topoteretes/cognee · https://docs.cognee.ai |
+| Tauri | https://tauri.app |
 | Letta (Legacy-Server) | https://github.com/letta-ai/letta · https://docs.letta.com |
 | Letta Code (aktive Entwicklung) | https://github.com/letta-ai/letta-code |
 | Khoj | https://github.com/khoj-ai/khoj |

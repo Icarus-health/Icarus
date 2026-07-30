@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Icarus</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Icarus</h1>
+        <p id="status" class="status">Verbinde…</p>
+      </header>
+
+      <section aria-labelledby="neu">
+        <h2 id="neu">Was soll ich mir merken?</h2>
+        <form id="record-form">
+          <input
+            id="statement"
+            type="text"
+            placeholder="z. B. Ich wohne in Leipzig."
+            autocomplete="off"
+            required
+          />
+          <select id="kind" aria-label="Art der Aussage">
+            <option value="state">Zustand</option>
+            <option value="identity">Identität</option>
+            <option value="preference">Vorliebe</option>
+            <option value="goal">Ziel</option>
+            <option value="constraint">Grenze</option>
+          </select>
+          <button type="submit">Merken</button>
+        </form>
+      </section>
+
+      <section aria-labelledby="bestand">
+        <h2 id="bestand">Was ich über dich weiß</h2>
+        <!-- Jede Zeile zeigt ihre Herkunft. Das ist der Punkt des Projekts:
+             nichts steht hier ohne nachvollziehbaren Ursprung. -->
+        <ul id="assertions"></ul>
+        <p id="empty" class="muted">Noch nichts gespeichert.</p>
+      </section>
+    </main>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

@@ -15,7 +15,7 @@ Der Unterschied liegt nicht in der Abrufqualität, sondern in vier Fragen, die e
 
 Genau hier brechen Assistenten in der Praxis ein. Die einschlägigen Benchmarks — LoCoMo für sehr lange Gespräche, LongMemEval für Wissensupdates, temporales Reasoning und Abstention — messen im Kern diese Fähigkeiten. Ohne explizite Architektur entsteht nur die *Illusion* von Persönlichkeit: ein System, das flüssig klingt und dabei veraltete Fakten mit voller Überzeugung vorträgt.
 
-Keines der untersuchten Projekte löst das vollständig. Mem0 kommt mit Zeitstempeln und Ablaufdaten am weitesten, bleibt aber ein Faktenspeicher. Deshalb steht hier ein eigenes Format — und zwar bewusst **vor** dem Code, der es füllt.
+Keines der untersuchten Projekte löst das vollständig. Sie speichern Fakten und finden sie wieder; sie halten keine Ersetzungsketten, keine Ableitungsherkunft und keinen Widerrufspfad. Deshalb steht hier ein eigenes Format — und zwar bewusst **vor** dem Code, der es füllt.
 
 ## Grundregeln
 
@@ -27,7 +27,7 @@ Keines der untersuchten Projekte löst das vollständig. Mem0 kommt mit Zeitstem
 
 **Löschen heißt kaskadieren.** Wird eine Aussage widerrufen, müssen alle daraus abgeleiteten Aussagen mitgelöscht oder neu begründet werden. Das Feld `redaction.cascade` hält fest, was mitging. Ein Grabstein bleibt stehen, damit eine Lücke als Lücke erkennbar ist statt als Nie-dagewesen.
 
-**Das Format ist speicherunabhängig.** Mem0 ist heute die Ablage. Das Modell muss sie überleben können — das ist Säule 2 in konkreter Form, nicht als Absichtserklärung.
+**Das Format ist speicherunabhängig.** Der verbindliche Bestand liegt heute in lokalem SQLite, der semantische Index in cognee. Das Modell muss beide überleben können — im Code ist das als Schnittstelle `Backend` festgehalten, nicht bloß als Vorsatz. Das ist Säule 2 in konkreter Form.
 
 ## Die Typen von Aussagen
 
@@ -71,12 +71,17 @@ Ehrlich benannt, damit es niemand für fertig hält:
 - **Kein Konfliktlöser.** Das Schema kann Widersprüche *darstellen*, aber nicht entscheiden. Welche zweier widersprüchlicher Aussagen gewinnt, ist Logik der Orchestrierungsschicht.
 - **Keine Verdichtung.** Reflexionen und Zusammenfassungen über viele Episoden hinweg — die Ebene, die aus Erinnerungen ein Selbstbild macht — fehlen. Für den Anfang lassen sie sich als `inference` mit `derived_from` abbilden, das trägt aber nicht auf Dauer.
 - **Keine Durchsetzung.** `sensitivity` ist heute nur eine Markierung. Dass `special_category` niemals an ein externes Modell geht, muss die Orchestrierungsschicht garantieren; siehe [03-delegation.md](03-delegation.md).
-- **Keine Bindung an die Ablage.** Wie Aussagen auf Mem0-Objekte abgebildet werden, ist offen und der nächste konkrete Arbeitsschritt.
+- **Kein Konsolidierungslauf.** Aussagen sammeln sich an; ein Prozess, der sie periodisch verdichtet, prüft und veraltete zur Bestätigung vorlegt, fehlt.
 
 ## Prüfen
 
 ```bash
-make validate-schema
+make test              # 27 Tests der Regeln
+make validate-schema   # Beispielprofil gegen das Schema
 ```
 
-Validiert `schema/beispiel-profil.json` gegen das Schema (JSON Schema Draft 2020-12, benötigt `pip install jsonschema`). Das Beispiel deckt bewusst die schwierigen Fälle ab: eine Ersetzungskette (Hamburg → Leipzig), eine abgelaufene Gesundheitsangabe, eine markierte Ableitung und einen kaskadierenden Widerruf.
+Die Tests laufen **ohne Netz, ohne Modell und ohne cognee**. Das ist Absicht: Die Regeln, die das Modell überprüfbar machen, dürfen nicht von einer Fremdbibliothek abhängen. Abgedeckt sind unter anderem die Ersetzungskette über drei Stationen, die Wiederbelebung einer abgelaufenen Aussage durch Bestätigung, der kaskadierende Widerruf über zwei Ableitungsebenen und die Weigerung, eine widerrufene Aussage zu ersetzen.
+
+Ein Test prüft zusätzlich, dass der **Export gegen genau die Schemadatei validiert**, die dieses Dokument beschreibt — Doku und Code können nicht auseinanderlaufen, ohne dass die Tests rot werden.
+
+`schema/beispiel-profil.json` deckt dieselben schwierigen Fälle als Beispiel ab: Ersetzungskette (Hamburg → Leipzig), abgelaufene Gesundheitsangabe, markierte Ableitung, kaskadierender Widerruf.

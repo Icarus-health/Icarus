@@ -6,94 +6,94 @@
 
 Aus dieser These folgen vier Säulen. Jeder Baustein wird daran gemessen, nicht an Feature-Listen.
 
-| # | Säule | Heutiger Stand im Skelett |
+| # | Säule | Stand |
 |---|---|---|
-| 1 | Überprüfbares Selbstmodell | **Offen.** Kein untersuchtes Projekt liefert das. Erster konkreter Schritt: [`schema/self-model.schema.json`](../schema/self-model.schema.json), beschrieben in [02-selbstmodell.md](02-selbstmodell.md). |
-| 2 | Anbieterunabhängiges Gedächtnis | **Teilweise.** Mem0 auf eigenem Postgres; die Daten liegen im eigenen Haus. Belegte Exportierbarkeit steht aus. |
-| 3 | Aktuelle Informationen | **Teilweise.** Open WebUI bringt Websuche, Dateien und Werkzeuge mit — im Skelett bewusst nicht verdrahtet. |
-| 4 | Kontrollierte Delegation | **Offen.** Spezifiziert in [03-delegation.md](03-delegation.md), nicht implementiert. |
+| 1 | Überprüfbares Selbstmodell | **Gebaut, im Kern.** Provenienz, Ersetzung, Ablauf und kaskadierender Widerruf laufen und sind getestet. |
+| 2 | Anbieterunabhängiges Gedächtnis | **Gebaut, im Kern.** Der Bestand liegt in lokalem SQLite und überlebt einen Wechsel der Memory-Bibliothek. |
+| 3 | Aktuelle Informationen | **Offen.** Konnektoren für Mail, Kalender, Dateien und Web fehlen. |
+| 4 | Kontrollierte Delegation | **Spezifiziert, nicht gebaut.** Siehe [03-delegation.md](03-delegation.md). |
 
-Säule 1 und 4 sind der eigentliche Differenzierer. Sie sind bewusst **nicht** durch Fremdkomponenten abgedeckt, und das Skelett soll diese Lücke sichtbar lassen statt sie zu kaschieren.
+## Betriebsform: eine App, kein Stack
+
+Icarus ist eine **downloadbare Desktop-Anwendung**, zuerst für macOS, später Windows. Kein Docker, kein Server, keine Einrichtung.
+
+Das war nicht immer so. Die erste Fassung dieser Architektur setzte auf einen Docker-Compose-Stack aus Open WebUI und Mem0. Diese Entscheidung wurde revidiert, als das Ziel „downloadbare App" feststand: Ein Nutzer, der Docker Desktop installieren muss, bevor er eine Notiz speichern kann, ist nicht die Zielgruppe. Die Begründungen stehen in [ADR 0005](adr/0005-cognee-statt-mem0.md) und [ADR 0006](adr/0006-tauri-desktop.md).
 
 ## Aufbau
 
 ```mermaid
 flowchart TD
-    U[Nutzer] --> UI[Open WebUI<br/>Chat · Sprache · Dateien]
+    U[Nutzer] --> UI[Tauri-App<br/>System-WebView]
 
-    UI -.->|OpenAPI-Werkzeug,<br/>manuell zu verbinden| MEM[Mem0<br/>Memory-Schicht]
-    UI --> LLM[Modell-Backends<br/>OpenAI · Anthropic · Ollama]
+    UI -->|"HTTP auf 127.0.0.1<br/>Token je Start"| SC[Python-Sidecar]
 
-    MEM --> PG[(Postgres + pgvector<br/>Memories · Nutzer · API-Keys)]
+    subgraph SC [Sidecar]
+        direction TB
+        LOGIC[Selbstmodell-Logik<br/>Ersetzung · Ablauf · Widerruf]
+        LOGIC --> SQL[(SQLite<br/>verbindlicher Bestand)]
+        LOGIC -.->|nur Suche| COG[cognee<br/>semantischer Index]
+        COG -.-> FILES[(LanceDB · KuzuDB<br/>dateibasiert)]
+    end
+
+    COG -.->|Einordnen, Einbetten| LLM[Modell<br/>OpenAI · Anthropic · Ollama]
 
     subgraph offen [Noch nicht gebaut]
         direction TB
-        ORCH[Orchestrierung<br/>Session-Router]
         POL[Policy- und Approval-Layer]
-        ACT[Computer-Use<br/>z. B. Agent Zero]
         CONN[Konnektoren<br/>Mail · Kalender · Dateien]
+        ACT[Computer-Use]
     end
 
-    UI -.-> ORCH
-    ORCH -.-> POL
-    POL -.-> ACT
+    UI -.-> POL
     POL -.-> CONN
-    ORCH -.-> MEM
-
-    SM[/self-model.schema.json<br/>Selbstmodell/] -.->|Format, speicherunabhängig| MEM
+    POL -.-> ACT
+    CONN -.-> LOGIC
 
     classDef gebaut fill:#dff5e1,stroke:#3b7a4b,color:#14311d
     classDef fehlt fill:#f5f0dd,stroke:#9a8b3b,color:#3a3316,stroke-dasharray:4 3
-    class UI,MEM,PG,LLM gebaut
-    class ORCH,POL,ACT,CONN,SM fehlt
+    class UI,LOGIC,SQL,COG,FILES gebaut
+    class POL,CONN,ACT,LLM fehlt
 ```
 
-Durchgezogene Linien sind im Skelett vorhanden, gestrichelte sind Konfigurationsarbeit oder noch nicht gebaut.
+## Die zwei Speicher, und warum es zwei sind
 
-## Die drei laufenden Bausteine
+Das ist die zentrale Entscheidung der Gedächtnisschicht und der häufigste Punkt für Missverständnisse.
 
-### Open WebUI — Bedienoberfläche
+**Der verbindliche Bestand liegt in SQLite.** Aussagen, Provenienz, Ersetzungs- und Ableitungsketten müssen exakt sein, per ID adressierbar, deterministisch lesbar und ohne Modellaufruf verfügbar. Ein per LLM befüllter Wissensgraph erfüllt das nicht: Er ist verlustbehaftet und nicht reproduzierbar. Als alleinige Quelle der Wahrheit für ein **überprüfbares** Selbstmodell ist er ungeeignet.
 
-Gepinnt auf `v0.11.0`, erreichbar auf Port 3000. Ausgewählt, weil es im untersuchten Feld die reifste Oberfläche ist und Modelle austauschbar hält: lokal über Ollama oder jede OpenAI-kompatible API. Damit ist Säule 2 auf der Modellseite bereits erfüllt — die Oberfläche bindet sich an keinen Anbieter.
+**cognee ist der semantische Index.** Dort liegt seine Stärke: Ähnlichkeitssuche und Graph-Traversierung über die Formulierungen. Treffer aus cognee werden immer gegen den Bestand aufgelöst — der Graph kann keine Aussage erfinden, die im Bestand nicht existiert.
 
-Lizenz-Caveat: Der Kern steht nicht mehr rein unter einer klassischen OSI-Lizenz, sondern enthält Bestandteile unter der Open WebUI License. Siehe [ADR 0001](adr/0001-ui-open-webui.md).
+Der praktische Nutzen dieser Trennung: Fällt cognee weg, bleibt der Bestand **vollständig**. Nur die Suche fällt auf Substringsuche zurück. Das ist Säule 2 in praktischer Form statt als Absichtserklärung — und es ist im Code als Schnittstelle `Backend` festgehalten, nicht bloß als Vorsatz.
 
-### Mem0 — Memory-Schicht
+Ebenso landet **Widerrufenes und Ersetztes nie im semantischen Index**. Sonst käme es über Ähnlichkeit wieder hoch, obwohl es nicht mehr gilt.
 
-Apache-2.0, gepinnt auf einen Commit, gebaut aus dem Unterverzeichnis `server` des Mem0-Repos. REST-Schnittstelle mit OpenAPI-Beschreibung auf Port 8888.
+## Der Sidecar
 
-Mem0 extrahiert Fakten aus Gesprächen, sucht hybrid (semantisch, lexikalisch, Entitäten) und kennt Zeitstempel und Ablaufdaten. Das ist die beste verfügbare Grundlage, aber noch **kein** überprüfbares Selbstmodell im Sinne von Säule 1 — deshalb das eigene Schema.
+Die App startet den Python-Sidecar als Kindprozess:
 
-Warum aus der Quelle gebaut und nicht das fertige Image: das veröffentlichte `mem0/mem0-api-server` ist arm64-only. Siehe [ADR 0002](adr/0002-memory-mem0.md).
+- Der **Port** wird beim Start vom Betriebssystem vergeben, nicht fest verdrahtet.
+- Ein **Token** wird bei jedem Start neu erzeugt und per Umgebungsvariable übergeben. Ohne das könnte jeder lokale Prozess das Selbstmodell auslesen — auf einem Einzelplatzrechner ist genau das der relevante Angriffsweg.
+- Gebunden wird ausschließlich an `127.0.0.1`. Es gibt bewusst keine Option, den Sidecar zu öffnen.
+- Beim Beenden der App wird der Kindprozess terminiert, sonst hält er die Datenbank offen.
 
-### Postgres mit pgvector
+Die Schnittstelle ist bewusst klein: Aussagen aufnehmen, verwendbare lesen, suchen, Kette einer Aussage anzeigen, bestätigen, widerrufen, exportieren.
 
-`pgvector/pgvector:pg17`. Hält zwei Datenbanken: die Default-Datenbank als Vektorspeicher für Memories, und `mem0_app` für Nutzer, Auth und API-Keys. Letztere wird beim ersten Start durch [`docker/postgres/init-db.sh`](../docker/postgres/init-db.sh) angelegt.
+## Warum die Oberfläche Eigenarbeit ist
 
-Der Container veröffentlicht bewusst **keinen** Host-Port. Er ist nur innerhalb des Compose-Netzes erreichbar.
+Open WebUI und AnythingLLM bringen fertig mit, was hier gebaut werden muss. Trotzdem fiel die Entscheidung für eine eigene Hülle, und der Grund ist eine Eigentumsfrage.
 
-## Der Integrationspfad zwischen Oberfläche und Gedächtnis
+Die beiden Dinge, die Icarus von einem Chat-Frontend unterscheiden, sind keine Plugins. **Herkunft muss bei jeder Aussage sichtbar sein** — deshalb steht unter jeder Zeile, woher sie stammt, und nicht in einem aufklappbaren Detail. **Jede Aktion muss durch die Freigabeklassifikation** — das greift in jede Interaktion ein. In einer fremden App leben diese Dinge als Fremdkörper.
 
-Das ist der Punkt, an dem das Skelett ehrlich sein muss: **Open WebUI und Mem0 sind nicht automatisch miteinander verdrahtet.**
-
-Open WebUI bringt ein *eigenes*, davon unabhängiges Memory-Feature mit. Wer nichts weiter tut, bekommt zwei getrennte Gedächtnisse — genau der Zustand, den dieses Projekt vermeiden will.
-
-Die Verbindung ist Konfigurationsarbeit:
-
-1. Mem0 beschreibt sich selbst als OpenAPI unter `http://localhost:8888/docs` (im Compose-Netz `http://mem0:8000`).
-2. In Open WebUI unter **Settings → Tools → Add Connection** diese OpenAPI-Beschreibung eintragen.
-3. Open WebUI kann Mem0 dann als Werkzeug aufrufen.
-
-Ein Proxy wie `mcpo` wird hier **nicht** gebraucht. Der ist nur nötig, um MCP-Server anzubinden, die über stdio sprechen — Mem0 spricht bereits HTTP mit OpenAPI.
-
-Offene Frage für die nächste Ausbaustufe: Open WebUIs eigenes Memory sollte deaktiviert oder auf Mem0 umgebogen werden, damit es genau eine Quelle der Wahrheit gibt.
+Der Report benennt UX-Vereinfachung als größten Zeitfresser und zugleich als eigentliche Produktdifferenzierung. Diesen Teil auszulagern hieße, den Kern auszulagern.
 
 ## Bewusst offene Stellen
 
-**Agent-Core.** Der Recherche-Report empfahl Letta. Diese Empfehlung ist überholt — das Repo ist deprecated, der Nachfolger an eine Cloud gekoppelt. Details in [ADR 0003](adr/0003-kein-letta.md). Der Platz bleibt vorerst leer; Open WebUI übernimmt die Gesprächsführung.
-
 **Policy- und Approval-Layer.** Muss vor jeder Form von Ausführung existieren, nicht danach. Spezifikation in [03-delegation.md](03-delegation.md).
 
-**Computer-Use.** Agent Zero ist der stärkste offene Kandidat, kommt aber bewusst erst nach dem Approval-Layer ins Compose. Ein Assistent mit Desktop-Zugriff und ohne Freigabemodell ist kein Feature, sondern ein Risiko.
+**Konnektoren.** Mail, Kalender, Dateien und Web sind Säule 3. Sobald sie schreibend werden, hängen sie am Approval-Layer.
 
-**Konnektoren.** Mail, Kalender und Dateien sind Säule 3 und hängen ebenfalls am Approval-Layer, sobald sie schreibend werden.
+**Computer-Use.** Agent Zero bleibt der stärkste offene Kandidat, kommt aber erst nach Säule 4. Ein Assistent mit Desktop-Zugriff ohne Freigabemodell ist kein Feature, sondern ein Risiko.
+
+**Gesprächsführung.** Es gibt noch keinen Chat. Die App kann heute Aussagen aufnehmen, anzeigen und widerrufen — sie ist der Gedächtniskern mit Oberfläche, nicht der Assistent.
+
+**Verdichtung.** Reflexionen über viele Episoden hinweg — die Ebene, die aus Erinnerungen ein Selbstbild macht — fehlen. Siehe [02-selbstmodell.md](02-selbstmodell.md).

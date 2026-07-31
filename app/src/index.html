@@ -9,15 +9,55 @@
   <body>
     <nav>
       <strong>Icarus</strong>
-      <button data-view="chat" class="tab active">Gespräch</button>
+      <button data-view="dashboard" class="tab active">Heute</button>
+      <button data-view="chat" class="tab">Gespräch</button>
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
       <span id="status" class="status">Verbinde…</span>
     </nav>
 
     <main>
+      <!-- Heute: Aufgaben, Termine, Nachrichten auf einen Blick -->
+      <section id="view-dashboard" class="view">
+        <h2 id="greeting"></h2>
+
+        <div class="cards">
+          <article class="card">
+            <h3>Aufgaben <span id="task-badge" class="badge" hidden></span></h3>
+            <form id="task-form">
+              <input id="task-title" type="text" placeholder="Was ist zu tun?" autocomplete="off" required />
+              <input id="task-due" type="date" aria-label="Fällig am" />
+              <button type="submit">Anlegen</button>
+            </form>
+            <ul id="task-list"></ul>
+            <p id="task-empty" class="muted">Nichts offen.</p>
+          </article>
+
+          <article class="card">
+            <h3>Termine</h3>
+            <ul id="event-list"></ul>
+            <p id="event-note" class="muted"></p>
+          </article>
+
+          <article class="card">
+            <h3>Nachrichten <span id="mail-badge" class="badge" hidden></span></h3>
+            <!-- Mail ist der gefährlichste Injection-Weg: jeder kann dir
+                 schreiben. Deshalb hier nur Vorschau, niemals automatisch
+                 verarbeitet. -->
+            <ul id="mail-list"></ul>
+            <p id="mail-note" class="muted"></p>
+          </article>
+
+          <article class="card">
+            <h3>Zuletzt gemerkt</h3>
+            <ul id="memory-list"></ul>
+            <p id="memory-note" class="muted"></p>
+          </article>
+        </div>
+      </section>
+
       <!-- Gespräch -->
-      <section id="view-chat" class="view">
+      <section id="view-chat" class="view" hidden>
         <div id="messages" class="messages"></div>
 
         <!-- Freigaben. Solange hier etwas steht, wartet eine Aktion. -->

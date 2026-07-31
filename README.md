@@ -12,8 +12,9 @@ server, no setup.
 > **Status: early, but end-to-end.** You can talk to it, it remembers with
 > provenance, it reaches for current information, and nothing leaves your
 > machine without you confirming exactly what goes out. It defends against
-> prompt injection, keeps keys in the OS keychain, and backs itself up.
-> Missing: real mail and calendar channels, computer-use, memory consolidation.
+> prompt injection, keeps keys in the OS keychain, and backs itself up. A
+> dashboard shows today's tasks, appointments and messages.
+> Missing: computer-use and memory consolidation.
 
 Detailed documentation is in German under [`docs/`](docs/).
 
@@ -23,7 +24,7 @@ Detailed documentation is in German under [`docs/`](docs/).
 |---|---|---|
 | 1 | Verifiable self-model — provenance, versioning, revocation | **Built.** Record, supersede, expire, revoke with cascade |
 | 2 | Vendor-independent memory | **Built.** Local SQLite record; OpenAI-compatible, Anthropic or Ollama in front |
-| 3 | Current information | **Partial.** Web fetch, files, time; mail and calendar missing |
+| 3 | Current information | **Built.** Mail (IMAP), calendar (CalDAV), tasks, web, files |
 | 4 | Controlled delegation and execution | **Built.** Action classes, dry-run approvals, append-only audit |
 
 ## How it is put together
@@ -70,7 +71,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 84 tests: memory, policy, audit, agent, security, backup
+make test            # 109 tests: memory, policy, audit, agent, security, connectors
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -115,8 +116,32 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-84 tests, no network and no model required — including a test that plays out a
+109 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped.
+
+## Connecting mail and calendar
+
+Open protocols, not vendor APIs — IMAP, SMTP and CalDAV work with iCloud,
+Fastmail, Nextcloud, your own server, and (with an app password) Gmail and
+Outlook. No OAuth dance, no API that gets deprecated.
+
+```bash
+# in .env — then: make secrets-migrate
+ICARUS_IMAP_HOST=imap.example.com
+ICARUS_SMTP_HOST=smtp.example.com
+ICARUS_MAIL_USER=you@example.com
+ICARUS_MAIL_PASSWORD=          # use an app password, never your main one
+ICARUS_CALDAV_URL=https://caldav.example.com/calendar/
+```
+
+Both are optional. Without them the dashboard shows the section with a note and
+everything else keeps working.
+
+**Mail is the most dangerous injection vector there is** — anyone can write to
+you. Message content is therefore always marked as foreign and taints the round,
+so any consequential action afterwards needs an approval. Calendar events with
+guests are outward-facing and require you to retype the recipient; without
+guests they stay local.
 
 ## Keeping it safe
 
@@ -146,13 +171,15 @@ sidecar/             Python: memory, policy, agent
     policy.py        Action classes, approval levels, constraints
     audit.py         Append-only log, enforced by SQLite triggers
     providers.py     OpenAI-compatible and Anthropic, one interface
-    tools.py         Web, files, time, memory, outward actions
+    tasks.py         Tasks with provenance, due dates, done vs. dropped
+    connectors/      Mail (IMAP/SMTP) and calendar (CalDAV), open protocols
+    tools.py         Web, files, time, memory, mail, calendar, tasks
     agent.py         Ties it together; proposes, never executes directly
     security.py      Path confinement, SSRF guard, untrusted-input handling
     secrets.py       OS keychain: macOS, Windows DPAPI, secret-tool
     backup.py        Snapshots, restore, encrypted export
     server.py        Loopback-only HTTP API for the app
-  tests/             84 tests, no network and no model required
+  tests/             109 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example

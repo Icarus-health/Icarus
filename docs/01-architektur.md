@@ -10,7 +10,7 @@ Aus dieser These folgen vier Säulen. Jeder Baustein wird daran gemessen, nicht 
 |---|---|---|
 | 1 | Überprüfbares Selbstmodell | **Gebaut, im Kern.** Provenienz, Ersetzung, Ablauf und kaskadierender Widerruf laufen und sind getestet. |
 | 2 | Anbieterunabhängiges Gedächtnis | **Gebaut, im Kern.** Der Bestand liegt in lokalem SQLite und überlebt einen Wechsel der Memory-Bibliothek. |
-| 3 | Aktuelle Informationen | **Teilweise.** Web-Abruf, Dateien und Zeit sind angebunden; Mail und Kalender fehlen. |
+| 3 | Aktuelle Informationen | **Gebaut.** Mail (IMAP/SMTP), Kalender (CalDAV), Aufgaben, Web, Dateien. |
 | 4 | Kontrollierte Delegation | **Gebaut.** Aktionsklassen, Freigabestufen, Trockenlauf, anhängendes Audit-Log. |
 
 ## Betriebsform: eine App, kein Stack
@@ -73,7 +73,15 @@ Die App startet den Python-Sidecar als Kindprozess:
 - Gebunden wird ausschließlich an `127.0.0.1`. Es gibt bewusst keine Option, den Sidecar zu öffnen.
 - Beim Beenden der App wird der Kindprozess terminiert, sonst hält er die Datenbank offen.
 
-Die Schnittstelle ist bewusst klein: Aussagen aufnehmen, verwendbare lesen, suchen, Kette anzeigen, bestätigen, widerrufen, exportieren — dazu Gespräch, Freigaben, Protokoll und `/context`.
+Die Schnittstelle ist bewusst klein: Aussagen aufnehmen, verwendbare lesen, suchen, Kette anzeigen, bestätigen, widerrufen, exportieren — dazu Gespräch, Freigaben, Protokoll, `/context`, Aufgaben und `/dashboard`.
+
+## Warum Aufgaben nicht ins Selbstmodell gehören
+
+Es wäre verlockend, Aufgaben als Aussagen vom Typ `goal` zu führen. Sie liegen trotzdem in einer eigenen Ablage, weil der Lebenszyklus ein anderer ist: Aussagen im Selbstmodell beschreiben, **wie jemand ist**, und werden ersetzt oder widerrufen. Aufgaben beschreiben, **was zu tun ist**, und werden erledigt oder fallengelassen. Beides in ein Modell zu pressen würde beide verwässern.
+
+Übernommen wird das Prinzip: Auch eine Aufgabe trägt ihre Herkunft. Taucht in drei Monaten „Rechnung an Müller schicken" auf, muss beantwortbar sein, ob das aus einer Mail kam, aus einem Gespräch, oder ob das System es sich ausgedacht hat.
+
+Erledigt und fallengelassen sind bewusst zwei Zustände. Ohne diese Trennung sieht ein Jahresrückblick so aus, als wäre alles geschafft worden.
 
 ## Was das Modell zu sehen bekommt
 
@@ -99,7 +107,7 @@ Der Report benennt UX-Vereinfachung als größten Zeitfresser und zugleich als e
 
 ## Bewusst offene Stellen
 
-**Mail und Kalender.** Der Freigabeweg für außenwirksame Aktionen steht und ist geprüft, aber es hängt kein echter Kanal daran. Eine erteilte Freigabe endet heute im Protokoll als `failed` mit Begründung — nicht als stiller Erfolg. Was fehlt, ist die Anbindung samt OAuth, nicht die Kontrolle darüber.
+**Konnektoren sind ungetestet gegen echte Server.** IMAP, SMTP und CalDAV sind implementiert und gegen Fakes geprüft; ein Lauf gegen einen echten Server steht aus. Der iCalendar-Parser deckt Zeitpunkt, Titel, Ort und Teilnehmer ab — Wiederholungsregeln nicht.
 
 **Computer-Use.** Agent Zero bleibt der stärkste Kandidat. Jetzt, wo die Policy steht, ist der Weg dafür frei: Die Anbindung erfolgt hinter der Freigabeschicht, nie direkt an der Oberfläche.
 

@@ -24,12 +24,14 @@ from .agent import Agent
 from .audit import AuditLog
 from .backends import CogneeBackend
 from .backup import BackupError, export_model, import_model, list_snapshots, snapshot
+from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
 from .policy import Policy, PolicyError
 from .providers import from_env as provider_from_env
 from .secrets import Keychain, load_into_env
 from .security import file_roots_from_env
 from .store import ConflictError, SelfModelStore
+from .tasks import TaskStore
 from .tools import build_registry
 
 TOKEN_ENV = "ICARUS_SIDECAR_TOKEN"
@@ -91,10 +93,37 @@ class VerifyIn(BaseModel):
     passphrase: str | None = None
 
 
+def _mail_sink(app: FastAPI):
+    """Verbindet das Werkzeug mail_senden mit dem echten Versand.
+
+    Wird erst nach erteilter Freigabe gerufen. Ohne eingerichteten Mailzugang
+    schlägt es hörbar fehl, statt Erfolg vorzutäuschen.
+    """
+
+    def send(payload: dict) -> str:
+        mail = getattr(app.state, "mail", None)
+        if mail is None:
+            raise RuntimeError(
+                "Kein Mailzugang eingerichtet. Die Freigabe war erteilt, "
+                "aber es gibt keinen Kanal (ICARUS_SMTP_HOST fehlt)."
+            )
+        return mail.send(payload["to"], payload["subject"], payload["body"])
+
+    return send
+
+
+class TaskIn(BaseModel):
+    title: str = Field(min_length=1)
+    due: datetime | None = None
+    notes: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
 def create_app(
     store: SelfModelStore | None = None,
     agent: Agent | None = None,
     audit: AuditLog | None = None,
+    tasks: TaskStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Icarus", version="0.1.0")
 
@@ -108,15 +137,33 @@ def create_app(
         audit = AuditLog(_data_dir() / "audit.sqlite3")
     app.state.audit = audit
 
+    if tasks is None:
+        tasks = TaskStore(_data_dir() / "tasks.sqlite3")
+    app.state.tasks = tasks
+
     if agent is None:
-        # Schlüssel aus dem Schlüsselbund holen, bevor der Anbieter gebaut wird.
+        # Schlüssel aus dem Schlüsselbund holen, bevor Anbieter und Konnektoren
+        # gebaut werden — Zugangsdaten sollen nicht aus .env kommen müssen.
         app.state.keychain = Keychain()
         app.state.loaded_secrets = load_into_env(app.state.keychain)
+
+        mail_config = MailConfig.from_env(dict(os.environ))
+        cal_config = CalendarConfig.from_env(dict(os.environ))
+        app.state.mail = MailConnector(mail_config) if mail_config else None
+        app.state.calendar = CalendarConnector(cal_config) if cal_config else None
+
         agent = Agent(
             store=store,
             policy=Policy(),
             audit=audit,
-            tools=build_registry(store, file_roots=file_roots_from_env(os.environ.get(ROOTS_ENV))),
+            tools=build_registry(
+                store,
+                outward_sink=_mail_sink(app),
+                file_roots=file_roots_from_env(os.environ.get(ROOTS_ENV)),
+                mail=app.state.mail,
+                calendar=app.state.calendar,
+                task_store=tasks,
+            ),
             provider=provider_from_env(),
         )
     app.state.agent = agent
@@ -150,6 +197,8 @@ def create_app(
             # kann, statt dass der Nutzer ihn erraten muss.
             "keychain": getattr(getattr(app.state, "keychain", None), "backend", "none"),
             "file_roots": [str(p) for p in file_roots_from_env(os.environ.get(ROOTS_ENV))],
+            "mail": getattr(app.state, "mail", None) is not None,
+            "calendar": getattr(app.state, "calendar", None) is not None,
         }
 
     # -- Assistent ---------------------------------------------------------
@@ -250,6 +299,95 @@ def create_app(
     @app.get("/export", dependencies=guard)
     def export() -> dict[str, Any]:
         return app.state.store.export().to_dict()
+
+    # -- Dashboard ---------------------------------------------------------
+
+    @app.get("/dashboard", dependencies=guard)
+    def dashboard(days: int = 7) -> dict[str, Any]:
+        """Alles für die Startseite in einem Aufruf.
+
+        Jeder Bereich ist einzeln fehlertolerant: Ist ein Konnektor nicht
+        eingerichtet oder gerade nicht erreichbar, fehlt genau dieser Block mit
+        einer Begründung — der Rest der Seite steht trotzdem. Ein Dashboard,
+        das komplett ausfällt, weil ein Mailserver hakt, ist nutzlos.
+        """
+        result: dict[str, Any] = {
+            "now": datetime.now().astimezone().isoformat(),
+            "tasks": {"items": [], "error": None},
+            "calendar": {"items": [], "error": None},
+            "mail": {"items": [], "error": None},
+            "memory": {"count": 0, "recent": []},
+        }
+
+        try:
+            offen = app.state.tasks.open_tasks(limit=50)
+            result["tasks"]["items"] = [t.to_dict() for t in offen]
+            result["tasks"]["overdue"] = sum(1 for t in offen if t.is_overdue())
+        except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
+            result["tasks"]["error"] = str(exc)
+
+        calendar = getattr(app.state, "calendar", None)
+        if calendar is None:
+            result["calendar"]["error"] = "Kein Kalender eingerichtet (ICARUS_CALDAV_URL)."
+        else:
+            try:
+                result["calendar"]["items"] = [e.to_dict() for e in calendar.events(days=days)]
+            except Exception as exc:  # noqa: BLE001
+                result["calendar"]["error"] = str(exc)
+
+        mail = getattr(app.state, "mail", None)
+        if mail is None:
+            result["mail"]["error"] = "Kein Mailzugang eingerichtet (ICARUS_IMAP_HOST)."
+        else:
+            try:
+                messages = mail.inbox(limit=8)
+                result["mail"]["items"] = [m.to_dict() for m in messages]
+                result["mail"]["unread"] = sum(1 for m in messages if m.unread)
+            except Exception as exc:  # noqa: BLE001
+                result["mail"]["error"] = str(exc)
+
+        usable = app.state.store.usable()
+        result["memory"]["count"] = len(usable)
+        result["memory"]["recent"] = [
+            a.to_dict() for a in sorted(usable, key=lambda x: x.recorded_at, reverse=True)[:5]
+        ]
+        return result
+
+    # -- Aufgaben ----------------------------------------------------------
+
+    @app.get("/tasks", dependencies=guard)
+    def list_tasks(all: bool = False) -> list[dict[str, Any]]:
+        items = app.state.tasks.all_tasks() if all else app.state.tasks.open_tasks()
+        return [t.to_dict() for t in items]
+
+    @app.post("/tasks", dependencies=guard, status_code=201)
+    def add_task(body: TaskIn) -> dict[str, Any]:
+        task = app.state.tasks.add(
+            body.title,
+            Provenance(source_type=SourceType.USER_STATED,
+                       captured_at=datetime.now().astimezone()),
+            due=body.due, notes=body.notes, tags=body.tags,
+        )
+        return task.to_dict()
+
+    @app.post("/tasks/{task_id}/done", dependencies=guard)
+    def complete_task(task_id: str) -> dict[str, Any]:
+        try:
+            return app.state.tasks.complete(task_id).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/tasks/{task_id}/drop", dependencies=guard)
+    def drop_task(task_id: str) -> dict[str, Any]:
+        """Fallenlassen, nicht erledigen.
+
+        Der Unterschied ist für ein System, das Jahre läuft, wichtig: Sonst
+        sieht es später aus, als wäre alles geschafft worden.
+        """
+        try:
+            return app.state.tasks.drop(task_id).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     # -- Sicherung ---------------------------------------------------------
 

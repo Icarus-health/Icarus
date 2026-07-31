@@ -19,6 +19,7 @@ from typing import Iterable, Protocol
 
 from .model import (
     Assertion,
+    ensure_aware,
     Kind,
     Provenance,
     Redaction,
@@ -82,7 +83,11 @@ class SelfModelStore:
         Ersetzte Aussagen werden nicht überschrieben, sondern auf
         `superseded` gesetzt und zeigen auf die neue zurück.
         """
-        at = at or now()
+        at = ensure_aware(at) or now()
+        # Zeitangaben aus der API tragen oft keine Zone; ohne Normalisierung
+        # scheitert später jeder Vergleich mit TypeError.
+        valid_from = ensure_aware(valid_from)
+        expires_at = ensure_aware(expires_at)
         supersedes = list(supersedes)
         derived_from = list(derived_from)
 

@@ -27,6 +27,9 @@ KNOWN = (
     "ANTHROPIC_API_KEY",
     "LLM_API_KEY",
     "ICARUS_BACKUP_PASSPHRASE",
+    # Konnektor-Zugangsdaten gehören genauso wenig in eine Klartextdatei.
+    "ICARUS_MAIL_PASSWORD",
+    "ICARUS_CALDAV_PASSWORD",
 )
 
 

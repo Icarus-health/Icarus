@@ -27,9 +27,21 @@ async function api(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+const SOURCE_LABELS = {
+  user_stated: "von dir gesagt",
+  chat: "aus einem Gespräch",
+  email: "aus einer E-Mail",
+  calendar: "aus dem Kalender",
+  document: "aus einem Dokument",
+  web: "aus dem Web",
+  tool_output: "von einem Werkzeug",
+  inference: "selbst gefolgert",
+  manual_correction: "manuell korrigiert",
+};
+
 // -- Ansichten --------------------------------------------------------------
 
-const REFRESH = { memory: loadMemory, audit: loadAudit, chat: loadApprovals };
+const REFRESH = { dashboard: loadDashboard, memory: loadMemory, audit: loadAudit, chat: loadApprovals };
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -39,6 +51,135 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $(`#view-${tab.dataset.view}`).hidden = false;
     REFRESH[tab.dataset.view]?.();
   });
+});
+
+
+// -- Heute ------------------------------------------------------------------
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return "Noch wach?";
+  if (h < 11) return "Guten Morgen";
+  if (h < 18) return "Hallo";
+  return "Guten Abend";
+}
+
+function li(main, meta, action) {
+  const el = document.createElement("li");
+  const p = document.createElement("p");
+  p.className = "statement";
+  p.textContent = main;
+  el.append(p);
+  if (meta) {
+    const m = document.createElement("p");
+    m.className = "meta";
+    m.textContent = meta;
+    el.append(m);
+  }
+  if (action) el.append(action);
+  return el;
+}
+
+function renderTasks(block) {
+  const list = $("#task-list");
+  const items = block.items ?? [];
+  list.replaceChildren();
+  $("#task-empty").hidden = items.length > 0;
+
+  const badge = $("#task-badge");
+  badge.hidden = !block.overdue;
+  badge.textContent = `${block.overdue} überfällig`;
+
+  for (const t of items) {
+    const done = document.createElement("button");
+    done.className = "ghost small";
+    done.textContent = "Erledigt";
+    done.addEventListener("click", async () => {
+      await api(`/tasks/${t.id}/done`, { method: "POST" });
+      await loadDashboard();
+    });
+
+    const bits = [];
+    if (t.due) bits.push(`fällig ${new Date(t.due).toLocaleDateString("de-DE")}`);
+    bits.push(SOURCE_LABELS[t.provenance.source_type] ?? t.provenance.source_type);
+
+    const row = li(t.title, bits.join(" · "), done);
+    if (t.overdue) row.classList.add("overdue");
+    list.append(row);
+  }
+}
+
+function renderEvents(block) {
+  const list = $("#event-list");
+  list.replaceChildren();
+  $("#event-note").textContent = block.error ?? (block.items.length ? "" : "Nichts geplant.");
+
+  for (const e of block.items ?? []) {
+    const start = e.start ? new Date(e.start) : null;
+    const when = start
+      ? (e.all_day
+          ? start.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) + " ganztags"
+          : start.toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }))
+      : "?";
+    const bits = [when];
+    if (e.location) bits.push(e.location);
+    if (e.attendees?.length) bits.push(`mit ${e.attendees.join(", ")}`);
+    list.append(li(e.summary, bits.join(" · ")));
+  }
+}
+
+function renderMail(block) {
+  const list = $("#mail-list");
+  list.replaceChildren();
+  $("#mail-note").textContent = block.error ?? (block.items.length ? "" : "Nichts Neues.");
+
+  const badge = $("#mail-badge");
+  badge.hidden = !block.unread;
+  badge.textContent = `${block.unread} ungelesen`;
+
+  for (const m of block.items ?? []) {
+    const when = m.date ? new Date(m.date).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+    const row = li(m.subject || "(kein Betreff)", `${m.from} · ${when}`);
+    if (m.unread) row.classList.add("unread");
+    list.append(row);
+  }
+}
+
+function renderMemoryCard(block) {
+  const list = $("#memory-list");
+  list.replaceChildren();
+  $("#memory-note").textContent = block.count
+    ? `${block.count} Aussagen insgesamt.`
+    : "Noch nichts gemerkt.";
+
+  for (const a of block.recent ?? []) {
+    list.append(li(a.statement, SOURCE_LABELS[a.provenance.source_type] ?? a.provenance.source_type));
+  }
+}
+
+async function loadDashboard() {
+  $("#greeting").textContent = greeting();
+  const data = await api("/dashboard");
+  renderTasks(data.tasks);
+  renderEvents(data.calendar);
+  renderMail(data.mail);
+  renderMemoryCard(data.memory);
+}
+
+$("#task-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const title = $("#task-title").value.trim();
+  if (!title) return;
+  const due = $("#task-due").value;
+  await api("/tasks", {
+    method: "POST",
+    // Datumsfeld liefert nur den Tag; als Tagesende deuten, damit eine Aufgabe
+    // nicht schon morgens früh als überfällig gilt.
+    body: JSON.stringify({ title, due: due ? `${due}T23:59:00` : null }),
+  });
+  $("#task-title").value = "";
+  $("#task-due").value = "";
+  await loadDashboard();
 });
 
 // -- Gespräch ---------------------------------------------------------------
@@ -178,18 +319,6 @@ $("#chat-form").addEventListener("submit", async (event) => {
 
 // -- Gedächtnis -------------------------------------------------------------
 
-const SOURCE_LABELS = {
-  user_stated: "von dir gesagt",
-  chat: "aus einem Gespräch",
-  email: "aus einer E-Mail",
-  calendar: "aus dem Kalender",
-  document: "aus einem Dokument",
-  web: "aus dem Web",
-  tool_output: "von einem Werkzeug",
-  inference: "selbst gefolgert",
-  manual_correction: "manuell korrigiert",
-};
-
 async function loadMemory() {
   const [assertions, ctx] = await Promise.all([api("/assertions"), api("/context")]);
   $("#context").textContent = ctx.context;
@@ -322,6 +451,7 @@ async function start() {
   }
 
   await loadApprovals();
+  await loadDashboard();
 }
 
 async function startWithRetry(attempts = 40) {

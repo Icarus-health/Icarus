@@ -15,6 +15,7 @@ wenn die Policy es erlaubt oder der Nutzer freigibt.
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -318,6 +319,46 @@ class Agent:
 
         turn.reply = turn.reply or "Ich komme hier nicht weiter."
         return turn
+
+    # -- Direkter Werkzeugaufruf ------------------------------------------
+
+    def tool_schemas(self) -> list[dict[str, Any]]:
+        return [t.schema() for t in self._tools.values()]
+
+    def invoke(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Ruft ein Werkzeug ohne Modell auf — durch dieselbe Policy.
+
+        Gebraucht wird das von der MCP-Tür: Dort stellt ein *fremder* Assistent
+        die Anträge, nicht das Modell im Haus. Genau deshalb darf dieser Weg
+        keine Abkürzung sein. Er geht durch `_handle()`, also durch Grenzen aus
+        dem Selbstmodell, durch die Anhebung nach fremdem Inhalt und durch das
+        Audit-Log — dieselben vier Schritte wie im Gespräch.
+
+        Außenwirksames wird hier nicht ausgeführt, sondern als Antrag
+        zurückgegeben. Ein Assistent auf der anderen Seite einer Leitung kann
+        keine Bestätigung abtippen; das kann nur der Mensch vor der App. Die
+        Antwort sagt ihm das, statt still zu scheitern.
+        """
+        if name not in self._tools:
+            return {"ok": False, "text": f"Unbekanntes Werkzeug: {name}", "approvals": []}
+
+        turn = Turn()
+        call = ToolCall(id=f"mcp-{uuid.uuid4().hex[:8]}", name=name, arguments=arguments)
+        text = self._handle(call, turn)
+
+        if turn.approvals:
+            approval = turn.approvals[0]
+            text = (
+                "Das braucht deine Freigabe in Icarus. Was passieren würde:\n\n"
+                f"{approval.dry_run}\n\n"
+                f"Antrag {approval.id} liegt in der App unter „Gespräch“."
+            )
+        return {
+            "ok": not turn.approvals,
+            "text": text,
+            "approvals": [a.to_dict() for a in turn.approvals],
+            "notices": turn.notices,
+        }
 
     # -- Werkzeugaufruf ----------------------------------------------------
 

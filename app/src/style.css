@@ -269,3 +269,52 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 #task-form { margin-bottom: 0.5rem; }
 #task-form input[type="text"] { flex: 1 1 10rem; }
 #task-form input[type="date"] { flex: 0 0 auto; }
+
+/* -- Projekte -------------------------------------------------------------- */
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(14rem, 22rem) 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 46rem) {
+  .split { grid-template-columns: 1fr; }
+}
+
+#project-list { margin: 0; }
+
+.project {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.project:hover { background: var(--panel); }
+
+.project.selected {
+  background: var(--panel);
+  border-left: 2px solid var(--accent, currentColor);
+}
+
+/* Abgeschlossenes und Aufgegebenes tritt zurück, verschwindet aber nicht —
+   eine Rückschau, die nur die Erfolge zeigt, ist keine. */
+.project.closed .statement { opacity: 0.55; }
+
+#project-detail {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+#project-detail h3 { margin: 0 0 0.3rem; }
+#project-detail h4 { margin: 1.2rem 0 0.4rem; font-size: 0.9rem; }
+#project-detail ul { margin: 0; }
+#project-detail select { margin-top: 0.75rem; }
+#project-detail form { margin-top: 0.75rem; }
+#project-detail form input { flex: 1 1 12rem; }
+
+#project-form { margin-bottom: 1rem; }
+#project-form input[type="text"] { flex: 1 1 10rem; }

@@ -51,6 +51,13 @@ class Task:
     notes: str | None = None
     done_at: datetime | None = None
     tags: list[str] = field(default_factory=list)
+    project_id: str | None = None
+    """Zu welchem Projekt die Aufgabe gehört.
+
+    Optional, und das ist Absicht: Nicht alles im Leben ist ein Projekt, und
+    ein Pflichtfeld hier würde dazu führen, dass ein Sammelprojekt „Sonstiges"
+    entsteht — das wäre dieselbe flache Liste mit mehr Schritten.
+    """
 
     def is_overdue(self, at: datetime | None = None) -> bool:
         at = at or now()
@@ -70,6 +77,7 @@ class Task:
             "notes": self.notes,
             "done_at": iso(self.done_at),
             "tags": list(self.tags),
+            "project_id": self.project_id,
             "overdue": self.is_overdue(),
         }
 
@@ -86,6 +94,13 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due    ON tasks(due);
 """
+
+# Nachgezogen für Dateien, die vor der Projektebene entstanden sind. Der
+# Inhalt liegt ohnehin im JSON-Dokument; die Spalte ist nur der Index darauf.
+_MIGRATIONS = [
+    "ALTER TABLE tasks ADD COLUMN project_id TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)",
+]
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -104,6 +119,13 @@ class TaskStore:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            for statement in _MIGRATIONS:
+                try:
+                    self._conn.execute(statement)
+                except sqlite3.OperationalError:
+                    # Spalte existiert bereits — der Normalfall bei jedem
+                    # Start nach dem ersten.
+                    pass
             self._conn.commit()
 
     # -- Schreiben ---------------------------------------------------------
@@ -116,6 +138,7 @@ class TaskStore:
         due: datetime | None = None,
         notes: str | None = None,
         tags: list[str] | None = None,
+        project_id: str | None = None,
         at: datetime | None = None,
     ) -> Task:
         task = Task(
@@ -127,6 +150,7 @@ class TaskStore:
             due=ensure_aware(due),
             notes=notes,
             tags=list(tags or []),
+            project_id=project_id,
         )
         self._put(task)
         return task
@@ -189,6 +213,22 @@ class TaskStore:
             if t.due is not None and t.due <= limit
         ]
 
+    def by_project(self, project_id: str, include_closed: bool = False) -> list[Task]:
+        """Alle Aufgaben eines Projekts.
+
+        Die zentrale Abfrage der Projektansicht: „Was steht bei X noch an?"
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT document FROM tasks WHERE project_id = ? "
+                "ORDER BY due IS NULL, due ASC, created_at ASC",
+                (project_id,),
+            ).fetchall()
+        items = [self._from_row(r) for r in rows]
+        if not include_closed:
+            items = [t for t in items if t.status is TaskStatus.OPEN]
+        return items
+
     def all_tasks(self, limit: int = 500) -> list[Task]:
         with self._lock:
             rows = self._conn.execute(
@@ -206,12 +246,13 @@ class TaskStore:
         d = task.to_dict()
         with self._lock:
             self._conn.execute(
-                "INSERT INTO tasks (id, created_at, status, due, title, document) "
-                "VALUES (?, ?, ?, ?, ?, ?) "
+                "INSERT INTO tasks (id, created_at, status, due, title, project_id, document) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET status=excluded.status, "
-                "due=excluded.due, title=excluded.title, document=excluded.document",
+                "due=excluded.due, title=excluded.title, "
+                "project_id=excluded.project_id, document=excluded.document",
                 (d["id"], d["created_at"], d["status"], d["due"], d["title"],
-                 json.dumps(d, ensure_ascii=False)),
+                 d["project_id"], json.dumps(d, ensure_ascii=False)),
             )
             self._conn.commit()
 
@@ -235,6 +276,7 @@ class TaskStore:
             notes=d.get("notes"),
             done_at=_parse(d.get("done_at")),
             tags=list(d.get("tags", [])),
+            project_id=d.get("project_id"),
         )
 
 

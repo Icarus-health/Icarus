@@ -41,7 +41,13 @@ const SOURCE_LABELS = {
 
 // -- Ansichten --------------------------------------------------------------
 
-const REFRESH = { dashboard: loadDashboard, memory: loadMemory, audit: loadAudit, chat: loadApprovals };
+const REFRESH = {
+  dashboard: loadDashboard,
+  projects: loadProjects,
+  memory: loadMemory,
+  audit: loadAudit,
+  chat: loadApprovals,
+};
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -157,9 +163,26 @@ function renderMemoryCard(block) {
   }
 }
 
+function renderProjectTeaser(block) {
+  const list = $("#project-teaser");
+  const items = block?.items ?? [];
+  list.replaceChildren();
+  $("#project-teaser-note").textContent =
+    block?.error ?? (items.length ? "" : "Noch keine Projekte.");
+
+  for (const p of items.slice(0, 5)) {
+    const bits = [];
+    if (p.area) bits.push(p.area);
+    if (p.deadline) bits.push(`Frist ${new Date(p.deadline).toLocaleDateString("de-DE")}`);
+    bits.push(PROJECT_STATUS[p.status] ?? p.status);
+    list.append(li(p.name, bits.join(" · ")));
+  }
+}
+
 async function loadDashboard() {
   $("#greeting").textContent = greeting();
   const data = await api("/dashboard");
+  renderProjectTeaser(data.projects);
   renderTasks(data.tasks);
   renderEvents(data.calendar);
   renderMail(data.mail);
@@ -180,6 +203,197 @@ $("#task-form").addEventListener("submit", async (event) => {
   $("#task-title").value = "";
   $("#task-due").value = "";
   await loadDashboard();
+});
+
+// -- Projekte ---------------------------------------------------------------
+
+const PROJECT_STATUS = {
+  idea: "Idee",
+  active: "aktiv",
+  paused: "pausiert",
+  done: "abgeschlossen",
+  // Aufgegeben ist nicht abgeschlossen. Der Unterschied muss auch in der
+  // Oberfläche sichtbar bleiben, sonst sieht eine Rückschau nach Jahren so
+  // aus, als wäre alles gelungen.
+  dropped: "aufgegeben",
+};
+
+const NOTE_KIND = {
+  meeting: "Protokoll",
+  research: "Recherche",
+  idea: "Idee",
+  decision: "Entscheidung",
+  reference: "Referenz",
+};
+
+let selectedProject = null;
+
+async function loadProjects() {
+  const projects = await api("/projects?all=true");
+  const list = $("#project-list");
+  list.replaceChildren();
+  $("#project-empty").hidden = projects.length > 0;
+
+  $("#areas").replaceChildren(
+    ...[...new Set(projects.map((p) => p.area).filter(Boolean))].map((a) => {
+      const o = document.createElement("option");
+      o.value = a;
+      return o;
+    })
+  );
+
+  for (const p of projects) {
+    const el = document.createElement("li");
+    el.className = "project";
+    if (!p.open) el.classList.add("closed");
+    if (p.id === selectedProject) el.classList.add("selected");
+
+    const name = document.createElement("p");
+    name.className = "statement";
+    name.textContent = p.name;
+
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    const bits = [PROJECT_STATUS[p.status] ?? p.status];
+    if (p.area) bits.push(p.area);
+    if (p.deadline) bits.push(`Frist ${new Date(p.deadline).toLocaleDateString("de-DE")}`);
+    meta.textContent = bits.join(" · ");
+
+    el.append(name, meta);
+    el.addEventListener("click", () => showProject(p.id));
+    list.append(el);
+  }
+
+  if (selectedProject) await showProject(selectedProject);
+}
+
+async function showProject(id) {
+  selectedProject = id;
+  for (const el of document.querySelectorAll("#project-list .project")) {
+    el.classList.remove("selected");
+  }
+
+  const p = await api(`/projects/${id}`);
+  const box = $("#project-detail");
+  box.replaceChildren();
+
+  const head = document.createElement("h3");
+  head.textContent = p.name;
+  box.append(head);
+
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  const bits = [PROJECT_STATUS[p.status] ?? p.status];
+  if (p.area) bits.push(p.area);
+  if (p.deadline) bits.push(`Frist ${new Date(p.deadline).toLocaleDateString("de-DE")}`);
+  bits.push(SOURCE_LABELS[p.provenance.source_type] ?? p.provenance.source_type);
+  meta.textContent = bits.join(" · ");
+  box.append(meta);
+
+  if (p.description) {
+    const desc = document.createElement("p");
+    desc.textContent = p.description;
+    box.append(desc);
+  }
+
+  const status = document.createElement("select");
+  for (const [value, label] of Object.entries(PROJECT_STATUS)) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    o.selected = value === p.status;
+    status.append(o);
+  }
+  status.addEventListener("change", async () => {
+    await api(`/projects/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: status.value }),
+    });
+    await loadProjects();
+  });
+  box.append(status);
+
+  const tasksHead = document.createElement("h4");
+  tasksHead.textContent = `Offene Aufgaben (${p.tasks.length})`;
+  box.append(tasksHead);
+
+  const tasks = document.createElement("ul");
+  for (const t of p.tasks) {
+    const done = document.createElement("button");
+    done.className = "ghost small";
+    done.textContent = "Erledigt";
+    done.addEventListener("click", async () => {
+      await api(`/tasks/${t.id}/done`, { method: "POST" });
+      await showProject(id);
+    });
+    const when = t.due ? `fällig ${new Date(t.due).toLocaleDateString("de-DE")}` : "";
+    const row = li(t.title, when, done);
+    if (t.overdue) row.classList.add("overdue");
+    tasks.append(row);
+  }
+  box.append(tasks);
+
+  const form = document.createElement("form");
+  form.className = "row";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.placeholder = "Aufgabe zu diesem Projekt";
+  input.autocomplete = "off";
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.textContent = "Anlegen";
+  form.append(input, add);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = input.value.trim();
+    if (!title) return;
+    await api("/tasks", {
+      method: "POST",
+      body: JSON.stringify({ title, project_id: id }),
+    });
+    input.value = "";
+    await showProject(id);
+  });
+  box.append(form);
+
+  if (p.notes.length) {
+    const notesHead = document.createElement("h4");
+    notesHead.textContent = `Notizen (${p.notes.length})`;
+    box.append(notesHead);
+
+    const notes = document.createElement("ul");
+    for (const n of p.notes) {
+      const when = new Date(n.updated_at).toLocaleDateString("de-DE");
+      const kind = NOTE_KIND[n.kind] ?? n.kind;
+      const origin = SOURCE_LABELS[n.provenance.source_type] ?? n.provenance.source_type;
+      notes.append(li(n.title, `${kind} · ${when} · ${origin}`));
+    }
+    box.append(notes);
+  }
+
+  const current = [...document.querySelectorAll("#project-list .project")].find(
+    (el) => el.querySelector(".statement")?.textContent === p.name
+  );
+  current?.classList.add("selected");
+}
+
+$("#project-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = $("#project-name").value.trim();
+  if (!name) return;
+  const deadline = $("#project-deadline").value;
+  const created = await api("/projects", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      area: $("#project-area").value.trim() || null,
+      deadline: deadline ? `${deadline}T23:59:00` : null,
+    }),
+  });
+  $("#project-name").value = "";
+  $("#project-deadline").value = "";
+  selectedProject = created.id;
+  await loadProjects();
 });
 
 // -- Gespräch ---------------------------------------------------------------

@@ -1,0 +1,64 @@
+# Container-Weg für den Sidecar — Alternative zur Tauri-App für alle, die es
+# ausprobieren wollen, ohne eine signierte macOS-App zu brauchen. Siehe
+# docs/adr/0007-docker-als-zweiter-weg.md.
+#
+#   docker compose up
+#
+# Startet den Gedächtniskern ohne Modell und ohne Dateizugriff. Für Chat einen
+# Anbieter setzen, für Notizen/Dateien den Bind-Mount unten einkommentieren.
+
+services:
+  sidecar:
+    build: .
+    image: ghcr.io/icarus-health/icarus:latest
+    restart: unless-stopped
+
+    # SICHERHEITSKRITISCH: Diese Portfreigabe muss an 127.0.0.1 gebunden
+    # bleiben. "8765:8765" ohne Host-Adresse bindet Docker standardmäßig an
+    # 0.0.0.0 — dann ist der Sidecar für jeden im selben lokalen Netz
+    # erreichbar, mit ihm das gesamte persönliche Gedächtnis (Selbstmodell,
+    # Mail- und Kalenderdaten, Notizen). Das ist kein theoretisches Risiko,
+    # sondern der Normalfall in einem WLAN mit anderen Geräten.
+    ports:
+      - "127.0.0.1:8765:8765"
+
+    environment:
+      # Das `:?` ist Absicht: Ohne Token startet der Stapel gar nicht erst.
+      #
+      # Ein Vorgabewert (`:-`) wäre bequemer und falsch. Der Sidecar liefe dann
+      # ohne jeden Zugriffsschutz, und zwar still — jeder Prozess auf diesem
+      # Rechner könnte das Selbstmodell lesen und schreiben, ohne dass irgendwo
+      # eine Warnung erschiene. Ein Fehlschlag beim Start ist die einzige
+      # Meldung, die niemand überliest.
+      #
+      #   ICARUS_SIDECAR_TOKEN=$(openssl rand -hex 32) docker compose up
+      - ICARUS_SIDECAR_TOKEN=${ICARUS_SIDECAR_TOKEN:?bitte setzen, z. B. mit openssl rand -hex 32}
+
+      # Passphrase für die verschlüsselte Schlüsseldatei. Im Container gibt es
+      # keinen Schlüsselbund des Betriebssystems; ohne diese Variable landen
+      # API-Schlüssel nur in der Umgebung und sind nach einem Neustart weg.
+      #
+      # Was das bringt: Das Datenverzeichnis — also das, was gesichert und
+      # kopiert wird — enthält dann keine lesbaren Schlüssel mehr. Wer
+      # Passphrase *und* Volume hat, hat sie trotzdem. Siehe secrets.py.
+      - ICARUS_SECRETS_PASSPHRASE=${ICARUS_SECRETS_PASSPHRASE:?bitte setzen, schützt die Schlüsseldatei}
+
+      # Zum Bind-Mount unten passend: ohne das bleibt ICARUS_FILE_ROOTS leer
+      # und damit jeder Dateizugriff verweigert (Absicht, kein Versehen).
+      # Pfad hier ist der Container-Pfad rechts vom Doppelpunkt, nicht der
+      # Host-Pfad links davon.
+      # - ICARUS_FILE_ROOTS=/notizen
+
+    volumes:
+      # Named Volume statt Bind-Mount: das Selbstmodell (SQLite,
+      # einstellungen.json) überlebt einen Neubau des Containers, ohne dass
+      # ein Host-Pfad gepflegt werden muss.
+      - icarus-daten:/daten
+
+      # Beispiel: Notiz-Ordner vom Host freigeben, für "Rohmaterial →
+      # Aufnehmen". Nur lesend einbinden — der Sidecar soll dort nichts
+      # schreiben.
+      # - /pfad/auf/dem/host/Notizen:/notizen:ro
+
+volumes:
+  icarus-daten:

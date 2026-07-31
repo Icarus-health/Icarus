@@ -3,10 +3,39 @@
 // Bewusst ohne Framework. Der Zweck des Gerüsts ist zu zeigen, wie Gedächtnis,
 // Freigaben und Protokoll zusammenspielen — nicht, wie man eine SPA baut.
 
-const { invoke } = window.__TAURI__.core;
+// Läuft in zwei Umgebungen: in der Tauri-App und im Browser (Container).
+// Der Unterschied ist genau eine Frage — woher kommen Adresse und Token?
+//
+//   Tauri:   die App hat beides erzeugt und reicht es über `sidecar_info`.
+//   Browser: der Sidecar liefert diese Seite selbst aus, also ist die Adresse
+//            der eigene Ursprung. Das Token steht beim Start in der Konsole
+//            und kommt als `?token=` in die URL — derselbe Weg wie bei
+//            Jupyter, und aus demselben Grund: Der Browser muss es kennen,
+//            andere Prozesse auf dem Rechner sollen es nicht.
+const tauri = window.__TAURI__?.core ?? null;
 
 let base = null;
 let token = null;
+
+/** Holt Adresse und Token, je nachdem wo wir laufen. */
+async function connectionInfo() {
+  if (tauri) {
+    const info = await tauri.invoke("sidecar_info");
+    return { base: `http://127.0.0.1:${info.port}`, token: info.token };
+  }
+
+  const fromUrl = new URLSearchParams(window.location.search).get("token");
+  if (fromUrl) {
+    // Aus der Adresszeile entfernen, sobald es liegt: Ein Token im Verlauf
+    // des Browsers und in jedem Screenshot ist unnötig.
+    sessionStorage.setItem("icarus-token", fromUrl);
+    history.replaceState(null, "", window.location.pathname);
+  }
+  return {
+    base: window.location.origin,
+    token: sessionStorage.getItem("icarus-token") ?? "",
+  };
+}
 
 const $ = (sel) => document.querySelector(sel);
 const statusEl = $("#status");

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .agent import Agent
@@ -49,6 +50,33 @@ from .workspace import (
 TOKEN_ENV = "ICARUS_SIDECAR_TOKEN"
 DATA_ENV = "ICARUS_DATA_DIR"
 ROOTS_ENV = "ICARUS_FILE_ROOTS"
+UI_ENV = "ICARUS_UI_DIR"
+
+#: Adresse, an die gebunden wird. Standard ist Loopback, und das bleibt so.
+#:
+#: Im Container muss der Dienst auf 0.0.0.0 hören, sonst greift die
+#: Portfreigabe nicht — dort ist „alle Adressen" *innerhalb* des Containers,
+#: und was von außen erreichbar ist, entscheidet die Freigabe in `compose.yaml`.
+#: Die muss `127.0.0.1:8765:8765` lauten. Steht dort `8765:8765`, hängt das
+#: gesamte persönliche Gedächtnis im lokalen Netz.
+HOST_ENV = "ICARUS_SIDECAR_HOST"
+DEFAULT_HOST = "127.0.0.1"
+
+
+def _ui_dir() -> Path | None:
+    """Wo die Oberfläche liegt, wenn der Sidecar sie selbst ausliefern soll.
+
+    In der Tauri-App liefert die App die Dateien aus und hier ist nichts zu
+    tun. Im Container gibt es keine App — dann ist der Sidecar auch der
+    Webserver, und man öffnet ihn im Browser.
+    """
+    configured = os.environ.get(UI_ENV)
+    if configured:
+        target = Path(configured)
+        return target if target.is_dir() else None
+    # Arbeitskopie: sidecar/icarus_memory/server.py → ../../app/src
+    candidate = Path(__file__).resolve().parents[2] / "app" / "src"
+    return candidate if candidate.is_dir() else None
 
 
 def _data_dir() -> Path:
@@ -947,7 +975,27 @@ def create_app(
             "assertions": len(document.get("assertions", [])),
         }
 
+    # -- Oberfläche --------------------------------------------------------
+    #
+    # Ganz zum Schluss, und das ist keine Kosmetik: Ein Mount auf "/" fängt
+    # alles ab, was vorher nicht als Route registriert wurde. Stünde er weiter
+    # oben, wären alle danach angemeldeten Endpunkte unerreichbar.
+    #
+    # Nur im Browserbetrieb. Die Tauri-App liefert ihre Dateien selbst aus.
+
+    ui = _ui_dir()
+    if ui is not None:
+        # Die Dateien selbst sind **nicht** durch das Token geschützt, und das
+        # ist Absicht: Sie enthalten kein Nutzerdatum, nur HTML, CSS und
+        # JavaScript. Geschützt ist alles darunter, also jeder Datenendpunkt.
+        # Wäre auch die Seite geschützt, könnte der Browser sie nie laden, ohne
+        # das Token schon zu kennen — und der einzige Weg, es ihm zu geben,
+        # wäre, es in die Seite zu schreiben.
+        app.mount("/", StaticFiles(directory=str(ui), html=True), name="ui")
+        app.state.ui_dir = str(ui)
+
     return app
+
 
 
 def write_connection_file(directory: Path, port: int, token: str | None) -> Path:
@@ -994,8 +1042,35 @@ def main() -> None:  # pragma: no cover
         return
 
     port = int(os.environ.get("ICARUS_SIDECAR_PORT", "8765"))
-    write_connection_file(_data_dir(), port, os.environ.get(TOKEN_ENV))
-    uvicorn.run(create_app(), host="127.0.0.1", port=port, log_level="warning")
+    host = os.environ.get(HOST_ENV, DEFAULT_HOST)
+    token = os.environ.get(TOKEN_ENV)
+    write_connection_file(_data_dir(), port, token)
+
+    if _ui_dir() is not None:
+        # Browserbetrieb: Der Nutzer braucht die Adresse samt Token, sonst
+        # kommt er nicht hinein. Das Token in die URL zu schreiben ist derselbe
+        # Weg, den Jupyter geht, und aus demselben Grund: Der Browser muss es
+        # kennen, andere Prozesse auf dem Rechner sollen es nicht. Wer die
+        # Zeile sieht, sitzt bereits an der Konsole des Dienstes.
+        adresse = f"http://127.0.0.1:{port}/"
+        if token:
+            adresse += f"?token={token}"
+        print(f"\n  Icarus läuft:  {adresse}\n", flush=True)
+        if not token:
+            print(
+                "  WARNUNG: Ohne ICARUS_SIDECAR_TOKEN kann jeder Prozess auf "
+                "diesem Rechner das Gedächtnis auslesen.\n",
+                flush=True,
+            )
+    if host != DEFAULT_HOST:
+        print(
+            f"  Hinweis: Es wird an {host} gebunden statt an {DEFAULT_HOST}. "
+            "Im Container ist das richtig — die Portfreigabe muss dann aber "
+            "auf 127.0.0.1 beschränkt sein.\n",
+            flush=True,
+        )
+
+    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
 
 
 if __name__ == "__main__":  # pragma: no cover

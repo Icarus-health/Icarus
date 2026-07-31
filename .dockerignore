@@ -1,0 +1,50 @@
+# Was für das Container-Bild nicht gebraucht wird — kleineres Bild, kein
+# versehentliches Einschleppen von Secrets oder lokalen Laufzeitdaten.
+
+.git/
+.github/
+
+# Die Rust-Hülle der Tauri-App braucht das Bild nicht — im Container gibt es
+# keine Betriebssystem-Oberfläche, die sie zeichnen könnte.
+#
+# `app/src` bleibt aber drin: Im Containerbetrieb liefert der Sidecar die
+# Oberfläche selbst aus, und man öffnet sie im Browser. Ohne diese Ausnahme
+# bricht der COPY-Schritt im Dockerfile.
+app/src-tauri/
+app/package.json
+app/package-lock.json
+packaging/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+.venv/
+sidecar/.venv/
+venv/
+**/*.egg-info/
+.pytest_cache/
+
+# Build-Artefakte
+build/
+
+# Laufzeitdaten des Selbstmodells — niemals ins Image
+.icarus-data/
+**/*.sqlite3
+**/*.log
+sicherungen/
+exporte/
+**/*.icarus
+
+# Lokale Konfiguration mit Secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+**/*.swp
+
+# Dokumentation — ändert sich oft, betrifft aber nie den Build
+docs/

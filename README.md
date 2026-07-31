@@ -6,8 +6,8 @@ Icarus builds a *verifiable* digital model of its user, keeps that memory
 independent of any single AI vendor, integrates current information, and
 delegates or performs digital work under explicit control.
 
-It is a **downloadable desktop app** — macOS first, Windows after. No Docker, no
-server, no setup.
+It is a **desktop app** — macOS first, Windows after. There is also a container
+image, so you can try it without a signed bundle; the app remains the real thing.
 
 > **Status: early, but end-to-end.** Open it and a five-step wizard sets it up —
 > no config file, no account. It remembers with provenance, reads your existing
@@ -128,6 +128,45 @@ Tell it `icarus_kontext` at the start of a session and it knows who you are,
 what you are working on, and how old each of those facts is. Details and the
 open ends: [`docs/07-mcp-tuer.md`](docs/07-mcp-tuer.md).
 
+## Two ways to run it
+
+|  | Native app | Container |
+|---|---|---|
+| Install | `make app-build` on a Mac | `docker compose up` |
+| Signing | needed to *distribute*, not to run it yourself | none |
+| Secrets | OS keychain | encrypted file, passphrase in the environment |
+| File access | real paths | bind mounts, paths differ inside |
+| Computer-use (later) | yes | never — a container has no screen to drive |
+
+**For yourself, build it locally.** An unsigned app runs fine on your own Mac —
+Gatekeeper blocks the *double click* on an unsigned bundle, not the execution:
+
+```bash
+make app-build
+xattr -d com.apple.quarantine /Applications/Icarus.app   # or: right-click → Open
+```
+
+**For everyone else, the container.** No signature, no Apple account, works on
+macOS, Linux and Windows alike:
+
+```bash
+export ICARUS_SIDECAR_TOKEN=$(openssl rand -hex 32)
+export ICARUS_SECRETS_PASSPHRASE=$(openssl rand -hex 32)
+docker compose up
+```
+
+The sidecar serves the interface itself here — open the URL it prints, token
+included. Two things about that setup are conditions, not suggestions:
+
+- The port mapping is `127.0.0.1:8765:8765`. Write `8765:8765` and Docker binds
+  every interface: your entire memory would be reachable from the local network.
+- Both variables are required with `:?`, so `docker compose up` **fails** without
+  them rather than quietly running an unauthenticated service. A start-up failure
+  is the one message nobody overlooks.
+
+Why the container is the second path and not the first, with the honest costs:
+[`docs/adr/0007-docker-als-zweiter-weg.md`](docs/adr/0007-docker-als-zweiter-weg.md).
+
 ## Setting it up
 
 There is **no account**. Icarus knows no server you could sign in to — the record
@@ -143,10 +182,15 @@ anything in.
 |---|---|---|
 | `einstellungen.json` (0600) | provider, model, server addresses, allowed folders | must be readable and backup-able |
 | OS keychain | API key, mail and CalDAV passwords | never touches the disk |
+| `schluessel.icarus` (0600) | the same secrets, where no OS keychain exists | encrypted; backups stay clean |
 
-Without a keychain (Linux without `secret-tool`), an entered key lasts only for
-the session. It is deliberately **not** written to the settings file instead, and
-the UI says so on open.
+Where the OS has a keychain, that wins — it is bound to your user account and
+needs no passphrase stored anywhere. Where it doesn't (a container, Linux without
+`secret-tool`), `ICARUS_SECRETS_PASSPHRASE` unlocks an encrypted file instead.
+That keeps readable keys out of every backup and snapshot of the data directory;
+it does **not** protect against someone who has both the passphrase and the
+volume. With neither store, a key lasts only for the session — it is deliberately
+never written to the settings file, and the UI says so on open.
 
 Changes take effect **without a restart** — enter a key and you can talk right
 away; allow a folder and you can import right away. A program that demands a
@@ -162,7 +206,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 277 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup
+make test            # 295 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -207,12 +251,13 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-277 tests, no network and no model required — including a test that plays out a
+295 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
 a vault containing an injection payload and asserts the record stayed empty, and
-one that proves no secret ever reaches the settings file.
+one that proves no secret ever reaches the settings file, and one that proves
+serving the interface does not expose the data behind it.
 
 ## Connecting mail and calendar
 
@@ -271,6 +316,7 @@ sidecar/             Python: memory, policy, agent
     episodes.py      Mid-term layer: raw records with a digest, claiming nothing
     ingest.py        Adapters: Obsidian, Notion export, text files
     config.py        Settings that survive a restart; secrets go to the keychain
+    crypto.py        One place for encryption — exports and the key file share it
     connectors/      Mail (IMAP/SMTP) and calendar (CalDAV), open protocols
     tools.py         Web, files, time, memory, mail, calendar, tasks, projects, notes
     agent.py         Ties it together; proposes, never executes directly
@@ -280,8 +326,10 @@ sidecar/             Python: memory, policy, agent
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             277 tests, no network and no model required
+  tests/             295 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
+                     The frontend also runs in a plain browser, for the container
+Dockerfile           Container image; compose.yaml pins the port to loopback
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,

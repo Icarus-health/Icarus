@@ -16,21 +16,17 @@ Deshalb drei Dinge:
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
-import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .crypto import KDF_ITERATIONS, DecryptionError, seal_json, unseal_json
 from .model import now
 
 SNAPSHOT_PREFIX = "self-model-"
 EXPORT_MAGIC = "icarus-export-v1"
-KDF_ITERATIONS = 600_000
 
 
 class BackupError(Exception):
@@ -135,52 +131,17 @@ def restore(snapshot_path: Path, db_path: Path) -> None:
 # -- Export ----------------------------------------------------------------
 
 
-def _derive(passphrase: str, salt: bytes) -> bytes:
-    return hashlib.pbkdf2_hmac("sha256", passphrase.encode("utf-8"), salt, KDF_ITERATIONS, 32)
-
-
-def _keystream(key: bytes, nonce: bytes, length: int) -> bytes:
-    """Schlüsselstrom aus HMAC-SHA256 im Zählerbetrieb.
-
-    Bewusst ohne Kryptobibliothek, damit der Export keine Abhängigkeit hat, die
-    in zehn Jahren vielleicht nicht mehr baut. HMAC-SHA256 ist in jeder
-    Python-Standardbibliothek und in jeder anderen Sprache verfügbar — das
-    Format bleibt entzifferbar, auch ohne dieses Programm.
-    """
-    out = bytearray()
-    counter = 0
-    while len(out) < length:
-        out += hmac.new(key, nonce + counter.to_bytes(8, "big"), hashlib.sha256).digest()
-        counter += 1
-    return bytes(out[:length])
-
-
 def export_model(model_dict: dict[str, Any], passphrase: str | None = None) -> str:
     """Schreibt das Selbstmodell als JSON, optional verschlüsselt.
 
     Ohne Passphrase: lesbares JSON, passend zu schema/self-model.schema.json.
     Mit Passphrase: verschlüsselt und mit HMAC gegen Veränderung geschützt.
     """
-    plain = json.dumps(model_dict, ensure_ascii=False, indent=2).encode("utf-8")
     if not passphrase:
-        return plain.decode("utf-8")
-
-    salt = os.urandom(16)
-    nonce = os.urandom(16)
-    key = _derive(passphrase, salt)
-    cipher = bytes(a ^ b for a, b in zip(plain, _keystream(key, nonce, len(plain))))
-    # Erst verschlüsseln, dann authentifizieren.
-    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
-
-    return json.dumps({
-        "format": EXPORT_MAGIC,
-        "kdf": {"name": "pbkdf2-sha256", "iterations": KDF_ITERATIONS,
-                "salt": base64.b64encode(salt).decode()},
-        "cipher": "hmac-sha256-ctr",
-        "nonce": base64.b64encode(nonce).decode(),
-        "data": base64.b64encode(cipher).decode(),
-        "tag": base64.b64encode(tag).decode(),
-    }, indent=2)
+        return json.dumps(model_dict, ensure_ascii=False, indent=2)
+    # Verfahren und Format liegen in crypto.py — dieselbe Verschlüsselung wie
+    # die Schlüsseldatei, damit es nur eine Stelle gibt, die driften kann.
+    return seal_json(model_dict, passphrase, EXPORT_MAGIC)
 
 
 def import_model(payload: str, passphrase: str | None = None) -> dict[str, Any]:
@@ -192,20 +153,12 @@ def import_model(payload: str, passphrase: str | None = None) -> dict[str, Any]:
     if not passphrase:
         raise BackupError("Dieser Export ist verschlüsselt. Passphrase erforderlich.")
 
-    salt = base64.b64decode(document["kdf"]["salt"])
-    nonce = base64.b64decode(document["nonce"])
-    cipher = base64.b64decode(document["data"])
-    tag = base64.b64decode(document["tag"])
-    key = _derive(passphrase, salt)
-
-    expected = hmac.new(key, nonce + cipher, hashlib.sha256).digest()
-    if not hmac.compare_digest(tag, expected):
-        raise BackupError(
-            "Prüfsumme stimmt nicht. Falsche Passphrase oder veränderte Datei."
-        )
-
-    plain = bytes(a ^ b for a, b in zip(cipher, _keystream(key, nonce, len(cipher))))
-    return json.loads(plain.decode("utf-8"))
+    try:
+        return unseal_json(payload, passphrase)
+    except DecryptionError as exc:
+        # Nach außen bleibt es ein BackupError; der Aufrufer soll nicht
+        # unterscheiden müssen, aus welchem Modul der Fehler stammt.
+        raise BackupError(str(exc)) from exc
 
 
 __all__ = [

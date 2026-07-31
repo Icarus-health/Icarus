@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .audit import AuditLog
+from .currency import Currency, describe, judge
 from .model import Sensitivity, now
 from .policy import (
     ActionClass,
@@ -32,6 +33,27 @@ from .providers import Provider, ProviderError, ToolCall
 from .store import SelfModelStore
 from .tools import Tool
 
+
+class EgressBlocked(Exception):
+    """Etwas über der Schutzbedarfsgrenze stand in einer ausgehenden Nutzlast.
+
+    Kein Fehler im üblichen Sinn, sondern die Sperre, die greift. Sie beendet
+    den Zug absichtlich statt zu filtern und weiterzumachen: wer sie sieht, soll
+    wissen, dass ein Codeweg etwas hinaustragen wollte, das er nicht durfte.
+    """
+
+
+_RANK: dict[Sensitivity, int] = {
+    Sensitivity.NORMAL: 0,
+    Sensitivity.SENSITIVE: 1,
+    Sensitivity.SPECIAL_CATEGORY: 2,
+}
+
+
+def _lower_of(left: Sensitivity, right: Sensitivity) -> Sensitivity:
+    return left if _RANK[left] <= _RANK[right] else right
+
+
 SYSTEM_PROMPT = """Du bist Icarus, ein persönlicher Assistent mit langfristigem Gedächtnis.
 
 Über den Nutzer weißt du nur, was unten steht. Rate nichts dazu.
@@ -42,6 +64,12 @@ Regeln:
 - Für Fakten, die sich geändert haben können, und für alles Aktuelle nutze
   Werkzeuge statt zu raten. Das gilt besonders für Datum und Uhrzeit.
 - Grenzen des Nutzers sind bindend. Erkläre, wenn etwas daran scheitert.
+- Jeder Fakt unten trägt seine Quelle in Klammern. Steht dort „Stand <Datum>",
+  ist die Angabe womöglich veraltet: behaupte sie nicht als Gegenwart, sondern
+  nenne das Datum oder frage nach. Was unter „Alte Angaben" steht, gilt nur für
+  die Vergangenheit — nutze es nie für eine Aussage über den heutigen Zustand.
+- Sage „das weiß ich nicht" statt zu raten. Ein falsch einsortierter Fakt ist
+  schlimmer als eine offene Frage.
 - Antworte knapp und auf Deutsch."""
 
 
@@ -105,6 +133,69 @@ class Agent:
 
     # -- Kontext -----------------------------------------------------------
 
+    def effective_sensitivity_ceiling(self) -> Sensitivity:
+        """Die tatsächlich geltende Obergrenze für diesen Zug.
+
+        Der Aufrufer darf die Grenze senken, aber nie über das heben, was der
+        Anbieter verdient. Ein externes Modell bekommt ausschließlich `normal`.
+        Ein Anbieter auf Loopback darf auch `sensitive` sehen — genau dafür ist
+        die lokale Variante da. `special_category` bleibt in beiden Fällen
+        zurück und braucht eine eigene, ausdrückliche Freigabe.
+
+        Ohne Anbieter gilt die strengste Grenze, damit ein später gesetzter
+        Anbieter nicht versehentlich einen zu weiten Kontext erbt.
+        """
+        provider_ceiling = Sensitivity.NORMAL
+        if self._provider is not None and getattr(self._provider, "is_local", False):
+            provider_ceiling = Sensitivity.SENSITIVE
+        return _lower_of(self._max_sensitivity, provider_ceiling)
+
+    def assert_egress_allowed(self, messages: list[dict[str, Any]]) -> None:
+        """Zweite, unabhängige Prüfung unmittelbar vor dem Versand.
+
+        Der Kontextaufbau filtert bereits. Diese Prüfung traut ihm nicht: sie
+        sieht sich die fertige Nutzlast an und vergleicht sie gegen die Aussagen
+        im Selbstmodell, die über der Grenze liegen. Damit kann kein anderer
+        Codeweg — ein Werkzeugergebnis, ein Verlauf aus einer früheren Runde,
+        eine künftige Erweiterung — etwas hinaustragen, das hier nie erlaubt
+        war. Fail-closed: im Zweifel Abbruch.
+        """
+        ceiling = _RANK[self.effective_sensitivity_ceiling()]
+        haystack = "\n".join(
+            m["content"]
+            for m in messages
+            if isinstance(m.get("content"), str)
+        )
+        if not haystack:
+            return
+        for assertion in self._store.usable():
+            if _RANK[assertion.sensitivity] <= ceiling:
+                continue
+            statement = assertion.statement.strip()
+            if len(statement) < 12 or statement not in haystack:
+                continue
+            self._audit.record(
+                tool="egress_guard",
+                action_class=ActionClass.OUTWARD.value,
+                level=ApprovalLevel.DENY.value,
+                outcome="refused",
+                arguments={
+                    "assertion_id": assertion.id,
+                    "sensitivity": assertion.sensitivity.value,
+                    "ceiling": self.effective_sensitivity_ceiling().value,
+                },
+                model=self._provider.model if self._provider else None,
+                detail=(
+                    "Egress verweigert: eine Aussage über der geltenden "
+                    "Schutzbedarfsgrenze stand in der Nutzlast."
+                ),
+            )
+            raise EgressBlocked(
+                f"Aussage {assertion.id} ist als "
+                f"{assertion.sensitivity.value} markiert und darf nicht an "
+                f"diesen Anbieter gehen."
+            )
+
     def context(self) -> str:
         """Baut den Wissensblock über den Nutzer.
 
@@ -112,21 +203,43 @@ class Agent:
         Widerrufenes. Genau hier zahlt sich das Selbstmodell aus — ein flacher
         Faktenspeicher würde „Wohnt in Hamburg" munter mitliefern.
 
-        Zusätzlich greift der Schutzbedarf: `special_category` geht per Default
-        nicht an ein externes Modell.
+        Zusätzlich greift der Schutzbedarf: was über
+        `effective_sensitivity_ceiling()` liegt, wird nur gezählt, nicht
+        übermittelt.
         """
-        shareable = self._store.shareable(self._max_sensitivity)
+        shareable = self._store.shareable(self.effective_sensitivity_ceiling())
         constraints = constraints_from_store(self._store)
 
+        aktuell: list[str] = []
+        alt: list[str] = []
+        for a in shareable:
+            zeile = f"- [{a.kind.value}] {a.statement} ({describe(a)})"
+            if judge(a) is Currency.OUTDATED:
+                alt.append(zeile)
+            else:
+                aktuell.append(zeile)
+
         lines = []
-        if shareable:
+        if aktuell:
             lines.append("Was du über den Nutzer weißt:")
-            for a in shareable:
-                mark = " (selbst gefolgert)" if a.provenance.source_type.value == "inference" else ""
-                lines.append(f"- [{a.kind.value}] {a.statement}{mark}")
+            lines.extend(aktuell)
+
+        if alt:
+            # Getrennt statt weggelassen: der Nutzer darf nach seiner eigenen
+            # Vergangenheit fragen. Aber diese Zeilen dürfen nie als Gegenwart
+            # auftreten, und dafür braucht es die eigene Überschrift.
+            lines.append(
+                "\nAlte Angaben — nicht als aktuell behaupten, im Zweifel nachfragen:"
+            )
+            lines.extend(alt)
 
         withheld = len(self._store.usable()) - len(shareable)
-        if withheld > 0:
+        if withheld == 1:
+            lines.append(
+                "\n(Eine weitere Aussage ist als besonders geschützt markiert "
+                "und wird dir nicht übermittelt.)"
+            )
+        elif withheld > 1:
             lines.append(
                 f"\n({withheld} weitere Aussagen sind als besonders geschützt "
                 "markiert und werden dir nicht übermittelt.)"
@@ -162,6 +275,7 @@ class Agent:
                 {"role": "system", "content": f"{SYSTEM_PROMPT}\n\n{self.context()}"},
                 *self._history,
             ]
+            self.assert_egress_allowed(messages)
             try:
                 reply = self._provider.complete(messages, schemas)
             except ProviderError as exc:

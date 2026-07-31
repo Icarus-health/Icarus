@@ -36,6 +36,6 @@ Lettas `.af` beschreibt einen **Agentenzustand**, nicht ein überprüfbares Pers
 
 **Abbildung auf Mem0 ist ungeklärt.** Ob sich Ersetzungsketten und kaskadierende Löschung sauber auf Mem0 abbilden lassen, ist der nächste zu prüfende Punkt. Fällt die Antwort negativ aus, braucht Säule 1 einen eigenen Speicher neben Mem0.
 
-**Das Schema erzwingt nichts von allein.** Es kann Widersprüche darstellen, aber nicht auflösen; `sensitivity` ist heute nur eine Markierung. Die Durchsetzung gehört in die Policy-Schicht ([03-delegation.md](../03-delegation.md)).
+**Das Schema erzwingt nichts von allein.** Es kann Widersprüche darstellen, aber nicht auflösen. `sensitivity` ist im Schema eine Markierung; seit 2026-07-30 wird sie in der Agentenschicht durchgesetzt — siehe [06-gedaechtnis-kontrakt.md](../06-gedaechtnis-kontrakt.md). Die übrige Durchsetzung gehört in die Policy-Schicht ([03-delegation.md](../03-delegation.md)).
 
 **Geprüft wird automatisiert.** `make validate-schema` validiert das Beispielprofil gegen das Schema. Das Beispiel deckt absichtlich die schwierigen Fälle ab: Ersetzungskette, abgelaufene Gesundheitsangabe, markierte Ableitung, kaskadierender Widerruf.

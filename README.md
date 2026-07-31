@@ -57,6 +57,13 @@ holds — once foreign content is in context, every consequential action gets
 escalated to an approval. That last one does not rely on the model spotting the
 attack. See [`docs/05-sicherheit.md`](docs/05-sicherheit.md).
 
+**Memory has rules, and they are tested.** The record is append-only — enforced by
+SQLite triggers, not convention. Sensitive facts reach a loopback model but never
+an external provider, checked twice on independent paths. Every fact carries its
+source and an age verdict, so a fact learned in March is not asserted as present
+truth. What is still missing is named rather than glossed over:
+[`docs/06-gedaechtnis-kontrakt.md`](docs/06-gedaechtnis-kontrakt.md).
+
 **Two stores, deliberately.** The authoritative record lives in SQLite: exact,
 addressable by ID, readable without invoking a model. cognee is only the
 semantic index — hits are always resolved against the record, so the graph can
@@ -71,7 +78,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 109 tests: memory, policy, audit, agent, security, connectors
+make test            # 153 tests: memory, policy, audit, agent, security, connectors, egress
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -116,8 +123,9 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-109 tests, no network and no model required — including a test that plays out a
-full prompt-injection attack and asserts nothing escaped.
+153 tests, no network and no model required — including a test that plays out a
+full prompt-injection attack and asserts nothing escaped, and a suite that proves
+sensitive facts cannot reach an external provider.
 
 ## Connecting mail and calendar
 
@@ -178,8 +186,9 @@ sidecar/             Python: memory, policy, agent
     security.py      Path confinement, SSRF guard, untrusted-input handling
     secrets.py       OS keychain: macOS, Windows DPAPI, secret-tool
     backup.py        Snapshots, restore, encrypted export
+    currency.py      Per-kind staleness horizons; the age verdict on every fact
     server.py        Loopback-only HTTP API for the app
-  tests/             109 tests, no network and no model required
+  tests/             153 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example

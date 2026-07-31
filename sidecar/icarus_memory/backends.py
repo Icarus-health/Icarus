@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -85,24 +86,74 @@ def assertion_from_dict(d: dict[str, Any]) -> Assertion:
 
 
 class MemoryBackend:
-    """Flüchtiger Speicher. Für Tests und kurzlebige Sitzungen."""
+    """Flüchtiger Speicher. Für Tests und kurzlebige Sitzungen.
+
+    Legt Kopien ab statt Referenzen. Sonst würde eine Änderung am übergebenen
+    Objekt den Bestand still mitverändern, und die Append-only-Regel wäre hier
+    nicht prüfbar — im Unterschied zu `SqliteBackend`, wo jedes Lesen ohnehin
+    frisch deserialisiert.
+    """
 
     def __init__(self) -> None:
         self._data: dict[str, Assertion] = {}
 
     def put(self, assertion: Assertion) -> None:
-        self._data[assertion.id] = assertion
+        vorher = self._data.get(assertion.id)
+        if vorher is not None:
+            ensure_content_unchanged(vorher, assertion)
+        self._data[assertion.id] = deepcopy(assertion)
 
     def get(self, assertion_id: str) -> Assertion | None:
-        return self._data.get(assertion_id)
+        gespeichert = self._data.get(assertion_id)
+        return deepcopy(gespeichert) if gespeichert is not None else None
 
     def all(self) -> list[Assertion]:
-        return list(self._data.values())
+        return [deepcopy(a) for a in self._data.values()]
 
     def search(self, query: str, limit: int) -> list[Assertion]:
         needle = query.casefold()
         hits = [a for a in self._data.values() if needle in a.statement.casefold()]
         return hits[:limit]
+
+
+class ImmutableContentError(Exception):
+    """Es wurde versucht, den Inhalt einer bestehenden Aussage zu überschreiben.
+
+    Eine Korrektur ist eine **neue** Aussage, die die alte ersetzt — nicht ein
+    Überschreiben der alten. Statuswechsel (Ersetzung, Ablauf, Bestätigung,
+    Widerruf) bleiben erlaubt; sie ändern die Bewertung, nicht das Gesagte.
+    """
+
+
+def ensure_content_unchanged(old: Assertion, new: Assertion) -> None:
+    """Prüft die Append-only-Regel vor einem Schreibvorgang.
+
+    Der Widerruf ist die einzige Ausnahme: Löschen auf Wunsch der Person muss
+    möglich bleiben. Er ist daran erkennbar, dass der neue Status `redacted`
+    ist, und hinterlässt einen Grabstein statt einer stillen Änderung.
+    """
+    if new.status is Status.REDACTED:
+        return
+
+    if new.id != old.id:
+        raise ImmutableContentError("Die Kennung einer Aussage ist unveränderlich.")
+    if new.recorded_at != old.recorded_at:
+        raise ImmutableContentError(
+            f"Die Aufnahmezeit von {old.id} ist unveränderlich."
+        )
+    if new.kind != old.kind:
+        raise ImmutableContentError(f"Die Art von {old.id} ist unveränderlich.")
+    if new.statement != old.statement:
+        raise ImmutableContentError(
+            f"Der Inhalt von {old.id} ist unveränderlich. Eine Korrektur ist "
+            "eine neue Aussage mit supersedes=[…]."
+        )
+    if (
+        new.provenance.source_type != old.provenance.source_type
+        or new.provenance.source_ref != old.provenance.source_ref
+        or new.provenance.captured_at != old.provenance.captured_at
+    ):
+        raise ImmutableContentError(f"Die Herkunft von {old.id} ist unveränderlich.")
 
 
 _SCHEMA = """
@@ -116,6 +167,38 @@ CREATE TABLE IF NOT EXISTS assertions (
 );
 CREATE INDEX IF NOT EXISTS idx_assertions_status ON assertions(status);
 CREATE INDEX IF NOT EXISTS idx_assertions_kind   ON assertions(kind);
+"""
+
+# Die Regel gilt auch für jeden, der die Bibliothek umgeht: sqlite3 auf der
+# Kommandozeile, ein anderes Programm, ein späterer Codeweg. Deshalb sitzt sie
+# zusätzlich in der Datenbank — dasselbe Muster, mit dem das Audit-Log
+# unveränderlich ist.
+_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS assertions_inhalt_unveraenderlich
+BEFORE UPDATE ON assertions
+FOR EACH ROW
+WHEN NEW.status <> 'redacted' AND (
+       NEW.id          IS NOT OLD.id
+    OR NEW.recorded_at IS NOT OLD.recorded_at
+    OR NEW.kind        IS NOT OLD.kind
+    OR NEW.statement   IS NOT OLD.statement
+    OR json_extract(NEW.document, '$.statement')
+       IS NOT json_extract(OLD.document, '$.statement')
+    OR json_extract(NEW.document, '$.provenance.source_ref')
+       IS NOT json_extract(OLD.document, '$.provenance.source_ref')
+)
+BEGIN
+    SELECT RAISE(ABORT,
+        'assertions: Inhalt ist unveraenderlich - eine Korrektur ist eine neue Aussage');
+END;
+
+CREATE TRIGGER IF NOT EXISTS assertions_kein_loeschen
+BEFORE DELETE ON assertions
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT,
+        'assertions: Loeschen ist nicht erlaubt - nutze redact() fuer den Widerruf');
+END;
 """
 
 
@@ -139,9 +222,18 @@ class SqliteBackend:
         self._lock = threading.Lock()
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            # Auch eine Datei aus der Zeit vor dieser Regel wird nachgezogen.
+            self._conn.executescript(_TRIGGERS)
             self._conn.commit()
 
+    @property
+    def path(self) -> Path:
+        return self._path
+
     def put(self, assertion: Assertion) -> None:
+        vorher = self.get(assertion.id)
+        if vorher is not None:
+            ensure_content_unchanged(vorher, assertion)
         d = assertion.to_dict()
         with self._lock:
             self._conn.execute(

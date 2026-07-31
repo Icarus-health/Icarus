@@ -14,9 +14,11 @@ Nach außen sehen beide gleich aus. Der Rest des Systems kennt nur `Provider`,
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import urlparse
 
 import httpx
 
@@ -42,6 +44,8 @@ class ProviderError(Exception):
 class Provider(Protocol):
     name: str
     model: str
+    is_local: bool
+    """Läuft der Anbieter auf diesem Rechner? Steuert die Egress-Grenze."""
 
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -50,6 +54,28 @@ class Provider(Protocol):
 
 def _http(timeout: float = 120.0) -> httpx.Client:
     return httpx.Client(timeout=timeout)
+
+
+def is_local_endpoint(base_url: str) -> bool:
+    """Läuft dieser Anbieter auf diesem Rechner?
+
+    Entscheidet über den Schutzbedarf, der ihm zugemutet werden darf. Nur
+    Loopback zählt als lokal: ein Ollama im Heimnetz ist bereits ein Netzwerk,
+    und ein Hostname, der heute auf 127.0.0.1 zeigt, kann morgen umziehen.
+    Deshalb wird die Adresse literal geprüft und nicht aufgelöst.
+    """
+    try:
+        host = urlparse(base_url).hostname
+    except ValueError:
+        return False
+    if not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class OpenAICompatible:
@@ -70,6 +96,7 @@ class OpenAICompatible:
         self.model = model
         self._key = api_key or "not-needed"
         self._base = base_url.rstrip("/")
+        self.is_local = is_local_endpoint(base_url)
 
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
@@ -121,6 +148,7 @@ class Anthropic:
         self._key = api_key
         self._base = base_url.rstrip("/")
         self._max_tokens = max_tokens
+        self.is_local = is_local_endpoint(base_url)
 
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]

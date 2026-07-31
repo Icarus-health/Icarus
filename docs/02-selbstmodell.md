@@ -70,13 +70,13 @@ Ehrlich benannt, damit es niemand für fertig hält:
 
 - **Kein Konfliktlöser.** Das Schema kann Widersprüche *darstellen*, aber nicht entscheiden. Welche zweier widersprüchlicher Aussagen gewinnt, ist Logik der Orchestrierungsschicht.
 - **Keine Verdichtung.** Reflexionen und Zusammenfassungen über viele Episoden hinweg — die Ebene, die aus Erinnerungen ein Selbstbild macht — fehlen. Für den Anfang lassen sie sich als `inference` mit `derived_from` abbilden, das trägt aber nicht auf Dauer.
-- **Keine Durchsetzung.** `sensitivity` ist heute nur eine Markierung. Dass `special_category` niemals an ein externes Modell geht, muss die Orchestrierungsschicht garantieren; siehe [03-delegation.md](03-delegation.md).
+- **Durchsetzung liegt in der Agentenschicht, nicht im Schema.** `sensitivity` ist im Schema eine Markierung; durchgesetzt wird sie von `Agent.effective_sensitivity_ceiling()` und `Agent.assert_egress_allowed()`. Ein externer Anbieter bekommt nur `normal`, ein Anbieter auf Loopback auch `sensitive`, `special_category` in keinem Fall. Siehe [06-gedaechtnis-kontrakt.md](06-gedaechtnis-kontrakt.md) und [03-delegation.md](03-delegation.md).
 - **Kein Konsolidierungslauf.** Aussagen sammeln sich an; ein Prozess, der sie periodisch verdichtet, prüft und veraltete zur Bestätigung vorlegt, fehlt.
 
 ## Prüfen
 
 ```bash
-make test              # 27 Tests der Regeln
+make test              # Tests der Regeln (derzeit 153)
 make validate-schema   # Beispielprofil gegen das Schema
 ```
 

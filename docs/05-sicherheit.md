@@ -67,6 +67,14 @@ im Trockenlauf, dass eine Mail an einen ihm unbekannten Empfänger gehen soll.
 Ein neuer Beitrag des Nutzers hebt die Kontamination auf — das ist wieder eine
 vertrauenswürdige Absicht.
 
+### E-Mail ist der schlimmste Fall
+
+Bei einer Webseite muss der Angreifer den Nutzer dazu bringen, sie abrufen zu lassen. Bei einer E-Mail entfällt dieser Schritt: **Jeder kann dir schreiben.** Der Angreifer braucht nur deine Adresse und wartet darauf, dass der Assistent den Posteingang liest.
+
+Deshalb ist `posteingang` als `returns_untrusted` markiert, ohne Ausnahme — und dasselbe gilt für Kalendereinträge, denn eine Einladung ist ebenfalls fremder Text. Danach wird jede wirksame Aktion vorgelegt.
+
+Die Oberfläche zeigt Nachrichten nur als Vorschau und verarbeitet sie nie von sich aus.
+
 ### Der Angriff im Test
 
 [`test_prompt_injection_kette`](../sidecar/tests/test_security.py) spielt genau

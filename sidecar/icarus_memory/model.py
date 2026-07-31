@@ -19,6 +19,24 @@ def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def ensure_aware(value: datetime | None) -> datetime | None:
+    """Hängt einem zeitzonenlosen Zeitpunkt die lokale Zone an.
+
+    Über HTTP kommen Zeitangaben oft ohne Zone herein („2026-08-05T23:59:00"),
+    intern wird aber durchgehend mit zeitzonenbehafteten Werten gerechnet. Ein
+    Vergleich der beiden wirft `TypeError: can't compare offset-naive and
+    offset-aware datetimes` — und zwar erst zur Laufzeit, an einer beliebigen
+    späteren Stelle.
+
+    Deshalb wird an jeder Eingangsstelle normalisiert, statt an jeder
+    Vergleichsstelle zu prüfen. Die lokale Zone ist die richtige Annahme: Wer
+    „fällig am 5.8. um 23:59" tippt, meint seine eigene Uhr.
+    """
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.astimezone()
+
+
 def _iso(value: datetime | None) -> str | None:
     if value is None:
         return None
@@ -213,6 +231,7 @@ class SelfModel:
 __all__ = [
     "SCHEMA_VERSION",
     "Assertion",
+    "ensure_aware",
     "Kind",
     "Provenance",
     "Redaction",

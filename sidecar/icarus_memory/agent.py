@@ -213,9 +213,11 @@ class Agent:
             return f"Unbekanntes Werkzeug: {call.name}"
 
         model_name = self._provider.model if self._provider else None
+        # Manche Werkzeuge werden erst durch ihre Argumente außenwirksam.
+        action_class = tool.classify(call.arguments)
         decision = self._policy.decide(
             tool.name,
-            tool.action_class,
+            action_class,
             call.arguments,
             constraints_from_store(self._store),
             # Sobald fremder Text im Kontext steht, ist jede folgende Absicht
@@ -262,13 +264,13 @@ class Agent:
             result = tool.run(**arguments)
         except Exception as exc:
             self._audit.record(
-                tool.name, tool.action_class.value, level.value, "failed",
+                tool.name, tool.classify(arguments).value, level.value, "failed",
                 arguments, model=model_name, detail=str(exc), approved_by=approved_by,
             )
             return f"Fehlgeschlagen: {exc}"
 
         self._audit.record(
-            tool.name, tool.action_class.value, level.value, "executed",
+            tool.name, tool.classify(arguments).value, level.value, "executed",
             arguments, model=model_name, result=result[:500], approved_by=approved_by,
         )
         turn.used_tools.append(tool.name)

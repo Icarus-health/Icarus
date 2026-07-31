@@ -9,7 +9,8 @@ SCHEMA  := schema/self-model.schema.json
 EXAMPLE := schema/beispiel-profil.json
 
 .DEFAULT_GOAL := help
-.PHONY: help venv sidecar-dev sidecar-run mcp-config test validate-schema check \
+.PHONY: help venv sidecar-dev sidecar-run mcp-config container container-run \
+        test validate-schema check \
         app-dev app-build sidecar-binary icon clean
 
 help: ## Diese Übersicht anzeigen
@@ -33,6 +34,18 @@ sidecar-full: venv ## Sidecar mit cognee installieren (zieht ~950 MB nach)
 
 sidecar-run: ## Sidecar lokal starten (127.0.0.1:8765)
 	ICARUS_DATA_DIR=$${ICARUS_DATA_DIR:-./.icarus-data} $(BIN)/icarus-sidecar
+
+container: ## Container-Bild lokal bauen
+	docker build -t icarus:local .
+
+container-run: ## Container starten (Token und Passphrase werden erzeugt)
+	@ICARUS_SIDECAR_TOKEN=$$(openssl rand -hex 32); \
+	 ICARUS_SECRETS_PASSPHRASE=$$(openssl rand -hex 32); \
+	 echo "Oberfläche: http://127.0.0.1:8765/?token=$$ICARUS_SIDECAR_TOKEN"; \
+	 echo; \
+	 ICARUS_SIDECAR_TOKEN=$$ICARUS_SIDECAR_TOKEN \
+	 ICARUS_SECRETS_PASSPHRASE=$$ICARUS_SECRETS_PASSPHRASE \
+	 docker compose up
 
 mcp-config: ## Konfigurationsschnipsel für die MCP-Tür ausgeben
 	@echo 'In die Konfiguration des Assistenten (Claude Desktop, Claude Code, …).'

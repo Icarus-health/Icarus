@@ -152,11 +152,19 @@ die getippte Bestätigungsphrase. Die Quelle wird nicht erneut geöffnet. Ein
 Vorschlag, der auf einer inzwischen geänderten Datei oder Mail beruht, wird
 ausgeführt, als wäre nichts passiert. Der Digest ist die Voraussetzung dafür.
 
-**Kein `disputed`-Status.** `Status` kennt `active, superseded, expired,
-retracted, redacted`. Zwei sich widersprechende Aussagen bleiben beide `active`
-und gehen beide in den Prompt. `docs/02-selbstmodell.md` sagt es offen: „Kein
-Konfliktlöser." Das Ziel ist nicht, Widersprüche aufzulösen, sondern sie sichtbar
-zu markieren, statt das Modell zwischen ihnen raten zu lassen.
+**Kein `disputed`-Status — geschlossen.** `Status` kennt ihn jetzt.
+`store.dispute()` markiert zwei oder mehr Aussagen als einander widersprechend,
+und zwar **gegenseitig**: Ein einseitiger Verweis hieße, dass eine Seite des
+Widerspruchs unbemerkt als Gegenwart auftritt. Strittiges ist nicht `usable()`
+und erscheint im Kontext unter einer eigenen Überschrift („Ungeklärt"), damit
+das Modell nachfragt statt zu wählen.
+
+Aufgelöst wird über die bestehenden Wege — `record(supersedes=…)` oder
+`retract()`. Ein eigener „Streit beilegen"-Pfad wäre ein dritter Weg, Bestand zu
+ändern, und davon gibt es genug. Was **offen bleibt**, ist das automatische
+*Finden* von Widersprüchen; heute muss sie jemand benennen.
+
+Tests: `tests/test_disputed.py` (10).
 
 **Der abgeleitete Zustand wird nicht neu berechnet.** `Assertion.is_usable()`
 vertraut dem gespeicherten `status`; `usable()` schreibt ihn beim Lesen sogar

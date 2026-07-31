@@ -6,20 +6,48 @@ Rechner, der Jahre laufen soll, ist das der Ort, an dem am ehesten etwas
 ausläuft.
 
 Ohne Zusatzabhängigkeit: macOS über `security`, Windows über PowerShell mit
-DPAPI, Linux über `secret-tool`, falls vorhanden. Gibt es keinen Speicher,
-fällt alles auf Umgebungsvariablen zurück — dann funktioniert das System
-weiterhin, nur eben ohne diesen Schutz, und sagt das auch.
+DPAPI, Linux über `secret-tool`, falls vorhanden.
+
+## Die verschlüsselte Datei
+
+In einem Container gibt es keinen dieser Speicher. Auch auf Linux ohne
+`secret-tool` gibt es keinen. Bisher hieß das: Schlüssel liegen in
+Umgebungsvariablen, also in einer `compose.yaml` oder `.env` — genau der
+Klartext, gegen den dieses Modul gebaut ist.
+
+Deshalb ein vierter Speicher: `schluessel.icarus` im Datenverzeichnis,
+verschlüsselt mit einer Passphrase aus `ICARUS_SECRETS_PASSPHRASE` (Verfahren in
+`crypto.py`).
+
+**Was das bringt und was nicht**, ehrlich: Das Datenverzeichnis ist das, was
+gesichert, kopiert und in Snapshots gezogen wird. Nach dieser Änderung enthält
+keine dieser Kopien lesbare Schlüssel. Die Passphrase lebt in der
+Orchestrierungsschicht — ein anderes Artefakt mit einem anderen Lebenszyklus.
+Wer allerdings **beides** hat, Passphrase und Datenverzeichnis, hat die
+Schlüssel. Das ist eine echte Verbesserung gegen ausgelaufene Sicherungen, kein
+Schutz gegen jemanden, der ohnehin auf dem Rechner sitzt.
+
+Ohne jeden Speicher fällt weiterhin alles auf Umgebungsvariablen zurück — dann
+funktioniert das System, nur eben ohne diesen Schutz, und sagt das auch.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import platform
 import shutil
 import subprocess
 from pathlib import Path
 
+from .crypto import DecryptionError, seal_json, unseal_json
+
 SERVICE = "health.icarus.desktop"
+
+#: Name der verschlüsselten Schlüsseldatei im Datenverzeichnis.
+SECRETS_FILE = "schluessel.icarus"
+SECRETS_MAGIC = "icarus-secrets-v1"
+PASSPHRASE_ENV = "ICARUS_SECRETS_PASSPHRASE"
 
 #: Schlüssel, die aus dem Schlüsselbund kommen dürfen.
 KNOWN = (
@@ -48,15 +76,29 @@ def _run(command: list[str], stdin: str | None = None) -> subprocess.CompletedPr
     )
 
 
+def _data_dir() -> Path:
+    configured = os.environ.get("ICARUS_DATA_DIR")
+    if configured:
+        return Path(configured)
+    return Path.home() / "Library" / "Application Support" / "Icarus"
+
+
 class Keychain:
     """Zugriff auf den Schlüsselspeicher der Plattform."""
 
-    def __init__(self, service: str = SERVICE) -> None:
+    def __init__(self, service: str = SERVICE, data_dir: Path | None = None) -> None:
         self._service = service
+        self._data_dir = Path(data_dir) if data_dir else _data_dir()
         self._backend = self._detect()
 
-    @staticmethod
-    def _detect() -> str:
+    def _detect(self) -> str:
+        """Sucht den besten verfügbaren Speicher.
+
+        Der Schlüsselbund des Betriebssystems geht vor: Er ist an das
+        Benutzerkonto gebunden und braucht keine Passphrase, die irgendwo
+        stehen müsste. Die verschlüsselte Datei kommt erst danach — sie ist die
+        Antwort auf „es gibt keinen", nicht die bessere Lösung.
+        """
         system = platform.system()
         if system == "Darwin" and shutil.which("security"):
             return "macos"
@@ -64,7 +106,52 @@ class Keychain:
             return "windows"
         if system == "Linux" and shutil.which("secret-tool"):
             return "secret-tool"
+        if os.environ.get(PASSPHRASE_ENV):
+            return "file"
         return "none"
+
+    # -- Verschlüsselte Datei ----------------------------------------------
+
+    @property
+    def secrets_path(self) -> Path:
+        return self._data_dir / SECRETS_FILE
+
+    def _read_file(self) -> dict[str, str]:
+        """Liest die Schlüsseldatei. Eine kaputte Datei blockiert nichts.
+
+        Ein leerer Speicher ist reparierbar — der Nutzer trägt die Schlüssel
+        erneut ein. Eine Ausnahme beim Start hieße, dass er nicht mehr an sein
+        Gedächtnis kommt, und das ist der schlimmere Ausgang.
+        """
+        passphrase = os.environ.get(PASSPHRASE_ENV)
+        if not passphrase or not self.secrets_path.is_file():
+            return {}
+        try:
+            document = json.loads(self.secrets_path.read_text(encoding="utf-8"))
+            if document.get("format") != SECRETS_MAGIC:
+                return {}
+            werte = unseal_json(self.secrets_path.read_text(encoding="utf-8"), passphrase)
+        except (OSError, ValueError, DecryptionError):
+            return {}
+        return {str(k): str(v) for k, v in werte.items()} if isinstance(werte, dict) else {}
+
+    def _write_file(self, werte: dict[str, str]) -> None:
+        passphrase = os.environ.get(PASSPHRASE_ENV)
+        if not passphrase:
+            raise KeychainError(
+                f"Ohne {PASSPHRASE_ENV} lässt sich die Schlüsseldatei nicht schreiben."
+            )
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        target = self.secrets_path
+        # Erst die Rechte, dann der Inhalt — sonst liegt das Chiffrat kurz
+        # unter den Standardrechten. Es ist verschlüsselt, aber ein
+        # Angreifer, der es kopiert, kann die Passphrase später raten.
+        target.touch(mode=0o600, exist_ok=True)
+        try:
+            target.chmod(0o600)
+        except OSError:
+            pass
+        target.write_text(seal_json(werte, passphrase, SECRETS_MAGIC), encoding="utf-8")
 
     @property
     def backend(self) -> str:
@@ -77,6 +164,9 @@ class Keychain:
     # -- Lesen und Schreiben ----------------------------------------------
 
     def get(self, name: str) -> str | None:
+        if self._backend == "file":
+            return self._read_file().get(name)
+
         if self._backend == "macos":
             result = _run([
                 "security", "find-generic-password",
@@ -98,6 +188,12 @@ class Keychain:
     def set(self, name: str, value: str) -> None:
         if self._backend == "none":
             raise KeychainError("Kein Schlüsselspeicher verfügbar.")
+
+        if self._backend == "file":
+            werte = self._read_file()
+            werte[name] = value
+            self._write_file(werte)
+            return
 
         if self._backend == "macos":
             # -U aktualisiert einen vorhandenen Eintrag, statt zu scheitern.
@@ -121,6 +217,12 @@ class Keychain:
             raise KeychainError(result.stderr.strip() or "Schreiben fehlgeschlagen.")
 
     def delete(self, name: str) -> None:
+        if self._backend == "file":
+            werte = self._read_file()
+            if werte.pop(name, None) is not None:
+                self._write_file(werte)
+            return
+
         if self._backend == "macos":
             _run(["security", "delete-generic-password", "-s", self._service, "-a", name])
         elif self._backend == "secret-tool":
@@ -194,4 +296,14 @@ def migrate_env_file(path: Path, keychain: Keychain | None = None) -> list[str]:
     return migrated
 
 
-__all__ = ["KNOWN", "SERVICE", "Keychain", "KeychainError", "load_into_env", "migrate_env_file"]
+__all__ = [
+    "KNOWN",
+    "PASSPHRASE_ENV",
+    "SECRETS_FILE",
+    "SECRETS_MAGIC",
+    "SERVICE",
+    "Keychain",
+    "KeychainError",
+    "load_into_env",
+    "migrate_env_file",
+]

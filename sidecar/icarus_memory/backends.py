@@ -78,6 +78,7 @@ def assertion_from_dict(d: dict[str, Any]) -> Assertion:
         derived_from=list(d.get("derived_from", [])),
         sensitivity=Sensitivity(d.get("sensitivity", "normal")),
         tags=list(d.get("tags", [])),
+        disputed_with=list(d.get("disputed_with", [])),
         redaction=redaction,
     )
 

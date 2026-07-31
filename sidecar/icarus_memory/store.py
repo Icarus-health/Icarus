@@ -209,6 +209,46 @@ class SelfModelStore:
 
         return [self._require(i) for i in sorted(affected)]
 
+    def dispute(self, *assertion_ids: str) -> list[Assertion]:
+        """Markiert zwei oder mehr Aussagen als einander widersprechend.
+
+        Löst nichts auf — das ist der Punkt. Bis hierher gingen zwei
+        widersprüchliche Aussagen beide als `active` in den Prompt, und das
+        Modell hat sich für eine entschieden, ohne dass jemand es merkte. Ein
+        Gedächtnis, das so etwas tut, ist selbstbewusst falsch, und das ist
+        schlimmer als eine offene Frage.
+
+        Der Verweis wird **gegenseitig** gesetzt. Ein einseitiger würde
+        bedeuten, dass eine Seite des Widerspruchs weiterhin unbemerkt als
+        Gegenwart auftritt.
+
+        Aufgelöst wird über die bestehenden Wege: `record(supersedes=…)`, wenn
+        eine Aussage die andere ablöst, oder `retract()`, wenn eine schlicht
+        falsch war. Beide sind protokolliert; ein eigener „Streit beilegen"-Pfad
+        wäre ein dritter Weg, Bestand zu ändern, und davon gibt es genug.
+        """
+        if len(assertion_ids) < 2:
+            raise ConflictError("Ein Widerspruch braucht mindestens zwei Aussagen.")
+
+        betroffen = [self._require(i) for i in assertion_ids]
+        for assertion in betroffen:
+            if assertion.status in (Status.REDACTED, Status.RETRACTED):
+                raise ConflictError(
+                    f"Aussage {assertion.id} ist {assertion.status.value} und "
+                    "steht in keinem Streit mehr."
+                )
+
+        for assertion in betroffen:
+            assertion.status = Status.DISPUTED
+            for other in betroffen:
+                if other.id != assertion.id and other.id not in assertion.disputed_with:
+                    assertion.disputed_with.append(other.id)
+            self._backend.put(assertion)
+        return betroffen
+
+    def disputed(self) -> list[Assertion]:
+        return [a for a in self._backend.all() if a.status is Status.DISPUTED]
+
     # -- Lesen -------------------------------------------------------------
 
     def usable(self, at: datetime | None = None) -> list[Assertion]:

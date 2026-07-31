@@ -11,8 +11,10 @@ Angriffsweg.
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -33,6 +35,13 @@ from .security import file_roots_from_env
 from .store import ConflictError, SelfModelStore
 from .tasks import TaskStore
 from .tools import build_registry
+from .workspace import (
+    NoteKind,
+    Priority,
+    ProjectStatus,
+    WorkspaceError,
+    WorkspaceStore,
+)
 
 TOKEN_ENV = "ICARUS_SIDECAR_TOKEN"
 DATA_ENV = "ICARUS_DATA_DIR"
@@ -117,6 +126,49 @@ class TaskIn(BaseModel):
     due: datetime | None = None
     notes: str | None = None
     tags: list[str] = Field(default_factory=list)
+    project_id: str | None = None
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1)
+    area: str | None = None
+    status: ProjectStatus = ProjectStatus.ACTIVE
+    priority: Priority = Priority.MEDIUM
+    description: str | None = None
+    deadline: datetime | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class ProjectPatch(BaseModel):
+    status: ProjectStatus | None = None
+    priority: Priority | None = None
+    description: str | None = None
+    deadline: datetime | None = None
+    area: str | None = None
+
+
+class NoteIn(BaseModel):
+    title: str = Field(min_length=1)
+    body: str = ""
+    kind: NoteKind = NoteKind.REFERENCE
+    project_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class NotePatch(BaseModel):
+    title: str | None = None
+    body: str | None = None
+    project_id: str | None = None
+
+
+class ToolIn(BaseModel):
+    """Argumente eines direkten Werkzeugaufrufs.
+
+    Bewusst frei: Jedes Werkzeug bringt sein eigenes Schema mit, und die
+    Prüfung gehört dorthin, nicht in eine zweite Beschreibung hier.
+    """
+
+    model_config = {"extra": "allow"}
 
 
 def create_app(
@@ -124,6 +176,7 @@ def create_app(
     agent: Agent | None = None,
     audit: AuditLog | None = None,
     tasks: TaskStore | None = None,
+    workspace: WorkspaceStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Icarus", version="0.1.0")
 
@@ -140,6 +193,10 @@ def create_app(
     if tasks is None:
         tasks = TaskStore(_data_dir() / "tasks.sqlite3")
     app.state.tasks = tasks
+
+    if workspace is None:
+        workspace = WorkspaceStore(_data_dir() / "workspace.sqlite3")
+    app.state.workspace = workspace
 
     if agent is None:
         # Schlüssel aus dem Schlüsselbund holen, bevor Anbieter und Konnektoren
@@ -163,6 +220,7 @@ def create_app(
                 mail=app.state.mail,
                 calendar=app.state.calendar,
                 task_store=tasks,
+                workspace=workspace,
             ),
             provider=provider_from_env(),
         )
@@ -313,11 +371,19 @@ def create_app(
         """
         result: dict[str, Any] = {
             "now": datetime.now().astimezone().isoformat(),
+            "projects": {"items": [], "error": None},
             "tasks": {"items": [], "error": None},
             "calendar": {"items": [], "error": None},
             "mail": {"items": [], "error": None},
             "memory": {"count": 0, "recent": []},
         }
+
+        try:
+            result["projects"]["items"] = [
+                p.to_dict() for p in app.state.workspace.projects()
+            ]
+        except Exception as exc:  # noqa: BLE001
+            result["projects"]["error"] = str(exc)
 
         try:
             offen = app.state.tasks.open_tasks(limit=50)
@@ -367,6 +433,7 @@ def create_app(
             Provenance(source_type=SourceType.USER_STATED,
                        captured_at=datetime.now().astimezone()),
             due=body.due, notes=body.notes, tags=body.tags,
+            project_id=body.project_id,
         )
         return task.to_dict()
 
@@ -388,6 +455,107 @@ def create_app(
             return app.state.tasks.drop(task_id).to_dict()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # -- Projekte ----------------------------------------------------------
+
+    @app.get("/projects", dependencies=guard)
+    def list_projects(all: bool = False) -> list[dict[str, Any]]:
+        return [p.to_dict() for p in app.state.workspace.projects(include_closed=all)]
+
+    @app.post("/projects", dependencies=guard, status_code=201)
+    def add_project(body: ProjectIn) -> dict[str, Any]:
+        project = app.state.workspace.add_project(
+            body.name,
+            Provenance(source_type=SourceType.USER_STATED,
+                       captured_at=datetime.now().astimezone()),
+            area=body.area, status=body.status, priority=body.priority,
+            description=body.description, deadline=body.deadline, tags=body.tags,
+        )
+        return project.to_dict()
+
+    @app.get("/projects/{project_id}", dependencies=guard)
+    def project_detail(project_id: str) -> dict[str, Any]:
+        """Projekt samt allem, was daran hängt.
+
+        Ein Aufruf statt drei — die Projektansicht soll nicht aus drei
+        Anfragen zusammengesetzt werden, die einzeln scheitern können.
+        """
+        try:
+            project = app.state.workspace.project(project_id)
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {
+            **project.to_dict(),
+            "tasks": [t.to_dict() for t in app.state.tasks.by_project(project_id)],
+            "notes": [
+                n.to_dict() for n in app.state.workspace.notes(project_id=project_id)
+            ],
+        }
+
+    @app.patch("/projects/{project_id}", dependencies=guard)
+    def patch_project(project_id: str, body: ProjectPatch) -> dict[str, Any]:
+        try:
+            project = app.state.workspace.update_project(
+                project_id,
+                status=body.status, priority=body.priority,
+                description=body.description, deadline=body.deadline, area=body.area,
+            )
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return project.to_dict()
+
+    # -- Notizen -----------------------------------------------------------
+
+    @app.get("/notes", dependencies=guard)
+    def list_notes(project_id: str | None = None, q: str | None = None) -> list[dict[str, Any]]:
+        if q:
+            return [n.to_dict() for n in app.state.workspace.search_notes(q)]
+        return [n.to_dict() for n in app.state.workspace.notes(project_id=project_id)]
+
+    @app.post("/notes", dependencies=guard, status_code=201)
+    def add_note(body: NoteIn) -> dict[str, Any]:
+        try:
+            note = app.state.workspace.add_note(
+                body.title, body.body,
+                Provenance(source_type=SourceType.USER_STATED,
+                           captured_at=datetime.now().astimezone()),
+                kind=body.kind, project_id=body.project_id, tags=body.tags,
+            )
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return note.to_dict()
+
+    @app.get("/notes/{note_id}", dependencies=guard)
+    def note_detail(note_id: str) -> dict[str, Any]:
+        try:
+            return app.state.workspace.note(note_id).to_dict()
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.patch("/notes/{note_id}", dependencies=guard)
+    def patch_note(note_id: str, body: NotePatch) -> dict[str, Any]:
+        try:
+            note = app.state.workspace.update_note(
+                note_id, title=body.title, body=body.body, project_id=body.project_id,
+            )
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return note.to_dict()
+
+    # -- Werkzeuge ---------------------------------------------------------
+    #
+    # Die Tür für andere Assistenten (siehe mcp.py). Bewusst *nicht* an der
+    # Policy vorbei: `agent.invoke()` geht durch dieselbe Prüfung wie das
+    # Modell im Haus, und Außenwirksames kommt als Antrag zurück, statt
+    # ausgeführt zu werden.
+
+    @app.get("/tools", dependencies=guard)
+    def list_tools() -> list[dict[str, Any]]:
+        return app.state.agent.tool_schemas()
+
+    @app.post("/tools/{name}", dependencies=guard)
+    def call_tool(name: str, body: ToolIn) -> dict[str, Any]:
+        return app.state.agent.invoke(name, body.model_dump())
 
     # -- Sicherung ---------------------------------------------------------
 
@@ -437,10 +605,51 @@ def create_app(
     return app
 
 
+def write_connection_file(directory: Path, port: int, token: str | None) -> Path:
+    """Hinterlegt Adresse und Token für die MCP-Tür.
+
+    Die App vergibt Port und Token bei jedem Start neu. Ohne diese Datei müsste
+    der Nutzer beides von Hand in die Konfiguration seines Assistenten
+    eintragen — und nach jedem Neustart erneut.
+
+    Die Datei enthält ein Token und gehört deshalb niemandem sonst: 0600, und
+    das Verzeichnis 0700. Auf Windows greifen die Bits nicht; dort schützt die
+    Lage im Benutzerprofil.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.chmod(0o700)
+    except OSError:
+        pass
+    path = directory / "verbindung.json"
+    payload = {"url": f"http://127.0.0.1:{port}", "token": token}
+    # Erst die Rechte, dann der Inhalt — sonst steht das Token kurzzeitig
+    # unter den Standardrechten auf der Platte.
+    path.touch(mode=0o600, exist_ok=True)
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
 def main() -> None:  # pragma: no cover
     import uvicorn
 
+    # Eine Binary, zwei Rollen. Im gebündelten Zustand liegt nur diese hier im
+    # App-Paket; ein zweites PyInstaller-Ziel für die MCP-Tür würde den
+    # Interpreter und alle Abhängigkeiten ein zweites Mal mitschleppen, für
+    # zweihundert Zeilen Code. Beim Installieren über pip gibt es daneben
+    # weiterhin den eigenen Befehl `icarus-mcp`.
+    if "--mcp" in sys.argv[1:]:
+        from .mcp import main as mcp_main
+
+        mcp_main()
+        return
+
     port = int(os.environ.get("ICARUS_SIDECAR_PORT", "8765"))
+    write_connection_file(_data_dir(), port, os.environ.get(TOKEN_ENV))
     uvicorn.run(create_app(), host="127.0.0.1", port=port, log_level="warning")
 
 

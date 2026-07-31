@@ -13,7 +13,8 @@ server, no setup.
 > provenance, it reaches for current information, and nothing leaves your
 > machine without you confirming exactly what goes out. It defends against
 > prompt injection, keeps keys in the OS keychain, and backs itself up. A
-> dashboard shows today's tasks, appointments and messages.
+> dashboard shows today's projects, tasks, appointments and messages, and other
+> assistants on the machine can reach the same memory over MCP.
 > Missing: computer-use and memory consolidation.
 
 Detailed documentation is in German under [`docs/`](docs/).
@@ -24,8 +25,22 @@ Detailed documentation is in German under [`docs/`](docs/).
 |---|---|---|
 | 1 | Verifiable self-model — provenance, versioning, revocation | **Built.** Record, supersede, expire, revoke with cascade |
 | 2 | Vendor-independent memory | **Built.** Local SQLite record; OpenAI-compatible, Anthropic or Ollama in front |
-| 3 | Current information | **Built.** Mail (IMAP), calendar (CalDAV), tasks, web, files |
+| 3 | Current information | **Built.** Mail (IMAP), calendar (CalDAV), projects, tasks, notes, web, files |
 | 4 | Controlled delegation and execution | **Built.** Action classes, dry-run approvals, append-only audit |
+
+## One app, not a folder of them
+
+Projects, tasks and notes live in Icarus itself — not in a second tool it syncs
+with. A task without a project is a sticky note; the same task on a project is a
+step. `projekt_stand` answers the question actually asked in daily life — "where
+does X stand?" — in one call, instead of making you explain X again every
+session.
+
+Notes are deliberately **not** append-only, unlike assertions. An assertion is a
+claim about the person: make it overwritable and the contradiction between old
+and new disappears. A note is a working document; a meeting record you may not
+correct just forces a second note saying "correction to the above". What stays
+immutable either way is where it came from.
 
 ## How it is put together
 
@@ -72,13 +87,33 @@ degrades to substring matching. That is pillar 2 made real rather than asserted.
 
 Full picture: [`docs/01-architektur.md`](docs/01-architektur.md).
 
+## Other assistants, same memory
+
+The assistants already on your machine can do plenty, but they forget everything
+between sessions. Icarus exposes its memory to them over MCP — as a **second
+door into the same house**, never a second system:
+
+```json
+{ "mcpServers": { "icarus": { "command": "/path/to/icarus-mcp" } } }
+```
+
+`icarus-mcp` opens no database of its own. It talks to the running sidecar, so
+every call goes through the same policy, the same constraints and the same audit
+log. Outward actions are **not** executed — a foreign assistant cannot retype a
+confirmation phrase, so the request lands in the Icarus app and waits for you
+there. Otherwise there would be a second approval queue that nobody looks at.
+
+Tell it `icarus_kontext` at the start of a session and it knows who you are,
+what you are working on, and how old each of those facts is. Details and the
+open ends: [`docs/07-mcp-tuer.md`](docs/07-mcp-tuer.md).
+
 ## Getting started
 
 Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 153 tests: memory, policy, audit, agent, security, connectors, egress
+make test            # 193 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -123,9 +158,10 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-153 tests, no network and no model required — including a test that plays out a
-full prompt-injection attack and asserts nothing escaped, and a suite that proves
-sensitive facts cannot reach an external provider.
+193 tests, no network and no model required — including a test that plays out a
+full prompt-injection attack and asserts nothing escaped, a suite that proves
+sensitive facts cannot reach an external provider, and one that proves a foreign
+assistant on the MCP door cannot trigger an outward action.
 
 ## Connecting mail and calendar
 
@@ -180,19 +216,21 @@ sidecar/             Python: memory, policy, agent
     audit.py         Append-only log, enforced by SQLite triggers
     providers.py     OpenAI-compatible and Anthropic, one interface
     tasks.py         Tasks with provenance, due dates, done vs. dropped
+    workspace.py     Projects and notes — the layer tasks and knowledge hang on
     connectors/      Mail (IMAP/SMTP) and calendar (CalDAV), open protocols
-    tools.py         Web, files, time, memory, mail, calendar, tasks
+    tools.py         Web, files, time, memory, mail, calendar, tasks, projects, notes
     agent.py         Ties it together; proposes, never executes directly
     security.py      Path confinement, SSRF guard, untrusted-input handling
     secrets.py       OS keychain: macOS, Windows DPAPI, secret-tool
     backup.py        Snapshots, restore, encrypted export
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     server.py        Loopback-only HTTP API for the app
-  tests/             153 tests, no network and no model required
+    mcp.py           The MCP door: same memory for other assistants, same policy
+  tests/             193 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
-docs/                Architecture, self-model, delegation, security, roadmap, ADRs
+docs/                Architecture, self-model, delegation, security, MCP door, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

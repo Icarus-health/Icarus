@@ -10,6 +10,7 @@
     <nav>
       <strong>Icarus</strong>
       <button data-view="dashboard" class="tab active">Heute</button>
+      <button data-view="projects" class="tab">Projekte</button>
       <button data-view="chat" class="tab">Gespräch</button>
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
@@ -22,6 +23,12 @@
         <h2 id="greeting"></h2>
 
         <div class="cards">
+          <article class="card">
+            <h3>Projekte</h3>
+            <ul id="project-teaser"></ul>
+            <p id="project-teaser-note" class="muted"></p>
+          </article>
+
           <article class="card">
             <h3>Aufgaben <span id="task-badge" class="badge" hidden></span></h3>
             <form id="task-form">
@@ -54,6 +61,29 @@
             <p id="memory-note" class="muted"></p>
           </article>
         </div>
+      </section>
+
+      <!-- Projekte: die Ebene, an der Aufgaben und Notizen hängen -->
+      <section id="view-projects" class="view" hidden>
+        <form id="project-form">
+          <input id="project-name" type="text" placeholder="Neues Projekt" autocomplete="off" required />
+          <input id="project-area" type="text" placeholder="Bereich" autocomplete="off" list="areas" />
+          <datalist id="areas"></datalist>
+          <input id="project-deadline" type="date" aria-label="Frist" />
+          <button type="submit">Anlegen</button>
+        </form>
+
+        <div class="split">
+          <ul id="project-list"></ul>
+
+          <!-- Rechts der Stand des gewählten Projekts: Beschreibung, offene
+               Aufgaben, Notizen. Ein Aufruf, nicht drei. -->
+          <div id="project-detail">
+            <p class="muted">Wähle links ein Projekt.</p>
+          </div>
+        </div>
+
+        <p id="project-empty" class="muted">Noch keine Projekte.</p>
       </section>
 
       <!-- Gespräch -->

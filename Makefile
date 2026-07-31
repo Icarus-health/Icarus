@@ -9,7 +9,7 @@ SCHEMA  := schema/self-model.schema.json
 EXAMPLE := schema/beispiel-profil.json
 
 .DEFAULT_GOAL := help
-.PHONY: help venv sidecar-dev sidecar-run test validate-schema check \
+.PHONY: help venv sidecar-dev sidecar-run mcp-config test validate-schema check \
         app-dev app-build sidecar-binary icon clean
 
 help: ## Diese Übersicht anzeigen
@@ -33,6 +33,23 @@ sidecar-full: venv ## Sidecar mit cognee installieren (zieht ~950 MB nach)
 
 sidecar-run: ## Sidecar lokal starten (127.0.0.1:8765)
 	ICARUS_DATA_DIR=$${ICARUS_DATA_DIR:-./.icarus-data} $(BIN)/icarus-sidecar
+
+mcp-config: ## Konfigurationsschnipsel für die MCP-Tür ausgeben
+	@echo 'In die Konfiguration des Assistenten (Claude Desktop, Claude Code, …).'
+	@echo
+	@echo 'Aus dieser Arbeitskopie:'
+	@echo '{ "mcpServers": { "icarus": {'
+	@echo '  "command": "$(abspath $(BIN))/icarus-mcp"'
+	@echo '} } }'
+	@echo
+	@echo 'Aus der gebündelten App — eine Binary, zwei Rollen:'
+	@echo '{ "mcpServers": { "icarus": {'
+	@echo '  "command": "/Applications/Icarus.app/Contents/Resources/icarus-sidecar",'
+	@echo '  "args": ["--mcp"]'
+	@echo '} } }'
+	@echo
+	@echo 'Der Sidecar muss laufen — er hinterlegt Port und Token in'
+	@echo 'verbindung.json. Siehe docs/07-mcp-tuer.md.'
 
 test: ## Tests des Selbstmodells
 	$(BIN)/python -m pytest sidecar/tests -q

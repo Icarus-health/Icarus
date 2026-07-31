@@ -12,6 +12,7 @@
       <button data-view="dashboard" class="tab active">Heute</button>
       <button data-view="projects" class="tab">Projekte</button>
       <button data-view="chat" class="tab">Gespräch</button>
+      <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
       <span id="status" class="status">Verbinde…</span>
@@ -97,6 +98,31 @@
           <input id="chat-input" type="text" placeholder="Schreib etwas…" autocomplete="off" />
           <button type="submit">Senden</button>
         </form>
+      </section>
+
+      <!-- Rohmaterial: die Mittelfristschicht.
+           Was hier liegt, behauptet nichts über den Nutzer. Der Weg in den
+           Bestand führt nur über die Verdichtung, und die legt vor. -->
+      <section id="view-ingest" class="view" hidden>
+        <p class="muted">
+          Aufgenommenes wartet hier, bis es verdichtet wurde. Nichts davon gilt
+          als gewusst — der Bestand bleibt unberührt, bis du zustimmst.
+        </p>
+
+        <form id="ingest-form">
+          <input id="ingest-path" type="text" placeholder="Ordner, z. B. ~/Dokumente/Vault" autocomplete="off" required />
+          <select id="ingest-adapter" aria-label="Quelle">
+            <option value="obsidian">Obsidian-Vault</option>
+            <option value="notion">Notion-Export</option>
+            <option value="markdown">Markdown-Ordner</option>
+            <option value="dateien">Textdateien</option>
+          </select>
+          <button type="submit">Aufnehmen</button>
+        </form>
+        <p id="ingest-note" class="muted"></p>
+
+        <ul id="episode-list"></ul>
+        <p id="episode-empty" class="muted">Noch nichts aufgenommen.</p>
       </section>
 
       <!-- Gedächtnis -->

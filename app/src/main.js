@@ -44,6 +44,7 @@ const SOURCE_LABELS = {
 const REFRESH = {
   dashboard: loadDashboard,
   projects: loadProjects,
+  ingest: loadEpisodes,
   memory: loadMemory,
   audit: loadAudit,
   chat: loadApprovals,
@@ -187,6 +188,7 @@ async function loadDashboard() {
   renderEvents(data.calendar);
   renderMail(data.mail);
   renderMemoryCard(data.memory);
+  setPendingBadge(data.episodes?.pending);
 }
 
 $("#task-form").addEventListener("submit", async (event) => {
@@ -528,6 +530,118 @@ $("#chat-form").addEventListener("submit", async (event) => {
   } finally {
     input.disabled = false;
     input.focus();
+  }
+});
+
+// -- Rohmaterial ------------------------------------------------------------
+//
+// Die Mittelfristschicht. Was hier liegt, behauptet nichts über den Nutzer —
+// deshalb gibt es in dieser Ansicht bewusst keinen Knopf, der etwas in den
+// Bestand schiebt. Der Weg dorthin führt nur über die Verdichtung.
+
+const EPISODE_KIND = {
+  message: "Nachricht",
+  document: "Dokument",
+  event: "Termin",
+  interaction: "Kontakt",
+  observation: "Beobachtung",
+};
+
+const EPISODE_STATE = {
+  new: "wartet",
+  consolidated: "verdichtet",
+  archived: "archiviert",
+  ignored: "verworfen",
+};
+
+function setPendingBadge(count) {
+  const badge = $("#pending-badge");
+  badge.hidden = !count;
+  badge.textContent = String(count ?? 0);
+}
+
+async function loadEpisodes() {
+  const [episodes, counts] = await Promise.all([
+    api("/episodes?limit=200"),
+    api("/episodes/counts"),
+  ]);
+  setPendingBadge(counts.new);
+
+  const list = $("#episode-list");
+  list.replaceChildren();
+  $("#episode-empty").hidden = episodes.length > 0;
+
+  for (const e of episodes) {
+    const el = document.createElement("li");
+    el.className = `episode ${e.state}`;
+
+    const title = document.createElement("p");
+    title.className = "statement";
+    title.textContent = e.title;
+
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    const when = new Date(e.occurred_at ?? e.recorded_at).toLocaleDateString("de-DE");
+    const origin = SOURCE_LABELS[e.provenance.source_type] ?? e.provenance.source_type;
+    const bits = [EPISODE_KIND[e.kind] ?? e.kind, when, origin, EPISODE_STATE[e.state] ?? e.state];
+    if (e.participants.length) bits.push(e.participants.join(", "));
+    meta.textContent = bits.join(" · ");
+
+    // Der Rohtext, eingeklappt. Er stammt aus fremder Quelle und wird deshalb
+    // nie in eine Zeile gequetscht, in der man ihn für eine Aussage von Icarus
+    // halten könnte.
+    const body = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "Wortlaut";
+    const pre = document.createElement("pre");
+    pre.className = "dry-run";
+    pre.textContent = e.body;
+    body.append(summary, pre);
+
+    el.append(title, meta, body);
+
+    if (e.state === "new") {
+      const drop = document.createElement("button");
+      drop.className = "ghost small";
+      drop.textContent = "Gibt nichts her";
+      drop.addEventListener("click", async () => {
+        await api(`/episodes/${e.id}/ignore`, { method: "POST" });
+        await loadEpisodes();
+      });
+      el.append(drop);
+    }
+
+    list.append(el);
+  }
+}
+
+$("#ingest-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const path = $("#ingest-path").value.trim();
+  if (!path) return;
+
+  const note = $("#ingest-note");
+  const button = event.target.querySelector("button");
+  button.disabled = true;
+  note.textContent = "Wird gelesen…";
+  note.classList.remove("error");
+
+  try {
+    const report = await api("/ingest", {
+      method: "POST",
+      body: JSON.stringify({ path, adapter: $("#ingest-adapter").value }),
+    });
+    const bits = [`${report.recorded} aufgenommen`];
+    if (report.duplicates) bits.push(`${report.duplicates} schon bekannt`);
+    if (report.skipped) bits.push(`${report.skipped} übersprungen`);
+    note.textContent =
+      bits.join(", ") + ". Nichts davon gilt als gewusst — der Bestand ist unberührt.";
+    await loadEpisodes();
+  } catch (err) {
+    note.textContent = err.message;
+    note.classList.add("error");
+  } finally {
+    button.disabled = false;
   }
 });
 

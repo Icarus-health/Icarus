@@ -9,12 +9,12 @@ delegates or performs digital work under explicit control.
 It is a **downloadable desktop app** — macOS first, Windows after. No Docker, no
 server, no setup.
 
-> **Status: early, but end-to-end.** You can talk to it, it remembers with
-> provenance, it reaches for current information, and nothing leaves your
-> machine without you confirming exactly what goes out. It defends against
-> prompt injection, keeps keys in the OS keychain, and backs itself up. A
-> dashboard shows today's projects, tasks, appointments and messages, and other
-> assistants on the machine can reach the same memory over MCP.
+> **Status: early, but end-to-end.** Open it and a five-step wizard sets it up —
+> no config file, no account. It remembers with provenance, reads your existing
+> notes, reaches for current information, and nothing leaves your machine without
+> you confirming exactly what goes out. It defends against prompt injection,
+> keeps keys in the OS keychain, and backs itself up. Other assistants on the
+> machine reach the same memory over MCP.
 > Missing: computer-use and memory consolidation.
 
 Detailed documentation is in German under [`docs/`](docs/).
@@ -34,8 +34,9 @@ Your memory does not start empty and it should not have to. Point Icarus at an
 Obsidian vault, a Notion export, or a folder of text files:
 
 ```bash
+# In the app: Einrichtung → Ordnerzugriff, then Rohmaterial → Aufnehmen.
+# From a shell:
 export ICARUS_FILE_ROOTS="$HOME/Documents"   # nothing is readable without this
-# then, in the app: Rohmaterial → pick a folder → Aufnehmen
 ```
 
 Everything lands as an **episode** — raw material with a content digest, a source
@@ -127,13 +128,41 @@ Tell it `icarus_kontext` at the start of a session and it knows who you are,
 what you are working on, and how old each of those facts is. Details and the
 open ends: [`docs/07-mcp-tuer.md`](docs/07-mcp-tuer.md).
 
+## Setting it up
+
+There is **no account**. Icarus knows no server you could sign in to — the record
+lives on your machine, which is the whole premise. What setup actually asks is one
+question: which provider gets to see your conversations. "None" is a valid answer.
+
+Open the app and a five-step wizard walks through it. **Every step is skippable,
+and Icarus works if you skip all of them.** A wizard with required fields produces
+drop-off exactly where someone doesn't yet know the program well enough to fill
+anything in.
+
+| Where it goes | What | Why |
+|---|---|---|
+| `einstellungen.json` (0600) | provider, model, server addresses, allowed folders | must be readable and backup-able |
+| OS keychain | API key, mail and CalDAV passwords | never touches the disk |
+
+Without a keychain (Linux without `secret-tool`), an entered key lasts only for
+the session. It is deliberately **not** written to the settings file instead, and
+the UI says so on open.
+
+Changes take effect **without a restart** — enter a key and you can talk right
+away; allow a folder and you can import right away. A program that demands a
+restart after every setting gets closed on the first attempt, and for most people
+the first attempt is the only one. Connections are actually tested rather than
+assumed: `Verbindung prüfen` returns the real error.
+
+Details: [`docs/09-einrichtung.md`](docs/09-einrichtung.md).
+
 ## Getting started
 
 Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 246 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest
+make test            # 277 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -141,13 +170,13 @@ The memory core needs **no API key and no model**. Recording, superseding,
 revoking and exporting all work offline; the app says so rather than offering a
 broken chat.
 
-For conversation, point it at any provider — including a fully local one:
+For conversation, point it at any provider — including a fully local one. In the
+app this is the setup wizard; from a shell, environment variables still win over
+the settings file, which is how you run a test without touching a user's config:
 
 ```bash
-cp .env.example .env
-# OpenAI:    OPENAI_API_KEY=...
-# Anthropic: ANTHROPIC_API_KEY=...
-# Ollama:    ICARUS_PROVIDER=ollama   (nothing else needed)
+ICARUS_PROVIDER=ollama make sidecar-run    # fully local, nothing else needed
+ANTHROPIC_API_KEY=... make sidecar-run
 ```
 
 For semantic search across your memory:
@@ -178,11 +207,12 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-246 tests, no network and no model required — including a test that plays out a
+277 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
-a vault containing an injection payload and asserts the record stayed empty.
+a vault containing an injection payload and asserts the record stayed empty, and
+one that proves no secret ever reaches the settings file.
 
 ## Connecting mail and calendar
 
@@ -240,6 +270,7 @@ sidecar/             Python: memory, policy, agent
     workspace.py     Projects and notes — the layer tasks and knowledge hang on
     episodes.py      Mid-term layer: raw records with a digest, claiming nothing
     ingest.py        Adapters: Obsidian, Notion export, text files
+    config.py        Settings that survive a restart; secrets go to the keychain
     connectors/      Mail (IMAP/SMTP) and calendar (CalDAV), open protocols
     tools.py         Web, files, time, memory, mail, calendar, tasks, projects, notes
     agent.py         Ties it together; proposes, never executes directly
@@ -249,12 +280,12 @@ sidecar/             Python: memory, policy, agent
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             246 tests, no network and no model required
+  tests/             277 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
-                     memory layers, roadmap, ADRs
+                     memory layers, setup, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

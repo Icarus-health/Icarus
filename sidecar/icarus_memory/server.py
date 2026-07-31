@@ -26,6 +26,7 @@ from .agent import Agent
 from .audit import AuditLog
 from .backends import CogneeBackend
 from .backup import BackupError, export_model, import_model, list_snapshots, snapshot
+from . import config
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
 from .ingest import ADAPTERS, ingest_directory
@@ -179,6 +180,45 @@ class IngestIn(BaseModel):
     limit: int = Field(default=5000, ge=1, le=100000)
 
 
+class MailIn(BaseModel):
+    imap_host: str = ""
+    imap_port: int = 993
+    smtp_host: str = ""
+    smtp_port: int = 587
+    user: str = ""
+    sender: str = ""
+
+
+class CalendarIn(BaseModel):
+    url: str = ""
+    user: str = ""
+
+
+class SetupIn(BaseModel):
+    """Einstellungen ändern.
+
+    Jedes Feld ist optional und `None` bedeutet **nicht ändern**. Ein leerer
+    String bedeutet dagegen **leeren** — sonst ließe sich ein einmal
+    eingetragener Mailserver nie wieder loswerden.
+
+    Geheimnisse gehen nur in diese Richtung. Es gibt bewusst kein Feld, das sie
+    zurückgibt: Ein solches wäre der bequemste Weg, einen Schlüssel
+    versehentlich zu protokollieren.
+    """
+
+    provider: str | None = None
+    model: str | None = None
+    endpoint: str | None = None
+    file_roots: list[str] | None = None
+    mail: MailIn | None = None
+    calendar: CalendarIn | None = None
+    onboarded: bool | None = None
+
+    api_key: str | None = None
+    mail_password: str | None = None
+    calendar_password: str | None = None
+
+
 class ToolIn(BaseModel):
     """Argumente eines direkten Werkzeugaufrufs.
 
@@ -187,6 +227,45 @@ class ToolIn(BaseModel):
     """
 
     model_config = {"extra": "allow"}
+
+
+def _build_agent(app: FastAPI) -> Agent:
+    """Baut Konnektoren, Werkzeuge und Agent aus der aktuellen Umgebung.
+
+    Als eigene Funktion, weil das **zweimal** gebraucht wird: beim Start und
+    nach jeder Änderung an den Einstellungen. Ohne das müsste der Nutzer die
+    App neu starten, nachdem er einen Schlüssel eingetragen hat — und genau
+    diese Art Reibung ist der Grund, warum Programme nach dem ersten Versuch
+    weggelegt werden.
+
+    Der Gesprächsverlauf geht dabei absichtlich verloren. Ein Verlauf, der vor
+    einem Anbieterwechsel entstanden ist, gehört einem anderen Modell; ihn
+    mitzunehmen hieße, Aussagen weiterzuschleppen, die ein neuer Anbieter nie
+    gesehen hat.
+    """
+    mail_config = MailConfig.from_env(dict(os.environ))
+    cal_config = CalendarConfig.from_env(dict(os.environ))
+    app.state.mail = MailConnector(mail_config) if mail_config else None
+    app.state.calendar = CalendarConnector(cal_config) if cal_config else None
+
+    agent = Agent(
+        store=app.state.store,
+        policy=Policy(),
+        audit=app.state.audit,
+        tools=build_registry(
+            app.state.store,
+            outward_sink=_mail_sink(app),
+            file_roots=file_roots_from_env(os.environ.get(ROOTS_ENV)),
+            mail=app.state.mail,
+            calendar=app.state.calendar,
+            task_store=app.state.tasks,
+            workspace=app.state.workspace,
+            episodes=app.state.episodes,
+        ),
+        provider=provider_from_env(),
+    )
+    app.state.agent = agent
+    return agent
 
 
 def create_app(
@@ -227,28 +306,15 @@ def create_app(
         app.state.keychain = Keychain()
         app.state.loaded_secrets = load_into_env(app.state.keychain)
 
-        mail_config = MailConfig.from_env(dict(os.environ))
-        cal_config = CalendarConfig.from_env(dict(os.environ))
-        app.state.mail = MailConnector(mail_config) if mail_config else None
-        app.state.calendar = CalendarConnector(cal_config) if cal_config else None
+        # Und dann die Einstellungen des Nutzers. Gesetzte Umgebungsvariablen
+        # gewinnen, siehe config.apply_to_env.
+        app.state.settings = config.load(_data_dir())
+        config.apply_to_env(app.state.settings)
 
-        agent = Agent(
-            store=store,
-            policy=Policy(),
-            audit=audit,
-            tools=build_registry(
-                store,
-                outward_sink=_mail_sink(app),
-                file_roots=file_roots_from_env(os.environ.get(ROOTS_ENV)),
-                mail=app.state.mail,
-                calendar=app.state.calendar,
-                task_store=tasks,
-                workspace=workspace,
-                episodes=episodes,
-            ),
-            provider=provider_from_env(),
-        )
-    app.state.agent = agent
+        _build_agent(app)
+    else:
+        app.state.agent = agent
+        app.state.settings = getattr(app.state, "settings", config.Settings())
 
     expected = os.environ.get(TOKEN_ENV)
 
@@ -282,6 +348,163 @@ def create_app(
             "mail": getattr(app.state, "mail", None) is not None,
             "calendar": getattr(app.state, "calendar", None) is not None,
         }
+
+    # -- Einrichtung -------------------------------------------------------
+    #
+    # Damit niemand eine .env anlegen muss, bevor er das Programm zum ersten
+    # Mal öffnet. Geheimnisse gehen in den Schlüsselbund und kommen über diese
+    # Schnittstelle nie zurück — nur die Auskunft, ob eines hinterlegt ist.
+
+    def _setup_state() -> dict[str, Any]:
+        settings: config.Settings = app.state.settings
+        keychain = getattr(app.state, "keychain", None) or Keychain()
+        provider = app.state.agent.provider
+        backend = getattr(app.state, "backend", None)
+        return {
+            "settings": settings.to_dict(),
+            "secrets": config.secret_status(keychain),
+            "keychain": keychain.backend,
+            # Ohne Schlüsselspeicher gilt ein eingetragener Schlüssel nur für
+            # diese Sitzung. Das muss die Oberfläche sagen dürfen.
+            "keychain_available": keychain.available,
+            "providers": [p for p in config.PROVIDERS],
+            "default_models": config.DEFAULT_MODELS,
+            "adapters": sorted(ADAPTERS),
+            "status": {
+                "chat": provider is not None,
+                "provider": getattr(provider, "name", None),
+                "model": getattr(provider, "model", None),
+                "mail": getattr(app.state, "mail", None) is not None,
+                "calendar": getattr(app.state, "calendar", None) is not None,
+                "file_roots": [
+                    str(p) for p in file_roots_from_env(os.environ.get(ROOTS_ENV))
+                ],
+                "semantic_search": not getattr(backend, "degraded", False),
+            },
+        }
+
+    @app.get("/setup", dependencies=guard)
+    def get_setup() -> dict[str, Any]:
+        return _setup_state()
+
+    @app.put("/setup", dependencies=guard)
+    def put_setup(body: SetupIn) -> dict[str, Any]:
+        """Übernimmt Einstellungen und baut den Agenten neu.
+
+        Nur gesetzte Felder werden angefasst. Ein `null` heißt „nicht ändern",
+        ein leerer String heißt „leeren" — sonst könnte man einen einmal
+        eingetragenen Mailserver nie wieder loswerden.
+        """
+        settings: config.Settings = app.state.settings
+        keychain = getattr(app.state, "keychain", None) or Keychain()
+
+        if body.provider is not None:
+            if body.provider not in config.PROVIDERS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unbekannter Anbieter: {body.provider!r}",
+                )
+            settings.provider = body.provider
+            # Modell mitziehen, wenn der Nutzer keins nennt: Ein Anbieter ohne
+            # Modell führt zu einer Fehlermeldung beim ersten Satz, und der
+            # Nutzer weiß nicht, warum.
+            if body.model is None and body.provider:
+                settings.model = config.DEFAULT_MODELS.get(body.provider, "")
+        if body.model is not None:
+            settings.model = body.model
+        if body.endpoint is not None:
+            settings.endpoint = body.endpoint
+        if body.file_roots is not None:
+            settings.file_roots = [p for p in body.file_roots if p.strip()]
+
+        if body.mail is not None:
+            settings.mail = config.MailSettings(
+                imap_host=body.mail.imap_host,
+                imap_port=body.mail.imap_port,
+                # Ein Mailkonto ohne SMTP kann lesen und nicht senden. Den
+                # IMAP-Host als Vorgabe zu übernehmen wäre geraten und falsch.
+                smtp_host=body.mail.smtp_host,
+                smtp_port=body.mail.smtp_port,
+                user=body.mail.user,
+                sender=body.mail.sender,
+            )
+        if body.calendar is not None:
+            settings.calendar = config.CalendarSettings(
+                url=body.calendar.url, user=body.calendar.user
+            )
+        if body.onboarded is not None:
+            settings.onboarded = body.onboarded
+
+        # Geheimnisse: leerer String löscht, None lässt unangetastet.
+        secret_targets = {
+            "api_key": config.secret_name_for_provider(settings.provider),
+            "mail_password": config.SECRET_FIELDS["mail_password"],
+            "calendar_password": config.SECRET_FIELDS["calendar_password"],
+        }
+        for feld, name in secret_targets.items():
+            value = getattr(body, feld)
+            if value is None or name is None:
+                continue
+            if value:
+                config.store_secret(keychain, name, value)
+            else:
+                config.clear_secret(keychain, name)
+
+        config.save(_data_dir(), settings)
+
+        # Die Umgebung neu setzen. Die aus der Datei stammenden Werte müssen
+        # weichen, sonst gewinnt für immer die erste Einstellung.
+        for name in (
+            "ICARUS_PROVIDER", "ICARUS_MODEL", "ICARUS_BASE_URL", ROOTS_ENV,
+            "ICARUS_IMAP_HOST", "ICARUS_IMAP_PORT", "ICARUS_SMTP_HOST",
+            "ICARUS_SMTP_PORT", "ICARUS_MAIL_USER", "ICARUS_MAIL_FROM",
+            "ICARUS_CALDAV_URL", "ICARUS_CALDAV_USER",
+        ):
+            os.environ.pop(name, None)
+        config.apply_to_env(settings)
+        _build_agent(app)
+
+        return _setup_state()
+
+    @app.post("/setup/test/{ziel}", dependencies=guard)
+    def test_setup(ziel: str) -> dict[str, Any]:
+        """Probiert eine Verbindung wirklich aus, statt sie zu behaupten.
+
+        Ein Einrichtungsassistent, der „gespeichert" sagt und beim ersten
+        echten Gebrauch scheitert, ist schlimmer als keiner — dann sucht der
+        Nutzer den Fehler an der falschen Stelle.
+        """
+        try:
+            if ziel == "modell":
+                provider = app.state.agent.provider
+                if provider is None:
+                    return {"ok": False, "detail": "Kein Anbieter eingerichtet."}
+                reply = provider.complete(
+                    [{"role": "user", "content": "Antworte mit dem Wort: bereit"}], []
+                )
+                return {
+                    "ok": True,
+                    "detail": f"{provider.name} ({provider.model}) antwortet.",
+                    "sample": reply.text[:200],
+                }
+
+            if ziel == "mail":
+                mail = getattr(app.state, "mail", None)
+                if mail is None:
+                    return {"ok": False, "detail": "Kein Mailzugang eingerichtet."}
+                messages = mail.inbox(limit=1)
+                return {"ok": True, "detail": f"Posteingang erreichbar ({len(messages)} gelesen)."}
+
+            if ziel == "kalender":
+                calendar = getattr(app.state, "calendar", None)
+                if calendar is None:
+                    return {"ok": False, "detail": "Kein Kalender eingerichtet."}
+                events = calendar.events(days=7)
+                return {"ok": True, "detail": f"Kalender erreichbar ({len(events)} Termine)."}
+        except Exception as exc:  # noqa: BLE001 - der echte Fehler ist die Antwort
+            return {"ok": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+        raise HTTPException(status_code=400, detail=f"Unbekanntes Ziel: {ziel}")
 
     # -- Assistent ---------------------------------------------------------
 

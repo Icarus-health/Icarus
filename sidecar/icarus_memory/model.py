@@ -68,6 +68,21 @@ class Status(str, Enum):
     RETRACTED = "retracted"
     REDACTED = "redacted"
 
+    DISPUTED = "disputed"
+    """Zwei Aussagen widersprechen sich, und keine ist entschieden.
+
+    Das Ziel ist ausdrücklich **nicht**, den Widerspruch aufzulösen. Es ist,
+    ihn sichtbar zu machen, statt das Modell zwischen zwei gleichrangigen
+    Behauptungen raten zu lassen — genau der Fall, in dem ein Gedächtnis
+    selbstbewusst falsch wird.
+
+    Eine strittige Aussage bleibt lesbar und bleibt in der Ersetzungskette. Sie
+    ist nicht `usable()`: Sie darf im Kontext auftauchen, aber getrennt und mit
+    ihrem Gegenstück, damit erkennbar ist, dass hier etwas offen ist. Wer den
+    Widerspruch auflöst, ersetzt (`supersedes`) oder zieht zurück
+    (`retract`) — beides sind bestehende, protokollierte Wege.
+    """
+
 
 class SourceType(str, Enum):
     USER_STATED = "user_stated"
@@ -162,6 +177,15 @@ class Assertion:
     tags: list[str] = field(default_factory=list)
     redaction: Redaction | None = None
 
+    disputed_with: list[str] = field(default_factory=list)
+    """Aussagen, zu denen diese im Widerspruch steht.
+
+    Gegenseitig gepflegt: Steht A im Streit mit B, trägt auch B die A. Ein
+    einseitiger Verweis würde bedeuten, dass eine Seite des Widerspruchs
+    unbemerkt als Gegenwart auftreten kann — und das ist genau der Schaden,
+    den der Status verhindern soll.
+    """
+
     def is_usable(self, at: datetime | None = None) -> bool:
         """Darf die Aussage ungeprüft verwendet werden?
 
@@ -204,6 +228,8 @@ class Assertion:
             d["sensitivity"] = self.sensitivity.value
         if self.tags:
             d["tags"] = list(self.tags)
+        if self.disputed_with:
+            d["disputed_with"] = list(self.disputed_with)
         if self.redaction is not None:
             d["redaction"] = self.redaction.to_dict()
         return d

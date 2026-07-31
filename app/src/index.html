@@ -15,8 +15,26 @@
       <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
+      <button data-view="setup" class="tab">Einrichtung</button>
       <span id="status" class="status">Verbinde…</span>
     </nav>
+
+    <!-- Erststart. Liegt über allem, bis jemand ihn beendet — aber jeder
+         Schritt ist überspringbar, und Icarus läuft auch, wenn man alles
+         überspringt. -->
+    <div id="wizard" hidden>
+      <div class="wizard-card">
+        <h2 id="wizard-title"></h2>
+        <p id="wizard-text" class="muted"></p>
+        <div id="wizard-body"></div>
+        <p id="wizard-result" class="muted"></p>
+        <div class="row wizard-actions">
+          <button id="wizard-skip" type="button" class="ghost">Überspringen</button>
+          <button id="wizard-next" type="button">Weiter</button>
+        </div>
+        <p class="muted wizard-steps"><span id="wizard-progress"></span></p>
+      </div>
+    </div>
 
     <main>
       <!-- Heute: Aufgaben, Termine, Nachrichten auf einen Blick -->
@@ -146,6 +164,15 @@
 
         <ul id="assertions"></ul>
         <p id="empty" class="muted">Noch nichts gespeichert.</p>
+      </section>
+
+      <!-- Einrichtung: alles, was sonst in einer .env stünde. -->
+      <section id="view-setup" class="view" hidden>
+        <p class="muted">
+          Nichts davon ist Pflicht. Ohne Modell funktioniert das Gedächtnis
+          weiterhin — Aussagen speichern, ansehen und widerrufen geht offline.
+        </p>
+        <div id="setup-panel"></div>
       </section>
 
       <!-- Protokoll -->

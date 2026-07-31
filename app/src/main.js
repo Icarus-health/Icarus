@@ -45,6 +45,7 @@ const REFRESH = {
   dashboard: loadDashboard,
   projects: loadProjects,
   ingest: loadEpisodes,
+  setup: loadSetup,
   memory: loadMemory,
   audit: loadAudit,
   chat: loadApprovals,
@@ -645,6 +646,435 @@ $("#ingest-form").addEventListener("submit", async (event) => {
   }
 });
 
+// -- Einrichtung ------------------------------------------------------------
+//
+// Alles, was sonst in einer .env stünde. Kein Konto, keine Anmeldung: Icarus
+// kennt keinen Server, bei dem man sich anmelden könnte. Was hier passiert, ist
+// die Frage, welchem Anbieter das Gespräch anvertraut wird — und "keinem" ist
+// eine gültige Antwort.
+
+let setupState = null;
+
+const PROVIDER_LABELS = {
+  "": "Kein Modell (Gedächtnis funktioniert trotzdem)",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  ollama: "Ollama (läuft lokal, nichts verlässt den Rechner)",
+};
+
+async function saveSetup(patch) {
+  setupState = await api("/setup", { method: "PUT", body: JSON.stringify(patch) });
+  return setupState;
+}
+
+function field(label, id, { type = "text", value = "", placeholder = "", hint = "" } = {}) {
+  const wrap = document.createElement("label");
+  wrap.className = "field";
+  wrap.textContent = label;
+  const input = document.createElement("input");
+  input.type = type;
+  input.id = id;
+  input.value = value ?? "";
+  input.placeholder = placeholder;
+  input.autocomplete = "off";
+  wrap.append(input);
+  if (hint) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = hint;
+    wrap.append(p);
+  }
+  return wrap;
+}
+
+function providerSelect(id, current) {
+  const wrap = document.createElement("label");
+  wrap.className = "field";
+  wrap.textContent = "Anbieter";
+  const select = document.createElement("select");
+  select.id = id;
+  for (const [value, label] of Object.entries(PROVIDER_LABELS)) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    o.selected = value === current;
+    select.append(o);
+  }
+  wrap.append(select);
+  return wrap;
+}
+
+/** Probiert eine Verbindung wirklich aus, statt sie zu behaupten. */
+function testButton(ziel, label, target) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ghost small";
+  button.textContent = label;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    target.textContent = "Wird geprüft…";
+    target.classList.remove("error");
+    try {
+      const result = await api(`/setup/test/${ziel}`, { method: "POST" });
+      target.textContent = result.detail;
+      target.classList.toggle("error", !result.ok);
+    } catch (err) {
+      target.textContent = err.message;
+      target.classList.add("error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+async function loadSetup() {
+  setupState = await api("/setup");
+  const s = setupState.settings;
+  const panel = $("#setup-panel");
+  panel.replaceChildren();
+
+  // Ohne Schlüsselspeicher gilt ein eingetragener Schlüssel nur für diese
+  // Sitzung. Das muss dastehen, nicht überraschen.
+  if (!setupState.keychain_available) {
+    const warn = document.createElement("p");
+    warn.className = "meta error";
+    warn.textContent =
+      "Kein Schlüsselspeicher gefunden. Eingetragene Schlüssel gelten nur für " +
+      "diese Sitzung und werden nicht auf die Platte geschrieben.";
+    panel.append(warn);
+  }
+
+  // -- Modell
+  const modell = document.createElement("section");
+  modell.className = "setup-block";
+  const mh = document.createElement("h3");
+  mh.textContent = "Modell";
+  const mnote = document.createElement("p");
+  mnote.className = "muted";
+  mnote.textContent = setupState.secrets[
+    s.provider === "anthropic" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY"
+  ]
+    ? "Ein Schlüssel ist hinterlegt. Leer lassen heißt: unverändert."
+    : "Ohne Modell funktioniert das Gedächtnis weiterhin.";
+  const psel = providerSelect("setup-provider", s.provider);
+  const mmodel = field("Modell", "setup-model", {
+    value: s.model,
+    placeholder: setupState.default_models[s.provider] ?? "",
+  });
+  const mkey = field("API-Schlüssel", "setup-key", {
+    type: "password",
+    placeholder: "unverändert lassen",
+  });
+  const mend = field("Eigene Adresse", "setup-endpoint", {
+    value: s.endpoint,
+    hint: "Nur nötig für Ollama an anderem Port oder einen Proxy.",
+  });
+  const mresult = document.createElement("p");
+  mresult.className = "meta";
+  const msave = document.createElement("button");
+  msave.type = "button";
+  msave.textContent = "Übernehmen";
+  msave.addEventListener("click", async () => {
+    msave.disabled = true;
+    try {
+      await saveSetup({
+        provider: $("#setup-provider").value,
+        model: $("#setup-model").value.trim(),
+        endpoint: $("#setup-endpoint").value.trim(),
+        api_key: $("#setup-key").value || null,
+      });
+      await loadSetup();
+      await refreshStatus();
+    } finally {
+      msave.disabled = false;
+    }
+  });
+  const mrow = document.createElement("div");
+  mrow.className = "row";
+  mrow.append(msave, testButton("modell", "Verbindung prüfen", mresult));
+  modell.append(mh, mnote, psel, mmodel, mkey, mend, mrow, mresult);
+  panel.append(modell);
+
+  // -- Ordner
+  const ordner = document.createElement("section");
+  ordner.className = "setup-block";
+  const oh = document.createElement("h3");
+  oh.textContent = "Ordnerzugriff";
+  const onote = document.createElement("p");
+  onote.className = "muted";
+  onote.textContent =
+    "Leer heißt: gar kein Dateizugriff. Es gibt bewusst keinen Vorgabewert — " +
+    "ein voreingestelltes Home-Verzeichnis wäre die Bequemlichkeit, die den " +
+    "Schutz aufhebt.";
+  const oinput = field("Ordner, durch Doppelpunkt getrennt", "setup-roots", {
+    value: s.file_roots.join(":"),
+    placeholder: "/Users/du/Dokumente/Notizen",
+  });
+  const osave = document.createElement("button");
+  osave.type = "button";
+  osave.textContent = "Übernehmen";
+  osave.addEventListener("click", async () => {
+    const roots = $("#setup-roots").value.split(":").map((p) => p.trim()).filter(Boolean);
+    await saveSetup({ file_roots: roots });
+    await loadSetup();
+  });
+  ordner.append(oh, onote, oinput, osave);
+  panel.append(ordner);
+
+  // -- Mail
+  const mail = document.createElement("section");
+  mail.className = "setup-block";
+  const mah = document.createElement("h3");
+  mah.textContent = "E-Mail";
+  const manote = document.createElement("p");
+  manote.className = "muted";
+  manote.textContent =
+    "Offene Protokolle statt Anbieter-APIs. Nutze ein App-Passwort, niemals " +
+    "dein Hauptpasswort. Gelesene Nachrichten gelten immer als fremder Inhalt.";
+  const maresult = document.createElement("p");
+  maresult.className = "meta";
+  const masave = document.createElement("button");
+  masave.type = "button";
+  masave.textContent = "Übernehmen";
+  masave.addEventListener("click", async () => {
+    await saveSetup({
+      mail: {
+        imap_host: $("#mail-imap").value.trim(),
+        imap_port: Number($("#mail-imap-port").value) || 993,
+        smtp_host: $("#mail-smtp").value.trim(),
+        smtp_port: Number($("#mail-smtp-port").value) || 587,
+        user: $("#mail-user").value.trim(),
+        sender: $("#mail-from").value.trim(),
+      },
+      mail_password: $("#mail-pass").value || null,
+    });
+    await loadSetup();
+    await refreshStatus();
+  });
+  const marow = document.createElement("div");
+  marow.className = "row";
+  marow.append(masave, testButton("mail", "Posteingang prüfen", maresult));
+  mail.append(
+    mah, manote,
+    field("IMAP-Server", "mail-imap", { value: s.mail.imap_host, placeholder: "imap.example.com" }),
+    field("IMAP-Port", "mail-imap-port", { value: s.mail.imap_port }),
+    field("SMTP-Server", "mail-smtp", { value: s.mail.smtp_host, placeholder: "leer lassen: nur lesen" }),
+    field("SMTP-Port", "mail-smtp-port", { value: s.mail.smtp_port }),
+    field("Benutzer", "mail-user", { value: s.mail.user, placeholder: "du@example.com" }),
+    field("Passwort", "mail-pass", {
+      type: "password",
+      placeholder: setupState.secrets.ICARUS_MAIL_PASSWORD ? "hinterlegt" : "App-Passwort",
+    }),
+    field("Absender", "mail-from", { value: s.mail.sender, hint: "Leer: der Benutzer oben." }),
+    marow, maresult
+  );
+  panel.append(mail);
+
+  // -- Kalender
+  const kal = document.createElement("section");
+  kal.className = "setup-block";
+  const kh = document.createElement("h3");
+  kh.textContent = "Kalender";
+  const knote = document.createElement("p");
+  knote.className = "muted";
+  knote.textContent =
+    "CalDAV. Termine ohne Gäste bleiben lokal; sobald jemand eingeladen wird, " +
+    "ist es außenwirksam und verlangt die strenge Bestätigung.";
+  const kresult = document.createElement("p");
+  kresult.className = "meta";
+  const ksave = document.createElement("button");
+  ksave.type = "button";
+  ksave.textContent = "Übernehmen";
+  ksave.addEventListener("click", async () => {
+    await saveSetup({
+      calendar: { url: $("#cal-url").value.trim(), user: $("#cal-user").value.trim() },
+      calendar_password: $("#cal-pass").value || null,
+    });
+    await loadSetup();
+    await refreshStatus();
+  });
+  const krow = document.createElement("div");
+  krow.className = "row";
+  krow.append(ksave, testButton("kalender", "Kalender prüfen", kresult));
+  kal.append(
+    kh, knote,
+    field("CalDAV-Adresse", "cal-url", { value: s.calendar.url, placeholder: "https://caldav.example.com/kalender/" }),
+    field("Benutzer", "cal-user", { value: s.calendar.user, hint: "Leer: der Mailbenutzer." }),
+    field("Passwort", "cal-pass", {
+      type: "password",
+      placeholder: setupState.secrets.ICARUS_CALDAV_PASSWORD ? "hinterlegt" : "",
+    }),
+    krow, kresult
+  );
+  panel.append(kal);
+}
+
+// -- Erststart --------------------------------------------------------------
+//
+// Jeder Schritt ist überspringbar. Icarus läuft auch, wenn man alles
+// überspringt — genau das soll der Assistent zeigen, statt Pflichtfelder
+// aufzubauen, an denen jemand abbricht.
+
+const WIZARD_STEPS = [
+  {
+    title: "Willkommen",
+    text:
+      "Icarus ist dein Gedächtnis. Alles bleibt auf diesem Rechner — es gibt " +
+      "kein Konto und keinen Server, bei dem du dich anmeldest. Die nächsten " +
+      "Schritte sind alle freiwillig; du kannst jeden überspringen.",
+    build: () => document.createDocumentFragment(),
+    apply: async () => {},
+  },
+  {
+    title: "Modell",
+    text:
+      "Womit soll gesprochen werden? Ohne Modell funktioniert das Gedächtnis " +
+      "weiterhin: Aussagen speichern, ansehen und widerrufen geht offline.",
+    build: (s) => {
+      const frag = document.createDocumentFragment();
+      frag.append(
+        providerSelect("wiz-provider", s.settings.provider),
+        field("API-Schlüssel", "wiz-key", {
+          type: "password",
+          hint: "Bei Ollama nicht nötig. Wird im Schlüsselbund abgelegt, nie in einer Datei.",
+        })
+      );
+      return frag;
+    },
+    apply: async () => {
+      const provider = $("#wiz-provider").value;
+      await saveSetup({ provider, api_key: $("#wiz-key").value || null });
+      if (!provider) return "Kein Modell — das Gedächtnis läuft trotzdem.";
+      const result = await api("/setup/test/modell", { method: "POST" });
+      return result.detail;
+    },
+  },
+  {
+    title: "Ordnerzugriff",
+    text:
+      "Aus welchen Ordnern darf gelesen werden? Leer lassen heißt: gar kein " +
+      "Dateizugriff. Es gibt bewusst keine Voreinstellung.",
+    build: (s) =>
+      field("Ordner, durch Doppelpunkt getrennt", "wiz-roots", {
+        value: s.settings.file_roots.join(":"),
+        placeholder: "/Users/du/Dokumente/Notizen",
+      }),
+    apply: async () => {
+      const roots = $("#wiz-roots").value.split(":").map((p) => p.trim()).filter(Boolean);
+      await saveSetup({ file_roots: roots });
+      return roots.length ? `${roots.length} Ordner freigegeben.` : "Kein Dateizugriff.";
+    },
+  },
+  {
+    title: "Vorhandene Notizen",
+    text:
+      "Hast du schon eine Ablage? Icarus liest sie ein, ohne dass du sie " +
+      "aufgeben musst. Alles landet als Rohmaterial — nichts davon gilt " +
+      "sofort als gewusst.",
+    build: (s) => {
+      const frag = document.createDocumentFragment();
+      const sel = document.createElement("label");
+      sel.className = "field";
+      sel.textContent = "Quelle";
+      const select = document.createElement("select");
+      select.id = "wiz-adapter";
+      for (const [value, label] of Object.entries({
+        obsidian: "Obsidian-Vault",
+        notion: "Notion-Export",
+        markdown: "Markdown-Ordner",
+        dateien: "Textdateien",
+      })) {
+        const o = document.createElement("option");
+        o.value = value;
+        o.textContent = label;
+        select.append(o);
+      }
+      sel.append(select);
+      frag.append(
+        sel,
+        field("Ordner", "wiz-ingest", {
+          placeholder: "muss oben freigegeben sein",
+          hint: s.settings.file_roots.length
+            ? `Freigegeben: ${s.settings.file_roots.join(", ")}`
+            : "Noch kein Ordner freigegeben — dann diesen Schritt überspringen.",
+        })
+      );
+      return frag;
+    },
+    apply: async () => {
+      const path = $("#wiz-ingest").value.trim();
+      if (!path) return "Übersprungen.";
+      const report = await api("/ingest", {
+        method: "POST",
+        body: JSON.stringify({ path, adapter: $("#wiz-adapter").value }),
+      });
+      return `${report.recorded} aufgenommen, ${report.duplicates} schon bekannt, ${report.skipped} übersprungen.`;
+    },
+  },
+  {
+    title: "E-Mail und Kalender",
+    text:
+      "Kannst du auch später einrichten, unter „Einrichtung“. Mail ist der " +
+      "gefährlichste Weg für untergeschobene Anweisungen — gelesene Nachrichten " +
+      "gelten deshalb immer als fremder Inhalt und heben die Freigabestufe an.",
+    build: () => document.createDocumentFragment(),
+    apply: async () => {},
+  },
+];
+
+let wizardStep = 0;
+
+function renderWizard() {
+  const step = WIZARD_STEPS[wizardStep];
+  $("#wizard-title").textContent = step.title;
+  $("#wizard-text").textContent = step.text;
+  $("#wizard-body").replaceChildren(step.build(setupState));
+  $("#wizard-result").textContent = "";
+  $("#wizard-result").classList.remove("error");
+  $("#wizard-progress").textContent = `Schritt ${wizardStep + 1} von ${WIZARD_STEPS.length}`;
+  $("#wizard-next").textContent =
+    wizardStep === WIZARD_STEPS.length - 1 ? "Fertig" : "Weiter";
+}
+
+async function advanceWizard(apply) {
+  const next = $("#wizard-next");
+  const skip = $("#wizard-skip");
+  next.disabled = skip.disabled = true;
+
+  if (apply) {
+    try {
+      const message = await WIZARD_STEPS[wizardStep].apply();
+      if (message) {
+        $("#wizard-result").textContent = message;
+        $("#wizard-result").classList.remove("error");
+      }
+    } catch (err) {
+      // Bei einem Fehler bleibt der Schritt stehen. Weiterzuspringen würde
+      // heißen, dem Nutzer zu suggerieren, es habe geklappt.
+      $("#wizard-result").textContent = err.message;
+      $("#wizard-result").classList.add("error");
+      next.disabled = skip.disabled = false;
+      return;
+    }
+  }
+
+  wizardStep += 1;
+  next.disabled = skip.disabled = false;
+
+  if (wizardStep >= WIZARD_STEPS.length) {
+    await saveSetup({ onboarded: true });
+    $("#wizard").hidden = true;
+    await refreshStatus();
+    await loadDashboard();
+    return;
+  }
+  renderWizard();
+}
+
+$("#wizard-next").addEventListener("click", () => advanceWizard(true));
+$("#wizard-skip").addEventListener("click", () => advanceWizard(false));
+
 // -- Gedächtnis -------------------------------------------------------------
 
 async function loadMemory() {
@@ -754,28 +1184,47 @@ async function loadAudit() {
 
 // -- Start ------------------------------------------------------------------
 
+/** Zeigt oben, was gerade wirklich geht. Nach jeder Änderung neu. */
+async function refreshStatus() {
+  const health = await api("/health");
+
+  const bits = [];
+  bits.push(health.chat ? `Modell: ${health.model}` : "kein Modell");
+  bits.push(health.semantic_search ? "semantische Suche" : "Textsuche");
+  if (health.mail) bits.push("Mail");
+  if (health.calendar) bits.push("Kalender");
+  statusEl.textContent = bits.join(" · ");
+  statusEl.classList.add("ready");
+
+  // Lieber ehrlich sagen, was fehlt, als einen kaputten Chat anbieten.
+  $("#chat-input").placeholder = health.chat
+    ? "Schreib etwas…"
+    : "Kein Modell eingerichtet — siehe Einrichtung";
+  return health;
+}
+
 async function start() {
   const info = await invoke("sidecar_info");
   base = `http://127.0.0.1:${info.port}`;
   token = info.token;
 
-  const health = await fetch(`${base}/health`).then((r) => r.json());
+  const health = await refreshStatus();
+  setupState = await api("/setup");
 
-  const bits = [];
-  bits.push(health.chat ? `Modell: ${health.model}` : "kein Modell");
-  bits.push(health.semantic_search ? "semantische Suche" : "Textsuche");
-  statusEl.textContent = bits.join(" · ");
-  statusEl.classList.add("ready");
-
-  if (!health.chat) {
-    // Lieber ehrlich sagen, was fehlt, als einen kaputten Chat anbieten.
+  if (!setupState.settings.onboarded) {
+    // Beim allerersten Start führt der Assistent. Danach nie wieder von
+    // selbst — wer ihn noch einmal will, geht auf „Einrichtung“.
+    wizardStep = 0;
+    $("#wizard").hidden = false;
+    renderWizard();
+  } else if (!health.chat) {
     addMessage(
       "assistant",
-      "Es ist kein Modell konfiguriert — Gespräche gehen noch nicht. " +
-        "Das Gedächtnis funktioniert trotzdem: im Reiter Gedächtnis lassen sich " +
-        "Aussagen speichern, ansehen und widerrufen."
+      "Es ist kein Modell eingerichtet — Gespräche gehen noch nicht. " +
+        "Das Gedächtnis funktioniert trotzdem: unter „Gedächtnis“ lassen sich " +
+        "Aussagen speichern, ansehen und widerrufen, unter „Rohmaterial“ " +
+        "vorhandene Notizen einlesen."
     );
-    $("#chat-input").placeholder = "Kein Modell konfiguriert";
   }
 
   await loadApprovals();

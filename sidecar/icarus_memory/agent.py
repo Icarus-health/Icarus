@@ -234,6 +234,23 @@ class Agent:
             )
             lines.extend(alt)
 
+        # Strittiges kommt mit beiden Seiten und einer eigenen Überschrift.
+        # Es wegzulassen wäre bequem und falsch: Der Nutzer hat es gesagt, und
+        # das Modell soll nachfragen können statt zu raten. Es unter „was du
+        # weißt" zu führen wäre schlimmer — dann wählt das Modell eine Seite.
+        streitig = [
+            a for a in self._store.disputed()
+            if _RANK[a.sensitivity] <= _RANK[self.effective_sensitivity_ceiling()]
+        ]
+        if streitig:
+            lines.append(
+                "\nUngeklärt — hier widersprechen sich Angaben. Nichts davon als "
+                "Tatsache behaupten; wenn es darauf ankommt, nachfragen:"
+            )
+            lines.extend(
+                f"- [{a.kind.value}] {a.statement} ({describe(a)})" for a in streitig
+            )
+
         withheld = len(self._store.usable()) - len(shareable)
         if withheld == 1:
             lines.append(

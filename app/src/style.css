@@ -318,3 +318,28 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 
 #project-form { margin-bottom: 1rem; }
 #project-form input[type="text"] { flex: 1 1 10rem; }
+
+/* -- Rohmaterial ----------------------------------------------------------- */
+
+.episode { padding: 0.7rem 0; }
+
+/* Verdichtetes und Verworfenes tritt zurück; was wartet, bleibt vorn. */
+.episode.consolidated .statement,
+.episode.archived .statement,
+.episode.ignored .statement { opacity: 0.55; }
+
+.episode details { margin-top: 0.4rem; }
+.episode summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted, #777);
+}
+.episode pre {
+  margin-top: 0.4rem;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+#ingest-form { margin-bottom: 0.5rem; }
+#ingest-form input[type="text"] { flex: 1 1 18rem; }
+#ingest-note.error { color: var(--danger); }

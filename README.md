@@ -25,8 +25,28 @@ Detailed documentation is in German under [`docs/`](docs/).
 |---|---|---|
 | 1 | Verifiable self-model — provenance, versioning, revocation | **Built.** Record, supersede, expire, revoke with cascade |
 | 2 | Vendor-independent memory | **Built.** Local SQLite record; OpenAI-compatible, Anthropic or Ollama in front |
-| 3 | Current information | **Built.** Mail (IMAP), calendar (CalDAV), projects, tasks, notes, web, files |
+| 3 | Current information | **Built.** Mail (IMAP), calendar (CalDAV), projects, tasks, notes, web, files, import from Obsidian/Notion |
 | 4 | Controlled delegation and execution | **Built.** Action classes, dry-run approvals, append-only audit |
+
+## Bring your existing notes
+
+Your memory does not start empty and it should not have to. Point Icarus at an
+Obsidian vault, a Notion export, or a folder of text files:
+
+```bash
+export ICARUS_FILE_ROOTS="$HOME/Documents"   # nothing is readable without this
+# then, in the app: Rohmaterial → pick a folder → Aufnehmen
+```
+
+Everything lands as an **episode** — raw material with a content digest, a source
+and a timestamp — and **nothing** goes into the record. A note can contain an
+instruction aimed at a model; it is evidence, not a claim about you. What becomes
+a durable assertion is decided by consolidation, and consolidation proposes
+rather than writes.
+
+Runs are deduplicated by digest, so re-reading the same vault every night only
+picks up what actually changed. That is what makes a process that runs
+continuously possible at all.
 
 ## One app, not a folder of them
 
@@ -113,7 +133,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 193 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP
+make test            # 246 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -158,10 +178,11 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-193 tests, no network and no model required — including a test that plays out a
+246 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
-assistant on the MCP door cannot trigger an outward action.
+assistant on the MCP door cannot trigger an outward action, and one that imports
+a vault containing an injection payload and asserts the record stayed empty.
 
 ## Connecting mail and calendar
 
@@ -217,6 +238,8 @@ sidecar/             Python: memory, policy, agent
     providers.py     OpenAI-compatible and Anthropic, one interface
     tasks.py         Tasks with provenance, due dates, done vs. dropped
     workspace.py     Projects and notes — the layer tasks and knowledge hang on
+    episodes.py      Mid-term layer: raw records with a digest, claiming nothing
+    ingest.py        Adapters: Obsidian, Notion export, text files
     connectors/      Mail (IMAP/SMTP) and calendar (CalDAV), open protocols
     tools.py         Web, files, time, memory, mail, calendar, tasks, projects, notes
     agent.py         Ties it together; proposes, never executes directly
@@ -226,11 +249,12 @@ sidecar/             Python: memory, policy, agent
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             193 tests, no network and no model required
+  tests/             246 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
-docs/                Architecture, self-model, delegation, security, MCP door, roadmap, ADRs
+docs/                Architecture, self-model, delegation, security, MCP door,
+                     memory layers, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

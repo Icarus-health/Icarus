@@ -139,10 +139,13 @@ Tests: `tests/test_aktualitaet.py` (16).
 Ehrlich benannt, nach Wirkung geordnet. Keiner dieser Punkte ist heute durch
 einen Test gedeckt.
 
-**Kein Digest an der Quelle.** `Provenance` hat `source_ref`, aber keinen Hash
-des Quellinhalts. Im Beispielprofil steht `"source_ref": "sha256:9b1c…
-(Projektnotiz.md)"` — eine Konvention im Freitext, keine Struktur und keine
-Prüfung. Solange das so ist, ist die nächste Zeile technisch unmöglich.
+**Kein Digest an der Quelle — teilweise geschlossen.** `Provenance` hat weiterhin
+keinen Hash. Die neue Episodenschicht trägt ihn jedoch: `Episode.digest` ist ein
+SHA-256 des Rohinhalts, und die Entdopplung hängt an einem UNIQUE-Index darauf,
+nicht an einer Prüfung im Code (`episodes.py`, `tests/test_episoden.py`). Damit
+ist der Digest für alles vorhanden, was über die Aufnahme kommt. Offen bleibt er
+für Aussagen, die auf anderem Weg entstehen, und die Neuprüfung darauf ist noch
+nicht gebaut. Siehe [`08-gedaechtnisschichten.md`](08-gedaechtnisschichten.md).
 
 **Keine Neuprüfung vor der folgenreichen Aktion.** `Policy.grant()` vergleicht
 die getippte Bestätigungsphrase. Die Quelle wird nicht erneut geöffnet. Ein
@@ -186,3 +189,4 @@ Für jeden Punkt gilt dasselbe Verfahren wie bei den drei geschlossenen:
 - [`02-selbstmodell.md`](02-selbstmodell.md) — Datenmodell und Korrekturoperationen
 - [`03-delegation.md`](03-delegation.md) — Aktionsklassen und Freigabestufen
 - [`05-sicherheit.md`](05-sicherheit.md) — fremde Inhalte und Prompt Injection
+- [`08-gedaechtnisschichten.md`](08-gedaechtnisschichten.md) — Kurzzeit, Mittelfrist, Bestand

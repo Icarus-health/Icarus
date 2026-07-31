@@ -27,11 +27,13 @@ from .audit import AuditLog
 from .backends import CogneeBackend
 from .backup import BackupError, export_model, import_model, list_snapshots, snapshot
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
+from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
+from .ingest import ADAPTERS, ingest_directory
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
 from .policy import Policy, PolicyError
 from .providers import from_env as provider_from_env
 from .secrets import Keychain, load_into_env
-from .security import file_roots_from_env
+from .security import SecurityError, file_roots_from_env
 from .store import ConflictError, SelfModelStore
 from .tasks import TaskStore
 from .tools import build_registry
@@ -161,6 +163,22 @@ class NotePatch(BaseModel):
     project_id: str | None = None
 
 
+class EpisodeIn(BaseModel):
+    kind: EpisodeKind = EpisodeKind.DOCUMENT
+    title: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    occurred_at: datetime | None = None
+    project_id: str | None = None
+    participants: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
+class IngestIn(BaseModel):
+    path: str = Field(min_length=1)
+    adapter: str = "markdown"
+    limit: int = Field(default=5000, ge=1, le=100000)
+
+
 class ToolIn(BaseModel):
     """Argumente eines direkten Werkzeugaufrufs.
 
@@ -177,6 +195,7 @@ def create_app(
     audit: AuditLog | None = None,
     tasks: TaskStore | None = None,
     workspace: WorkspaceStore | None = None,
+    episodes: EpisodeStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Icarus", version="0.1.0")
 
@@ -197,6 +216,10 @@ def create_app(
     if workspace is None:
         workspace = WorkspaceStore(_data_dir() / "workspace.sqlite3")
     app.state.workspace = workspace
+
+    if episodes is None:
+        episodes = EpisodeStore(_data_dir() / "episodes.sqlite3")
+    app.state.episodes = episodes
 
     if agent is None:
         # Schlüssel aus dem Schlüsselbund holen, bevor Anbieter und Konnektoren
@@ -221,6 +244,7 @@ def create_app(
                 calendar=app.state.calendar,
                 task_store=tasks,
                 workspace=workspace,
+                episodes=episodes,
             ),
             provider=provider_from_env(),
         )
@@ -412,6 +436,18 @@ def create_app(
             except Exception as exc:  # noqa: BLE001
                 result["mail"]["error"] = str(exc)
 
+        # Was roh vorliegt und noch niemand angesehen hat. Ein Chief of Staff,
+        # der einen Berg unbearbeiteten Materials verschweigt, ist keiner.
+        try:
+            counts = app.state.episodes.counts()
+            result["episodes"] = {
+                "pending": counts.get("new", 0),
+                "counts": counts,
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001
+            result["episodes"] = {"pending": 0, "counts": {}, "error": str(exc)}
+
         usable = app.state.store.usable()
         result["memory"]["count"] = len(usable)
         result["memory"]["recent"] = [
@@ -541,6 +577,92 @@ def create_app(
         except WorkspaceError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return note.to_dict()
+
+    # -- Episoden ----------------------------------------------------------
+    #
+    # Die Mittelfristschicht. Was hier liegt, ist Rohmaterial und behauptet
+    # nichts über den Nutzer — deshalb gibt es hier keinen Weg in den Bestand.
+    # Den zieht erst die Verdichtung, und sie legt vor.
+
+    @app.get("/episodes", dependencies=guard)
+    def list_episodes(
+        state: EpisodeState | None = None,
+        project_id: str | None = None,
+        q: str | None = None,
+        days: int | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        eps = app.state.episodes
+        if q:
+            items = eps.search(q, limit)
+        elif project_id:
+            items = eps.by_project(project_id, limit)
+        elif days is not None:
+            items = eps.recent(days, limit)
+        elif state is EpisodeState.NEW:
+            items = eps.pending(limit)
+        else:
+            items = eps.all_episodes(limit)
+        if state is not None:
+            items = [e for e in items if e.state is state]
+        return [e.to_dict() for e in items]
+
+    @app.get("/episodes/counts", dependencies=guard)
+    def episode_counts() -> dict[str, int]:
+        return app.state.episodes.counts()
+
+    @app.post("/episodes", dependencies=guard, status_code=201)
+    def add_episode(body: EpisodeIn) -> dict[str, Any]:
+        episode, is_new = app.state.episodes.record(
+            kind=body.kind, title=body.title, body=body.body,
+            provenance=Provenance(source_type=SourceType.USER_STATED,
+                                  captured_at=datetime.now().astimezone()),
+            occurred_at=body.occurred_at, project_id=body.project_id,
+            participants=body.participants, tags=body.tags,
+        )
+        # 200 statt 201, wenn der Digest schon bekannt war: Der Aufrufer soll
+        # unterscheiden können, ob er etwas erzeugt hat oder nur wiedergefunden.
+        return {**episode.to_dict(), "created": is_new}
+
+    @app.get("/episodes/{episode_id}", dependencies=guard)
+    def episode_detail(episode_id: str) -> dict[str, Any]:
+        try:
+            return app.state.episodes.get(episode_id).to_dict()
+        except EpisodeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/episodes/{episode_id}/ignore", dependencies=guard)
+    def ignore_episode(episode_id: str) -> dict[str, Any]:
+        try:
+            return app.state.episodes.ignore(episode_id).to_dict()
+        except EpisodeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # -- Aufnahme ----------------------------------------------------------
+
+    @app.get("/ingest/adapters", dependencies=guard)
+    def adapters() -> dict[str, Any]:
+        return {
+            "adapters": sorted(ADAPTERS),
+            # Ohne freigegebene Ordner geht nichts. Die Oberfläche soll das
+            # sagen können, statt den Nutzer in einen Fehler laufen zu lassen.
+            "file_roots": [str(p) for p in file_roots_from_env(os.environ.get(ROOTS_ENV))],
+        }
+
+    @app.post("/ingest", dependencies=guard)
+    def ingest(body: IngestIn) -> dict[str, Any]:
+        """Liest einen Ordner ein. Alles landet als Episode, nichts im Bestand."""
+        try:
+            report = ingest_directory(
+                app.state.episodes, body.path, body.adapter,
+                roots=file_roots_from_env(os.environ.get(ROOTS_ENV)),
+                limit=body.limit,
+            )
+        except SecurityError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return report.to_dict()
 
     # -- Werkzeuge ---------------------------------------------------------
     #

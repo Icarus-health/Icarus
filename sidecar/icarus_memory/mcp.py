@@ -225,6 +225,14 @@ def _heute(bridge: Bridge, arguments: dict[str, Any]) -> str:
 
     memory = data.get("memory", {})
     lines.append(f"\nGedächtnis: {memory.get('count', 0)} gültige Aussagen.")
+
+    # Unbearbeitetes Rohmaterial gehört in den Überblick, sonst wächst der
+    # Berg unsichtbar.
+    pending = data.get("episodes", {}).get("pending", 0)
+    if pending:
+        lines.append(
+            f"Rohmaterial: {pending} Episoden warten auf Verdichtung."
+        )
     return "\n".join(lines)
 
 

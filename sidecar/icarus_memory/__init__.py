@@ -15,9 +15,18 @@ abgeschlossenes Projekt nicht „widerrufen":
 
 * `tasks`     — Aufgaben, mit Herkunft und der Unterscheidung erledigt/aufgegeben
 * `workspace` — Projekte und Notizen, die Ebene, an der Aufgaben und Wissen hängen
+* `episodes`  — die Mittelfristschicht: rohe Aufzeichnungen mit Digest, die noch
+                nichts über die Person behaupten
+* `ingest`    — Adapter, die aus Obsidian, Notion oder Textdateien Episoden machen
+
+Die Schichtung ist in docs/08-gedaechtnisschichten.md beschrieben. Die Regel für
+den Übergang in den Bestand steht dort in einem Satz: Verdichtung schlägt vor,
+sie schreibt nicht.
 """
 
 from .backends import CogneeBackend, MemoryBackend, SqliteBackend
+from .episodes import Episode, EpisodeKind, EpisodeState, EpisodeStore, digest_of
+from .ingest import IngestReport, ingest_directory
 from .model import (
     SCHEMA_VERSION,
     Assertion,
@@ -49,6 +58,11 @@ __all__ = [
     "Assertion",
     "CogneeBackend",
     "ConflictError",
+    "Episode",
+    "EpisodeKind",
+    "EpisodeState",
+    "EpisodeStore",
+    "IngestReport",
     "Kind",
     "MemoryBackend",
     "Note",
@@ -71,4 +85,6 @@ __all__ = [
     "WorkspaceError",
     "WorkspaceStore",
     "__version__",
+    "digest_of",
+    "ingest_directory",
 ]

@@ -52,12 +52,13 @@ SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".keystore", ".jks"}
 SENSITIVE_PARTS = {".ssh", ".gnupg", ".aws", ".config/gcloud", "keychains"}
 
 
-def resolve_readable_path(raw: str, roots: list[Path]) -> Path:
-    """Prüft einen Pfad gegen die erlaubten Wurzeln.
+def _resolve_within_roots(raw: str, roots: list[Path]) -> Path:
+    """Der gemeinsame Kern: auflösen, eingrenzen, Gesperrtes abweisen.
 
-    Wirft `SecurityError`, wenn der Pfad außerhalb liegt oder auf etwas
-    offensichtlich Geheimes zeigt. Symlinks werden vorher aufgelöst — sonst
-    genügt ein Link im erlaubten Ordner, um die Grenze zu umgehen.
+    Von `resolve_readable_path` und `resolve_readable_dir` geteilt, damit es
+    genau **eine** Stelle gibt, an der die Grenze gezogen wird. Zwei Kopien
+    dieser Prüfung wären der wahrscheinlichste Ort für eine Lücke: Eine würde
+    irgendwann verschärft, die andere nicht.
     """
     if not roots:
         raise SecurityError(
@@ -70,9 +71,6 @@ def resolve_readable_path(raw: str, roots: list[Path]) -> Path:
         target = target.resolve(strict=True)
     except (OSError, RuntimeError) as exc:
         raise SecurityError(f"Pfad nicht auflösbar: {raw}") from exc
-
-    if not target.is_file():
-        raise SecurityError(f"Keine Datei: {target}")
 
     inside = any(_is_within(target, root.expanduser().resolve()) for root in roots)
     if not inside:
@@ -89,6 +87,33 @@ def resolve_readable_path(raw: str, roots: list[Path]) -> Path:
     if parts & SENSITIVE_PARTS:
         raise SecurityError(f"Dieser Ordner ist gesperrt: {target}")
 
+    return target
+
+
+def resolve_readable_path(raw: str, roots: list[Path]) -> Path:
+    """Prüft einen Dateipfad gegen die erlaubten Wurzeln.
+
+    Wirft `SecurityError`, wenn der Pfad außerhalb liegt oder auf etwas
+    offensichtlich Geheimes zeigt. Symlinks werden vorher aufgelöst — sonst
+    genügt ein Link im erlaubten Ordner, um die Grenze zu umgehen.
+    """
+    target = _resolve_within_roots(raw, roots)
+    if not target.is_file():
+        raise SecurityError(f"Keine Datei: {target}")
+    return target
+
+
+def resolve_readable_dir(raw: str, roots: list[Path]) -> Path:
+    """Dasselbe für ein Verzeichnis — der Einstieg für die Aufnahme.
+
+    Ein eigener Einstieg statt einer Lockerung von `resolve_readable_path`: Die
+    Aufnahme liest ganze Bäume, und die Beschränkung muss dabei genauso greifen
+    wie beim Lesen einer einzelnen Datei. Sie darf kein Weg sein, an
+    `ICARUS_FILE_ROOTS` vorbei den ganzen Rechner einzulesen.
+    """
+    target = _resolve_within_roots(raw, roots)
+    if not target.is_dir():
+        raise SecurityError(f"Kein Verzeichnis: {target}")
     return target
 
 
@@ -166,6 +191,7 @@ __all__ = [
     "SecurityError",
     "check_url",
     "file_roots_from_env",
+    "resolve_readable_dir",
     "resolve_readable_path",
     "wrap_untrusted",
 ]

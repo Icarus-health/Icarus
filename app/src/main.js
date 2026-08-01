@@ -1149,6 +1149,163 @@ async function loadSetup() {
     krow, kresult
   );
   panel.append(kal);
+
+  await renderSchedule(panel);
+}
+
+// -- Der mitlaufende Prozess ------------------------------------------------
+//
+// Er macht die Vorschlagsschlange voller, nie den Bestand. Deshalb ist er
+// unbedenklich — im schlimmsten Fall entsteht Arbeit, die man ignoriert.
+// Standardmäßig aus, und die Modellnutzung darin noch einmal getrennt: Ein
+// Zeitplan, der ungefragt einen Anbieter ruft, gibt fremdes Geld aus.
+
+function checkbox(label, id, checked, hint) {
+  const wrap = document.createElement("label");
+  wrap.className = "field check";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = id;
+  input.checked = Boolean(checked);
+  const text = document.createElement("span");
+  text.textContent = label;
+  wrap.append(input, text);
+  if (hint) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = hint;
+    wrap.append(p);
+  }
+  return wrap;
+}
+
+/** Zeigt den letzten Bericht — aufklappbar, damit die Schritte einzeln lesbar
+ *  sind. Eigene Funktion, weil ein Lauf von Hand ihn sofort ersetzen muss:
+ *  „Zuletzt: 09:39" neben einem Ergebnis von 09:44 liest sich wie ein Fehler. */
+function showLastRun(container, run) {
+  container.replaceChildren();
+  if (!run) return;
+
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  const wann = new Date(run.started_at).toLocaleString("de-DE");
+  summary.textContent = `Zuletzt: ${wann}${run.ok ? "" : " — mit Fehlern"}`;
+  details.append(summary);
+
+  const liste = document.createElement("ul");
+  for (const job of run.jobs) {
+    const eintrag = document.createElement("li");
+    eintrag.className = "meta";
+    eintrag.textContent = `${job.name}: ${job.detail || (job.ok ? "ok" : "Fehler")}`;
+    if (!job.ok) eintrag.classList.add("error");
+    liste.append(eintrag);
+  }
+  details.append(liste);
+  container.append(details);
+}
+
+async function renderSchedule(panel) {
+  const plan = await api("/schedule");
+
+  const block = document.createElement("section");
+  block.className = "setup-block";
+
+  const head = document.createElement("h3");
+  head.textContent = "Mitlaufen";
+
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent =
+    "Liest die eingestellten Ordner erneut ein, legt Vorschläge vor und sichert " +
+    "das Gedächtnis. Er schreibt nichts in den Bestand — das bleibt deine " +
+    "Entscheidung. Er läuft nur, solange Icarus offen ist.";
+
+  block.append(head, note);
+
+  block.append(
+    checkbox("Regelmäßig laufen lassen", "plan-enabled", plan.enabled),
+    field("Alle … Minuten", "plan-interval", {
+      value: plan.interval_minutes,
+      hint: `Mindestens ${plan.min_interval_minutes}. Häufiger erzeugt Lärm, bevor du die erste Runde geprüft hast.`,
+    }),
+    checkbox(
+      "Dabei auch das Modell fragen", "plan-model", plan.with_model,
+      "Nur damit entstehen neue Aussagen aus deinen Notizen — und nur damit " +
+        "kostet der Lauf etwas beim Anbieter."
+    ),
+    checkbox("Bei jedem Lauf sichern", "plan-backup", plan.backup),
+    field("Ordner erneut einlesen", "plan-sources", {
+      value: Object.keys(plan.sources ?? {}).join(":"),
+      placeholder: "durch Doppelpunkt getrennt, leer = keine",
+      hint: "Müssen oben freigegeben sein. Bereits Bekanntes wird nicht doppelt aufgenommen.",
+    })
+  );
+
+  const result = document.createElement("p");
+  result.className = "meta";
+
+  // Was zuletzt passiert ist, gehört sichtbar hierher. Ein Prozess, dessen
+  // Ergebnisse man nirgends sieht, ist nicht von einem abgestürzten zu
+  // unterscheiden.
+  const letzter = document.createElement("div");
+  showLastRun(letzter, plan.last_run);
+  block.append(letzter);
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = "Übernehmen";
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    const sources = {};
+    for (const pfad of $("#plan-sources").value.split(":").map((p) => p.trim()).filter(Boolean)) {
+      sources[pfad] = "markdown";
+    }
+    try {
+      await api("/schedule", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: $("#plan-enabled").checked,
+          interval_minutes: Number($("#plan-interval").value) || undefined,
+          with_model: $("#plan-model").checked,
+          backup: $("#plan-backup").checked,
+          sources,
+        }),
+      });
+      await loadSetup();
+    } catch (err) {
+      result.textContent = err.message;
+      result.classList.add("error");
+      save.disabled = false;
+    }
+  });
+
+  const jetzt = document.createElement("button");
+  jetzt.type = "button";
+  jetzt.className = "ghost small";
+  jetzt.textContent = "Jetzt einmal laufen";
+  jetzt.addEventListener("click", async () => {
+    jetzt.disabled = true;
+    result.textContent = "Läuft…";
+    result.classList.remove("error");
+    try {
+      const report = await api("/schedule/run", { method: "POST" });
+      result.textContent = report.summary;
+      result.classList.toggle("error", !report.ok);
+      showLastRun(letzter, report);
+      await loadDashboard();
+    } catch (err) {
+      result.textContent = err.message;
+      result.classList.add("error");
+    } finally {
+      jetzt.disabled = false;
+    }
+  });
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.append(save, jetzt);
+  block.append(row, result);
+  panel.append(block);
 }
 
 // -- Erststart --------------------------------------------------------------
@@ -1445,9 +1602,9 @@ async function refreshStatus() {
 }
 
 async function start() {
-  const info = await invoke("sidecar_info");
-  base = `http://127.0.0.1:${info.port}`;
-  token = info.token;
+  // Über `connectionInfo()`, nicht direkt über Tauri: Dieselbe Oberfläche läuft
+  // im Container in einem normalen Browser, und dort gibt es kein `invoke`.
+  ({ base, token } = await connectionInfo());
 
   const health = await refreshStatus();
   setupState = await api("/setup");

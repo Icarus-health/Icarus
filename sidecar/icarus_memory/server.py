@@ -30,6 +30,7 @@ from .backup import BackupError, export_model, import_model, list_snapshots, sna
 from . import config
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
+from .scheduler import Scheduler, backup_job, consolidation_job, ingest_job
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
 from .ingest import ADAPTERS, ingest_directory
@@ -249,6 +250,14 @@ class SetupIn(BaseModel):
     calendar_password: str | None = None
 
 
+class ScheduleIn(BaseModel):
+    enabled: bool | None = None
+    interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    with_model: bool | None = None
+    sources: dict[str, str] | None = None
+    backup: bool | None = None
+
+
 class ConsolidateIn(BaseModel):
     limit: int = Field(default=20, ge=1, le=200)
     with_model: bool = True
@@ -308,7 +317,39 @@ def _build_agent(app: FastAPI) -> Agent:
         proposals=app.state.proposals,
         provider=agent.provider,
     )
+    _wire_scheduler(app)
     return agent
+
+
+def _wire_scheduler(app: FastAPI) -> None:
+    """Hängt den Zeitplan an die aktuellen Bausteine.
+
+    Muss nach jedem Agentenneubau erneut laufen: Der Verdichter darin ist ein
+    neues Objekt, und ein Zeitplan, der auf den alten zeigt, würde weiter das
+    abgemeldete Modell fragen.
+    """
+    settings: config.Settings = app.state.settings
+    plan = settings.schedule
+    roots = file_roots_from_env(os.environ.get(ROOTS_ENV))
+
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler is None:
+        scheduler = Scheduler()
+        app.state.scheduler = scheduler
+
+    scheduler._run_ingest = (  # noqa: SLF001 - bewusst neu verdrahtet
+        ingest_job(app.state.episodes, roots, dict(plan.sources))
+        if plan.sources else None
+    )
+    scheduler._run_consolidation = consolidation_job(app.state.consolidator)  # noqa: SLF001
+    scheduler._run_backup = backup_job(_data_dir()) if plan.backup else None  # noqa: SLF001
+    scheduler.configure(
+        enabled=plan.enabled,
+        interval_minutes=plan.interval_minutes,
+        with_model=plan.with_model,
+    )
+    if plan.enabled:
+        scheduler.start()
 
 
 def create_app(
@@ -989,6 +1030,52 @@ def create_app(
         except ProposalError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return app.state.proposals.get(proposal_id).to_dict()
+
+    # -- Zeitplan ----------------------------------------------------------
+    #
+    # Er macht die Vorschlagsschlange voller, nie den Bestand. Das ist die
+    # Eigenschaft, die ihn unbedenklich macht: Im schlimmsten Fall entsteht
+    # Arbeit, die jemand ignoriert — nie ein falscher Fakt.
+
+    @app.get("/schedule", dependencies=guard)
+    def get_schedule() -> dict[str, Any]:
+        return {
+            **app.state.scheduler.state(),
+            "sources": dict(app.state.settings.schedule.sources),
+            "backup": app.state.settings.schedule.backup,
+        }
+
+    @app.put("/schedule", dependencies=guard)
+    def put_schedule(body: ScheduleIn) -> dict[str, Any]:
+        plan = app.state.settings.schedule
+        if body.enabled is not None:
+            plan.enabled = body.enabled
+        if body.interval_minutes is not None:
+            plan.interval_minutes = body.interval_minutes
+        if body.with_model is not None:
+            plan.with_model = body.with_model
+        if body.sources is not None:
+            unbekannt = sorted(set(body.sources.values()) - set(ADAPTERS))
+            if unbekannt:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unbekannte Quelle: {', '.join(unbekannt)}",
+                )
+            plan.sources = dict(body.sources)
+        if body.backup is not None:
+            plan.backup = body.backup
+
+        config.save(_data_dir(), app.state.settings)
+        if not plan.enabled:
+            app.state.scheduler.stop()
+        _wire_scheduler(app)
+        return get_schedule()
+
+    @app.post("/schedule/run", dependencies=guard)
+    def run_schedule() -> dict[str, Any]:
+        """Einen Durchgang von Hand auslösen — auch wenn der Plan aus ist."""
+        report = app.state.scheduler.run_once()
+        return {**report.to_dict(), "summary": report.summary()}
 
     # -- Werkzeuge ---------------------------------------------------------
     #

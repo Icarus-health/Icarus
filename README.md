@@ -15,8 +15,9 @@ image, so you can try it without a signed bundle; the app remains the real thing
 > you confirming exactly what goes out. It defends against prompt injection,
 > keeps keys in the OS keychain, and backs itself up. Other assistants on the
 > machine reach the same memory over MCP. Consolidation keeps the record honest —
-> by proposing, never by writing.
-> Missing: computer-use and a process that runs on its own.
+> by proposing, never by writing — and a background process now does that on a
+> schedule, so the memory keeps itself in order while you work.
+> Missing: computer-use.
 
 Detailed documentation is in German under [`docs/`](docs/).
 
@@ -87,6 +88,29 @@ answer too.
 
 Details, including the honest limits of the conflict finder:
 [`docs/10-verdichtung.md`](docs/10-verdichtung.md).
+
+## An agent that runs alongside
+
+What only happens when you remember to do it does not happen. So a background
+process re-reads your folders, runs consolidation, and takes a snapshot on a
+schedule — the same three steps you can trigger by hand, just without having to.
+
+It gets **no new rights**. It fills the proposal queue, never the record. That
+one property is what makes it safe to leave running: the worst case is work
+somebody ignores, never a wrong fact.
+
+It is **off by default**, for two reasons that are both real. Model use costs
+money, so it is a *second* switch — with the schedule on and the model off you
+still get ingest, staleness questions, conflict candidates and backups, with no
+API call at all. And noise is worse than silence: a process that hourly proposes
+junk grows a queue nobody looks into, which hides the useful part. Hence a floor
+of 15 minutes and a default of four hours.
+
+It is a thread in the sidecar, not a system service. It runs while the app runs.
+A daemon that phoned a provider at night with the app closed would be a
+different promise than the one this project makes.
+
+Details: [`docs/11-zeitplan.md`](docs/11-zeitplan.md).
 
 ## One app, not a folder of them
 
@@ -245,7 +269,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 327 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation
+make test            # 347 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -290,14 +314,15 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-327 tests, no network and no model required — including a test that plays out a
+347 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
 a vault containing an injection payload and asserts the record stayed empty, and
 one that proves no secret ever reaches the settings file, and one that proves
 serving the interface does not expose the data behind it, and three that prove
-consolidation cannot reach the record without a human saying yes.
+consolidation cannot reach the record without a human saying yes, and one that
+runs the whole background schedule and asserts the record came out unchanged.
 
 ## Connecting mail and calendar
 
@@ -366,16 +391,17 @@ sidecar/             Python: memory, policy, agent
     secrets.py       OS keychain: macOS, Windows DPAPI, secret-tool
     backup.py        Snapshots, restore, encrypted export
     currency.py      Per-kind staleness horizons; the age verdict on every fact
+    scheduler.py     The process that runs on its own — proposes, never writes
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             327 tests, no network and no model required
+  tests/             347 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
-                     memory layers, setup, consolidation, roadmap, ADRs
+                     memory layers, setup, consolidation, schedule, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

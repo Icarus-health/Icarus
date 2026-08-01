@@ -24,6 +24,15 @@
 
 * { box-sizing: border-box; }
 
+/* Die Browser-Regel für `hidden` ist `display: none` mit der schwächsten
+   Spezifität, die es gibt. Jede eigene Regel mit `display:` schlägt sie —
+   `#wizard { display: grid }` hat den fertig durchlaufenen Assistenten als
+   unsichtbare Fläche über der ganzen App liegen lassen, die jeden Klick
+   schluckte. Ein Fehler, den man nicht sieht, sondern nur spürt. Deshalb hier
+   einmal zentral und mit `!important`, statt an jeder Stelle einzeln daran zu
+   denken. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -372,6 +381,25 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 }
 
 .field .meta { margin: 0.25rem 0 0; }
+
+/* Ein Kästchen ist keine Zeile mit Beschriftung darüber, sondern eine
+   Entscheidung mit Text daneben. Der Hinweis rutscht unter den Text, nicht
+   unter das Kästchen — sonst liest man ihn als zweite Option. */
+.field.check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 0.5rem;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.field.check input {
+  display: inline;
+  width: auto;
+  margin: 0;
+}
+
+.field.check .meta { grid-column: 2; }
 
 .meta.error { color: var(--danger); }
 

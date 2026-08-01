@@ -16,7 +16,8 @@ image, so you can try it without a signed bundle; the app remains the real thing
 > keeps keys in the OS keychain, and backs itself up. Other assistants on the
 > machine reach the same memory over MCP. Consolidation keeps the record honest —
 > by proposing, never by writing — and a background process now does that on a
-> schedule, so the memory keeps itself in order while you work.
+> schedule, so the memory keeps itself in order while you work. Mail lives in
+> the chat window: read it, reply to it, take it into memory as raw material.
 > Missing: computer-use.
 
 Detailed documentation is in German under [`docs/`](docs/).
@@ -27,7 +28,7 @@ Detailed documentation is in German under [`docs/`](docs/).
 |---|---|---|
 | 1 | Verifiable self-model — provenance, versioning, revocation | **Built.** Record, supersede, expire, revoke with cascade |
 | 2 | Vendor-independent memory | **Built.** Local SQLite record; OpenAI-compatible, Anthropic or Ollama in front |
-| 3 | Current information | **Built.** Mail (IMAP), calendar (CalDAV), projects, tasks, notes, web, files, import from Obsidian/Notion |
+| 3 | Current information | **Built.** Mail read *and reply* in the chat window, calendar (CalDAV), projects, tasks, notes, web, files, import from Obsidian/Notion |
 | 4 | Controlled delegation and execution | **Built.** Action classes, dry-run approvals, append-only audit |
 
 ## Bring your existing notes
@@ -299,7 +300,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 392 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability
+make test            # 407 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability, inbox
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -344,7 +345,7 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-392 tests, no network and no model required — including a test that plays out a
+407 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
@@ -353,7 +354,9 @@ one that proves no secret ever reaches the settings file, and one that proves
 serving the interface does not expose the data behind it, and three that prove
 consolidation cannot reach the record without a human saying yes, and one that
 runs the whole background schedule and asserts the record came out unchanged,
-and three that prove compressing a month cannot lose anything.
+and three that prove compressing a month cannot lose anything, and one that
+takes an email saying "IGNORE ALL PREVIOUS INSTRUCTIONS" into memory and asserts
+the record stayed empty and nothing was sent.
 
 ## Connecting mail and calendar
 
@@ -394,6 +397,33 @@ you. Message content is therefore always marked as foreign and taints the round,
 so any consequential action afterwards needs an approval. Calendar events with
 guests are outward-facing and require you to retype the recipient; without
 guests they stay local.
+
+## Mail where you already write
+
+Read, reply and remember without leaving the app. The rule that governs
+everything here: **anyone can email you.** It is the most dangerous input
+channel there is, and the only one where a stranger picks the moment.
+
+So the send button is **not** a shortcut. It calls the same tool the model
+calls, which means it goes through policy, an approval with the full dry run,
+and the audit log. Nothing leaves until you confirm — and confirming an outward
+action means retyping the recipient. On a reply that matters more than usual:
+the address comes from `Reply-To`, and the sender sets that. A mail that looks
+like it came from your colleague can carry `Reply-To: attacker@example.com`, and
+retyping is exactly where that shows up.
+
+Taking a mail into memory records an **episode**, not a fact. It keeps that
+something *occurred*; it claims nothing about you. Whether a lasting assertion
+follows is consolidation's call, and consolidation proposes. That is why the
+button is safe despite the provenance — and why a mail saying "IGNORE ALL
+PREVIOUS INSTRUCTIONS" may be recorded: it is a fact about the sender, and a
+test asserts the record stays empty and nothing goes out.
+
+On request, never on a schedule. An inbox flowing wholesale into episodes would
+bring newsletters and spam with it, and every piece would later reach the model
+as material.
+
+Details: [`docs/14-posteingang.md`](docs/14-posteingang.md).
 
 ## Keeping it safe
 
@@ -443,7 +473,7 @@ sidecar/             Python: memory, policy, agent
     providers_mail.py  Known mail providers, so nobody has to know an IMAP host
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             392 tests, no network and no model required
+  tests/             407 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback
@@ -451,7 +481,7 @@ packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
                      memory layers, setup, consolidation, schedule,
-                     summaries, usability, roadmap, ADRs
+                     summaries, usability, inbox, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

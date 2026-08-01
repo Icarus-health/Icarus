@@ -146,3 +146,4 @@ nicht erkannt. Autodiscover über SRV-Einträge wäre der nächste Schritt.
 - [`../CLAUDE.md`](../CLAUDE.md) — der Grundsatz im Wortlaut
 - [`09-einrichtung.md`](09-einrichtung.md) — was eingerichtet wird und wo es liegt
 - [`03-delegation.md`](03-delegation.md) — warum manche Rückfragen bleiben müssen
+- [`14-posteingang.md`](14-posteingang.md) — Mail im Gesprächsfenster

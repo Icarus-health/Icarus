@@ -28,6 +28,11 @@ from typing import Any
 DEFAULT_IMAP_PORT = 993
 DEFAULT_SMTP_PORT = 587
 
+#: Wie viel vom Text eine einzeln geöffnete Nachricht mitbringt. Großzügig,
+#: aber begrenzt — eine Mail mit einem eingebetteten Bild als Base64 hat
+#: Megabyte, und die will niemand im Browser stehen haben.
+FULL_BODY_LIMIT = 20_000
+
 
 class MailError(Exception):
     pass
@@ -74,6 +79,24 @@ class Message:
     preview: str
     unread: bool
 
+    body: str = ""
+    """Der volle Text — nur beim Einzelabruf gefüllt.
+
+    Die Liste trägt ihn nicht: Zwanzig ganze Mails sind ein Vielfaches der
+    Datenmenge, und sie stehen ohnehin zusammengefaltet da.
+    """
+
+    message_id: str = ""
+    """Für `In-Reply-To`. Ohne den Kopf hängt eine Antwort nicht am Verlauf,
+    sondern erscheint beim Empfänger als neue Nachricht."""
+
+    reply_to: str = ""
+    """`Reply-To`, wo gesetzt. Sonst ist der Absender gemeint."""
+
+    def answer_address(self) -> str:
+        """An wen eine Antwort geht. `Reply-To` gewinnt — dafür steht er da."""
+        return self.reply_to or self.sender
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "uid": self.uid,
@@ -82,6 +105,9 @@ class Message:
             "date": self.date.astimezone().isoformat() if self.date else None,
             "preview": self.preview,
             "unread": self.unread,
+            "body": self.body,
+            "message_id": self.message_id,
+            "answer_to": self.answer_address(),
         }
 
 
@@ -160,6 +186,47 @@ class MailConnector:
         except (imaplib.IMAP4.error, OSError, ssl.SSLError) as exc:
             raise MailError(f"IMAP-Zugriff fehlgeschlagen: {exc}") from exc
 
+    def message(self, uid: str) -> Message:
+        """Eine einzelne Nachricht mit vollem Text.
+
+        `readonly=True` wie beim Posteingang: Etwas anzusehen darf es nicht als
+        gelesen markieren. Wer seine Mail woanders bearbeitet, soll dort
+        denselben Zustand vorfinden — Icarus schaut zu, es räumt nicht auf.
+        """
+        try:
+            with imaplib.IMAP4_SSL(
+                self._config.imap_host, self._config.imap_port,
+                ssl_context=ssl.create_default_context(),
+            ) as imap:
+                imap.login(self._config.username, self._config.password)
+                imap.select("INBOX", readonly=True)
+                status, fetched = imap.fetch(str(uid).encode(), "(FLAGS RFC822)")
+                if status != "OK" or not fetched or fetched[0] is None:
+                    raise MailError(f"Nachricht {uid} nicht gefunden.")
+                raw = next(
+                    (part[1] for part in fetched
+                     if isinstance(part, tuple) and isinstance(part[1], bytes)),
+                    None,
+                )
+                if raw is None:
+                    raise MailError(f"Nachricht {uid} nicht lesbar.")
+                parsed = email.message_from_bytes(raw)
+                flags = str(fetched[0][0]) if isinstance(fetched[0], tuple) else ""
+                text = _body(parsed, limit=FULL_BODY_LIMIT)
+                return Message(
+                    uid=str(uid),
+                    subject=_decode(parsed.get("Subject")),
+                    sender=_decode(parsed.get("From")),
+                    date=self._parse_date(parsed.get("Date")),
+                    preview=" ".join(text.split())[:300],
+                    unread="\\Seen" not in flags,
+                    body=text,
+                    message_id=(parsed.get("Message-ID") or "").strip(),
+                    reply_to=_decode(parsed.get("Reply-To")),
+                )
+        except (imaplib.IMAP4.error, OSError, ssl.SSLError) as exc:
+            raise MailError(f"IMAP-Zugriff fehlgeschlagen: {exc}") from exc
+
     @staticmethod
     def _parse_date(raw: str | None) -> datetime | None:
         if not raw:
@@ -171,7 +238,9 @@ class MailConnector:
 
     # -- Senden ------------------------------------------------------------
 
-    def send(self, to: str, subject: str, body: str) -> str:
+    def send(
+        self, to: str, subject: str, body: str, in_reply_to: str = ""
+    ) -> str:
         """Versendet eine Mail. Wird ausschließlich nach erteilter Freigabe gerufen."""
         if not self._config.smtp_host:
             raise MailError("Kein SMTP-Server konfiguriert (ICARUS_SMTP_HOST).")
@@ -182,6 +251,12 @@ class MailConnector:
         message["Subject"] = subject
         message["Date"] = email.utils.formatdate(localtime=True)
         message["Message-ID"] = email.utils.make_msgid()
+        if in_reply_to:
+            # Ohne diese beiden Köpfe erscheint eine Antwort beim Empfänger als
+            # neue Nachricht statt im Verlauf. Das ist kein Schönheitsfehler:
+            # Wer zwanzig Mails am Tag bekommt, findet sie dann nicht wieder.
+            message["In-Reply-To"] = in_reply_to
+            message["References"] = in_reply_to
         message.set_content(body)
 
         try:

@@ -24,6 +24,15 @@
 
 * { box-sizing: border-box; }
 
+/* Die Browser-Regel für `hidden` ist `display: none` mit der schwächsten
+   Spezifität, die es gibt. Jede eigene Regel mit `display:` schlägt sie —
+   `#wizard { display: grid }` hat den fertig durchlaufenen Assistenten als
+   unsichtbare Fläche über der ganzen App liegen lassen, die jeden Klick
+   schluckte. Ein Fehler, den man nicht sieht, sondern nur spürt. Deshalb hier
+   einmal zentral und mit `!important`, statt an jeder Stelle einzeln daran zu
+   denken. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -328,6 +337,17 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .episode.archived .statement,
 .episode.ignored .statement { opacity: 0.55; }
 
+/* Ein Rückblick ist das Einzige in dieser Liste, das Icarus selbst geschrieben
+   hat. Er sieht deshalb anders aus als Rohmaterial — wer beides verwechselt,
+   hält eine Deutung für einen Beleg. */
+.episode.summary {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.7rem;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.episode.summary .statement { opacity: 1; }
+
 .episode details { margin-top: 0.4rem; }
 .episode summary {
   cursor: pointer;
@@ -372,6 +392,34 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 }
 
 .field .meta { margin: 0.25rem 0 0; }
+
+/* Ein Kästchen ist keine Zeile mit Beschriftung darüber, sondern eine
+   Entscheidung mit Text daneben. Der Hinweis rutscht unter den Text, nicht
+   unter das Kästchen — sonst liest man ihn als zweite Option. */
+.field.check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 0.5rem;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.field.check input {
+  display: inline;
+  width: auto;
+  margin: 0;
+}
+
+.field.check .meta { grid-column: 2; }
+
+/* Freigegebene Ordner: eine Zeile je Ordner, Pfad links, Entfernen rechts.
+   Vorher stand hier ein Feld mit Doppelpunkt-Syntax. */
+.roots { margin: 0 0 0.7rem; }
+.roots li { padding: 0.5rem 0; align-items: center; }
+.roots .statement {
+  font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
 
 .meta.error { color: var(--danger); }
 

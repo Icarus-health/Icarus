@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
@@ -19,7 +20,7 @@ from icarus_memory.backup import (
     snapshot,
 )
 from icarus_memory.model import now
-from icarus_memory.secrets import Keychain, load_into_env, migrate_env_file
+from icarus_memory.secrets import KNOWN, Keychain, load_into_env, migrate_env_file
 
 
 @pytest.fixture
@@ -194,8 +195,22 @@ def test_umgebung_gewinnt_gegen_schluesselbund(monkeypatch: pytest.MonkeyPatch) 
             return "aus-dem-schluesselbund"
 
     monkeypatch.setenv("OPENAI_API_KEY", "aus-der-umgebung")
-    load_into_env(Fake())
-    assert __import__("os").environ["OPENAI_API_KEY"] == "aus-der-umgebung"
+    try:
+        load_into_env(Fake())
+        assert os.environ["OPENAI_API_KEY"] == "aus-der-umgebung"
+    finally:
+        # `load_into_env` füllt **alle** bekannten Namen, nicht nur den
+        # geprüften. Ohne dieses Aufräumen bleiben die übrigen für den Rest des
+        # Laufs gesetzt, und eine spätere Testdatei sieht einen eingerichteten
+        # Anbieter, den sie nie gesetzt hat — und scheitert an einer Stelle, die
+        # nichts damit zu tun hat.
+        #
+        # Nicht über `monkeypatch.delenv`: Das merkt sich nichts, wenn der Name
+        # vorher gar nicht gesetzt war, und stellt danach folglich auch nichts
+        # her. Genau der Fall, der hier vorliegt.
+        for name in KNOWN:
+            if name != "OPENAI_API_KEY":
+                os.environ.pop(name, None)
 
 
 def test_migration_uebernimmt_nur_bekannte_schluessel(tmp_path: Path) -> None:

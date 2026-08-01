@@ -577,6 +577,7 @@ const EPISODE_KIND = {
   event: "Termin",
   interaction: "Kontakt",
   observation: "Beobachtung",
+  summary: "Rückblick",
 };
 
 const EPISODE_STATE = {
@@ -598,12 +599,19 @@ async function loadEpisodes() {
     api("/episodes/counts"),
   ]);
   setPendingBadge(counts.new);
+  await fillIngestFolders();
+  await renderSummaries();
 
   const list = $("#episode-list");
   list.replaceChildren();
-  $("#episode-empty").hidden = episodes.length > 0;
+  $("#episode-empty").hidden = episodes.some((e) => e.kind !== "summary");
 
   for (const e of episodes) {
+    // Rückblicke stehen oben in ihrem eigenen Block. Sie hier ein zweites Mal
+    // zu zeigen, stellte sie neben das Rohmaterial, aus dem sie stammen — und
+    // genau diese Verwechslung soll die Trennung verhindern.
+    if (e.kind === "summary") continue;
+
     const el = document.createElement("li");
     el.className = `episode ${e.state}`;
 
@@ -645,6 +653,125 @@ async function loadEpisodes() {
 
     list.append(el);
   }
+}
+
+// -- Rückblicke -------------------------------------------------------------
+//
+// Sie stehen über dem Rohmaterial, nicht darin. Ein Rückblick ist die Antwort
+// auf „was war im April", und dafür taugt er nur, wenn man ihn nicht zwischen
+// vierzig Einzelnotizen suchen muss.
+//
+// Jeder trägt einen Knopf zum Zurücknehmen. Ohne den wäre das Zusammenfassen
+// eine Einbahnstraße: Ein Monat, den ein Modell falsch gelesen hat, wäre
+// faktisch ersetzt, und niemand käme mehr an die Übersicht heran.
+
+async function renderSummaries() {
+  const daten = await api("/summaries");
+  const block = $("#summary-block");
+  block.replaceChildren();
+
+  const note = $("#summary-note");
+  note.classList.remove("error");
+
+  if (daten.candidates.length) {
+    const wie_viele = daten.candidates.reduce((n, k) => n + k.count, 0);
+    const zeitraeume = daten.candidates.length === 1
+      ? "einem Zeitraum" : `${daten.candidates.length} Zeiträumen`;
+    note.textContent =
+      `${wie_viele} ältere Episoden in ${zeitraeume} könnten zu Rückblicken ` +
+      "werden. Die Quellen bleiben dabei erhalten.";
+    const knopf = document.createElement("button");
+    knopf.type = "button";
+    knopf.className = "small";
+    knopf.textContent = "Zusammenfassen";
+    knopf.addEventListener("click", async () => {
+      knopf.disabled = true;
+      note.textContent = "Läuft…";
+      try {
+        const report = await api("/summaries/run", {
+          method: "POST", body: JSON.stringify({}),
+        });
+        // Erst neu zeichnen, dann melden. Umgekehrt überschreibt das Neuzeichnen
+        // die Antwort, und ein Lauf ohne Modell sähe aus, als sei nichts
+        // passiert — der Nutzer drückt dann noch dreimal.
+        await loadEpisodes();
+        note.textContent = report.summary;
+        note.classList.toggle("error", Boolean(report.errors.length));
+      } catch (err) {
+        note.textContent = err.message;
+        note.classList.add("error");
+        knopf.disabled = false;
+      }
+    });
+    block.append(knopf);
+  } else {
+    note.textContent = "";
+  }
+
+  for (const s of daten.items) {
+    const el = document.createElement("li");
+    el.className = "episode summary";
+
+    const title = document.createElement("p");
+    title.className = "statement";
+    title.textContent = s.title;
+
+    const meta = document.createElement("p");
+    meta.className = "meta inferred";
+    meta.textContent =
+      `${s.period} · aus ${s.covers.length} Episoden` +
+      (s.provenance.extracted_by ? ` · ${s.provenance.extracted_by}` : "");
+
+    const text = document.createElement("p");
+    text.className = "statement";
+    text.textContent = s.body;
+
+    const zurueck = document.createElement("button");
+    zurueck.className = "ghost small";
+    zurueck.textContent = "Zurücknehmen";
+    zurueck.addEventListener("click", async () => {
+      zurueck.disabled = true;
+      await api(`/summaries/${s.id}`, { method: "DELETE" });
+      await loadEpisodes();
+    });
+
+    el.append(title, meta, text, zurueck);
+    block.append(el);
+  }
+}
+
+/** Füllt die Ordnerauswahl aus dem, was schon freigegeben ist.
+ *
+ *  Den Pfad hier erneut abzufragen wäre dasselbe zweimal — und beim zweiten Mal
+ *  mit größerer Chance auf einen Tippfehler. Ist nichts freigegeben, sagt das
+ *  Feld das, statt den Nutzer in einen Fehler laufen zu lassen.
+ */
+async function fillIngestFolders() {
+  const { file_roots: roots } = await api("/ingest/adapters");
+  const auswahl = $("#ingest-path");
+  const vorher = auswahl.value;
+  auswahl.replaceChildren();
+
+  const knopf = $("#ingest-form").querySelector("button");
+  if (!roots.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Erst unter Einrichtung einen Ordner freigeben";
+    auswahl.append(opt);
+    auswahl.disabled = true;
+    knopf.disabled = true;
+    return;
+  }
+
+  auswahl.disabled = false;
+  knopf.disabled = false;
+  for (const pfad of roots) {
+    const opt = document.createElement("option");
+    opt.value = pfad;
+    opt.textContent = pfad;
+    auswahl.append(opt);
+  }
+  if (roots.includes(vorher)) auswahl.value = vorher;
 }
 
 $("#ingest-form").addEventListener("submit", async (event) => {
@@ -1038,6 +1165,12 @@ async function loadSetup() {
   panel.append(modell);
 
   // -- Ordner
+  // -- Ordnerzugriff
+  //
+  // Vorher ein Feld mit Doppelpunkt-Syntax. Pfade tippt niemand fehlerfrei, und
+  // die Syntax muss man auch noch wissen. Jetzt: eine Liste, ein Ordner pro
+  // Zeile — und jeder wird beim Hinzufügen geprüft, statt drei Bildschirme
+  // später an einer Fehlermeldung zu scheitern, die den Tippfehler nicht nennt.
   const ordner = document.createElement("section");
   ordner.className = "setup-block";
   const oh = document.createElement("h3");
@@ -1045,25 +1178,84 @@ async function loadSetup() {
   const onote = document.createElement("p");
   onote.className = "muted";
   onote.textContent =
-    "Leer heißt: gar kein Dateizugriff. Es gibt bewusst keinen Vorgabewert — " +
-    "ein voreingestelltes Home-Verzeichnis wäre die Bequemlichkeit, die den " +
-    "Schutz aufhebt.";
-  const oinput = field("Ordner, durch Doppelpunkt getrennt", "setup-roots", {
-    value: s.file_roots.join(":"),
+    "Aus diesen Ordnern darf Icarus lesen — und nur aus diesen. Es gibt " +
+    "bewusst keinen Vorgabewert: ein voreingestelltes Home-Verzeichnis wäre " +
+    "die Bequemlichkeit, die den Schutz aufhebt.";
+
+  const oliste = document.createElement("ul");
+  oliste.className = "roots";
+  const oresult = document.createElement("p");
+  oresult.className = "meta";
+
+  async function speichereOrdner(pfade) {
+    await saveSetup({ file_roots: pfade });
+    await loadSetup();
+  }
+
+  for (const pfad of s.file_roots) {
+    const zeile = document.createElement("li");
+    const name = document.createElement("p");
+    name.className = "statement";
+    name.textContent = pfad;
+
+    const weg = document.createElement("button");
+    weg.className = "ghost small";
+    weg.textContent = "Entfernen";
+    weg.addEventListener("click", async () => {
+      weg.disabled = true;
+      await speichereOrdner(s.file_roots.filter((x) => x !== pfad));
+    });
+
+    zeile.append(name, weg);
+    oliste.append(zeile);
+  }
+  if (!s.file_roots.length) {
+    const leer = document.createElement("p");
+    leer.className = "meta";
+    leer.textContent = "Noch kein Ordner freigegeben — Icarus liest keine Dateien.";
+    oliste.append(leer);
+  }
+
+  const oinput = field("Ordner hinzufügen", "setup-root-neu", {
     placeholder: "/Users/du/Dokumente/Notizen",
   });
-  const osave = document.createElement("button");
-  osave.type = "button";
-  osave.textContent = "Übernehmen";
-  osave.addEventListener("click", async () => {
-    const roots = $("#setup-roots").value.split(":").map((p) => p.trim()).filter(Boolean);
-    await saveSetup({ file_roots: roots });
-    await loadSetup();
+  const oadd = document.createElement("button");
+  oadd.type = "button";
+  oadd.textContent = "Prüfen und freigeben";
+  oadd.addEventListener("click", async () => {
+    const pfad = $("#setup-root-neu").value.trim();
+    if (!pfad) return;
+    oadd.disabled = true;
+    oresult.classList.remove("error");
+    oresult.textContent = "Wird geprüft…";
+    try {
+      // Erst nachsehen, dann freigeben. Ein Ordner, den es nicht gibt, ist
+      // fast immer ein Tippfehler — und den zeigt man am besten sofort.
+      const pruef = await api(`/setup/folder?path=${encodeURIComponent(pfad)}`);
+      if (!pruef.ok) {
+        oresult.textContent = pruef.detail;
+        oresult.classList.add("error");
+        oadd.disabled = false;
+        return;
+      }
+      oresult.textContent = pruef.detail;
+      await speichereOrdner([...s.file_roots, pruef.path]);
+    } catch (err) {
+      oresult.textContent = err.message;
+      oresult.classList.add("error");
+      oadd.disabled = false;
+    }
   });
-  ordner.append(oh, onote, oinput, osave);
+
+  ordner.append(oh, onote, oliste, oinput, oadd, oresult);
   panel.append(ordner);
 
   // -- Mail
+  //
+  // Vorher standen hier sieben Felder, von denen vier Wissen voraussetzten, das
+  // außerhalb der IT niemand hat. Jetzt: Adresse eintippen, Passwort, fertig.
+  // Die Serverangaben stehen darunter eingeklappt, für eigene Domains — das ist
+  // genau die Gruppe, die sie auch kennt.
   const mail = document.createElement("section");
   mail.className = "setup-block";
   const mah = document.createElement("h3");
@@ -1071,10 +1263,132 @@ async function loadSetup() {
   const manote = document.createElement("p");
   manote.className = "muted";
   manote.textContent =
-    "Offene Protokolle statt Anbieter-APIs. Nutze ein App-Passwort, niemals " +
-    "dein Hauptpasswort. Gelesene Nachrichten gelten immer als fremder Inhalt.";
+    "Trag deine Adresse ein — den Rest sucht Icarus. Gelesene Nachrichten " +
+    "gelten immer als fremder Inhalt.";
   const maresult = document.createElement("p");
   maresult.className = "meta";
+
+  // Der Hinweis auf ein nötiges App-Passwort. Er steht hier, bevor jemand das
+  // erste Mal prüft — wer ihn nicht kennt, tippt sonst dreimal sein richtiges
+  // Kennwort ein, bekommt dreimal „Anmeldung fehlgeschlagen“ und hält das
+  // Programm für kaputt.
+  const mahint = document.createElement("p");
+  mahint.className = "meta";
+
+  const adresse = field("Deine E-Mail-Adresse", "mail-user", {
+    value: s.mail.user, placeholder: "du@beispiel.de",
+  });
+
+  const server = document.createElement("details");
+  const serverSummary = document.createElement("summary");
+  serverSummary.textContent = "Serverangaben";
+  server.append(
+    serverSummary,
+    field("IMAP-Server", "mail-imap", { value: s.mail.imap_host, placeholder: "imap.beispiel.de" }),
+    field("IMAP-Port", "mail-imap-port", { value: s.mail.imap_port }),
+    field("SMTP-Server", "mail-smtp", { value: s.mail.smtp_host, placeholder: "leer lassen: nur lesen" }),
+    field("SMTP-Port", "mail-smtp-port", { value: s.mail.smtp_port }),
+    field("Absender", "mail-from", { value: s.mail.sender, hint: "Leer: die Adresse oben." })
+  );
+
+  // Was Icarus selbst eingetragen hat. Nur das darf es auch wieder ändern
+  // oder leeren — was der Nutzer getippt hat, bleibt stehen. Ohne diese
+  // Unterscheidung stünde nach einem Wechsel von @gmx.de auf die eigene Domain
+  // weiter imap.gmx.net da, und das Prüfen scheiterte an einer Angabe, die
+  // niemand eingetragen hat und deshalb auch niemand verdächtigt.
+  let selbstEingetragen = "";
+
+  /** Trägt die Serverangaben eines Anbieters ein und zeigt seinen Hinweis. */
+  function applyMailProvider(p) {
+    mahint.replaceChildren();
+    mahint.classList.remove("error");
+    const jetzt = $("#mail-imap").value.trim();
+    const unseres = !jetzt || jetzt === selbstEingetragen;
+
+    if (!p) {
+      if (!unseres) return;   // Handgetragenes bleibt unangetastet.
+      // Eigene Domain: aufräumen und aufklappen, statt den Nutzer raten zu
+      // lassen, warum das Prüfen scheitert.
+      $("#mail-imap").value = "";
+      $("#mail-smtp").value = "";
+      selbstEingetragen = "";
+      server.open = true;
+      mahint.textContent =
+        "Diesen Anbieter kennt Icarus nicht — trag die Serverangaben unten ein.";
+      return;
+    }
+
+    if (!unseres) {
+      // Der Nutzer hat eigene Angaben gemacht. Der Hinweis darf trotzdem
+      // kommen, die Felder nicht überschrieben werden.
+      selbstEingetragen = "";
+    } else {
+      $("#mail-imap").value = p.imap_host;
+      $("#mail-imap-port").value = p.imap_port;
+      $("#mail-smtp").value = p.smtp_host;
+      $("#mail-smtp-port").value = p.smtp_port;
+      selbstEingetragen = p.imap_host;
+    }
+    if (p.hint) {
+      mahint.append(document.createTextNode(p.hint + " "));
+      if (p.help_url) {
+        const a = document.createElement("a");
+        a.href = p.help_url;
+        a.target = "_blank";
+        a.rel = "noreferrer";
+        a.textContent = "Dort einrichten";
+        mahint.append(a);
+      }
+    }
+  }
+
+  const maprovider = document.createElement("label");
+  maprovider.className = "field";
+  const maproviderText = document.createElement("span");
+  maproviderText.textContent = "Anbieter";
+  const maselect = document.createElement("select");
+  maselect.id = "mail-provider";
+  for (const p of [{ id: "", label: "Aus der Adresse erkennen" },
+                   ...(setupState.mail_providers ?? []),
+                   { id: "eigen", label: "Anderer Anbieter" }]) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.label;
+    maselect.append(opt);
+  }
+  maselect.addEventListener("change", () => {
+    const gewaehlt = (setupState.mail_providers ?? [])
+      .find((p) => p.id === maselect.value);
+    if (maselect.value === "eigen") {
+      server.open = true;
+      mahint.replaceChildren();
+      return;
+    }
+    if (gewaehlt) {
+      // Von Hand gewählt ist eine ausdrückliche Ansage: Dann überschreiben wir
+      // auch, was schon dasteht.
+      selbstEingetragen = $("#mail-imap").value.trim();
+      applyMailProvider(gewaehlt);
+    }
+    else void erkenneAnbieter();
+  });
+  maprovider.append(maproviderText, maselect);
+
+  /** Fragt den Sidecar, welcher Anbieter zu der Adresse gehört. */
+  async function erkenneAnbieter() {
+    const adr = $("#mail-user").value.trim();
+    if (!adr.includes("@")) return;
+    const { provider } = await api(
+      `/setup/mail-provider?address=${encodeURIComponent(adr)}`
+    );
+    if (provider) maselect.value = provider.id;
+    applyMailProvider(provider);
+    // Der Kalender hängt am selben Anbieter. Ihn getrennt zu erfragen wäre
+    // dieselbe Entscheidung zweimal. (Funktionsdeklaration weiter unten im
+    // selben Gültigkeitsbereich — sie ist hier schon sichtbar.)
+    applyCalendarProvider(provider);
+  }
+
   const masave = document.createElement("button");
   masave.type = "button";
   masave.textContent = "Übernehmen";
@@ -1096,21 +1410,20 @@ async function loadSetup() {
   const marow = document.createElement("div");
   marow.className = "row";
   marow.append(masave, testButton("mail", "Posteingang prüfen", maresult));
+
   mail.append(
-    mah, manote,
-    field("IMAP-Server", "mail-imap", { value: s.mail.imap_host, placeholder: "imap.example.com" }),
-    field("IMAP-Port", "mail-imap-port", { value: s.mail.imap_port }),
-    field("SMTP-Server", "mail-smtp", { value: s.mail.smtp_host, placeholder: "leer lassen: nur lesen" }),
-    field("SMTP-Port", "mail-smtp-port", { value: s.mail.smtp_port }),
-    field("Benutzer", "mail-user", { value: s.mail.user, placeholder: "du@example.com" }),
+    mah, manote, adresse,
     field("Passwort", "mail-pass", {
       type: "password",
       placeholder: setupState.secrets.ICARUS_MAIL_PASSWORD ? "hinterlegt" : "App-Passwort",
     }),
-    field("Absender", "mail-from", { value: s.mail.sender, hint: "Leer: der Benutzer oben." }),
-    marow, maresult
+    maprovider, mahint, server, marow, maresult
   );
   panel.append(mail);
+
+  // Erst nach dem Anhängen: `applyMailProvider` greift über `$()` ins Dokument.
+  $("#mail-user").addEventListener("blur", erkenneAnbieter);
+  if (s.mail.user && !s.mail.imap_host) void erkenneAnbieter();
 
   // -- Kalender
   const kal = document.createElement("section");
@@ -1120,7 +1433,8 @@ async function loadSetup() {
   const knote = document.createElement("p");
   knote.className = "muted";
   knote.textContent =
-    "CalDAV. Termine ohne Gäste bleiben lokal; sobald jemand eingeladen wird, " +
+    "Wird aus deinem Mailanbieter oben abgeleitet. Termine ohne Gäste bleiben " +
+    "lokal; sobald jemand eingeladen wird, " +
     "ist es außenwirksam und verlangt die strenge Bestätigung.";
   const kresult = document.createElement("p");
   kresult.className = "meta";
@@ -1148,7 +1462,208 @@ async function loadSetup() {
     }),
     krow, kresult
   );
+  const khint = document.createElement("p");
+  khint.className = "meta";
+  khint.id = "cal-hint";
+  kal.insertBefore(khint, kal.querySelector(".row"));
   panel.append(kal);
+
+  /** Überträgt, was am Mailanbieter über den Kalender bekannt ist. */
+  function applyCalendarProvider(anbieter) {
+    khint.replaceChildren();
+    khint.classList.remove("error");
+    if (!anbieter) return;
+    if (anbieter.caldav_note) {
+      // Ehrlich sagen, dass es nicht geht, statt den Nutzer eine Viertelstunde
+      // suchen zu lassen, bevor er annimmt, das Programm könne es nicht.
+      khint.textContent = anbieter.caldav_note;
+      return;
+    }
+    if (anbieter.caldav_url && !$("#cal-url").value.trim()) {
+      $("#cal-url").value = anbieter.caldav_url;
+      khint.textContent =
+        `Adresse von ${anbieter.label} übernommen. Benutzer und Passwort sind ` +
+        "dieselben wie bei der Mail.";
+    }
+  }
+
+  // Der Anbieter ist schon erkannt — ihn für den Kalender erneut abzufragen
+  // wäre dieselbe Entscheidung ein zweites Mal.
+  const bekannt = (setupState.mail_providers ?? [])
+    .find((x) => x.id === maselect.value);
+  if (bekannt) applyCalendarProvider(bekannt);
+  maselect.addEventListener("change", () => {
+    applyCalendarProvider(
+      (setupState.mail_providers ?? []).find((x) => x.id === maselect.value)
+    );
+  });
+
+  await renderSchedule(panel);
+}
+
+// -- Der mitlaufende Prozess ------------------------------------------------
+//
+// Er macht die Vorschlagsschlange voller, nie den Bestand. Deshalb ist er
+// unbedenklich — im schlimmsten Fall entsteht Arbeit, die man ignoriert.
+// Standardmäßig aus, und die Modellnutzung darin noch einmal getrennt: Ein
+// Zeitplan, der ungefragt einen Anbieter ruft, gibt fremdes Geld aus.
+
+function checkbox(label, id, checked, hint) {
+  const wrap = document.createElement("label");
+  wrap.className = "field check";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = id;
+  input.checked = Boolean(checked);
+  const text = document.createElement("span");
+  text.textContent = label;
+  wrap.append(input, text);
+  if (hint) {
+    const p = document.createElement("p");
+    p.className = "meta";
+    p.textContent = hint;
+    wrap.append(p);
+  }
+  return wrap;
+}
+
+/** Zeigt den letzten Bericht — aufklappbar, damit die Schritte einzeln lesbar
+ *  sind. Eigene Funktion, weil ein Lauf von Hand ihn sofort ersetzen muss:
+ *  „Zuletzt: 09:39" neben einem Ergebnis von 09:44 liest sich wie ein Fehler. */
+function showLastRun(container, run) {
+  container.replaceChildren();
+  if (!run) return;
+
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  const wann = new Date(run.started_at).toLocaleString("de-DE");
+  summary.textContent = `Zuletzt: ${wann}${run.ok ? "" : " — mit Fehlern"}`;
+  details.append(summary);
+
+  const liste = document.createElement("ul");
+  for (const job of run.jobs) {
+    const eintrag = document.createElement("li");
+    eintrag.className = "meta";
+    eintrag.textContent = `${job.name}: ${job.detail || (job.ok ? "ok" : "Fehler")}`;
+    if (!job.ok) eintrag.classList.add("error");
+    liste.append(eintrag);
+  }
+  details.append(liste);
+  container.append(details);
+}
+
+async function renderSchedule(panel) {
+  const plan = await api("/schedule");
+
+  const block = document.createElement("section");
+  block.className = "setup-block";
+
+  const head = document.createElement("h3");
+  head.textContent = "Mitlaufen";
+
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent =
+    "Liest die eingestellten Ordner erneut ein, legt Vorschläge vor und sichert " +
+    "das Gedächtnis. Er schreibt nichts in den Bestand — das bleibt deine " +
+    "Entscheidung. Er läuft nur, solange Icarus offen ist.";
+
+  block.append(head, note);
+
+  block.append(
+    checkbox("Regelmäßig laufen lassen", "plan-enabled", plan.enabled),
+    field("Alle … Minuten", "plan-interval", {
+      value: plan.interval_minutes,
+      hint: `Mindestens ${plan.min_interval_minutes}. Häufiger erzeugt Lärm, bevor du die erste Runde geprüft hast.`,
+    }),
+    checkbox(
+      "Dabei auch das Modell fragen", "plan-model", plan.with_model,
+      "Nur damit entstehen neue Aussagen aus deinen Notizen — und nur damit " +
+        "kostet der Lauf etwas beim Anbieter."
+    ),
+    checkbox("Bei jedem Lauf sichern", "plan-backup", plan.backup)
+  );
+
+  // Die Ordner ein drittes Mal abzutippen wäre zweimal zu viel. Sie stehen
+  // schon in der Freigabe — hier wird nur angehakt, welche mitlaufen sollen.
+  const quellen = document.createElement("div");
+  const qh = document.createElement("p");
+  qh.className = "meta";
+  const roots = setupState.status.file_roots ?? [];
+  qh.textContent = roots.length
+    ? "Diese Ordner bei jedem Lauf erneut einlesen:"
+    : "Kein Ordner freigegeben — es gibt nichts einzulesen.";
+  quellen.append(qh);
+  for (const [i, pfad] of roots.entries()) {
+    quellen.append(checkbox(pfad, `plan-quelle-${i}`, pfad in (plan.sources ?? {})));
+  }
+  block.append(quellen);
+
+  const result = document.createElement("p");
+  result.className = "meta";
+
+  // Was zuletzt passiert ist, gehört sichtbar hierher. Ein Prozess, dessen
+  // Ergebnisse man nirgends sieht, ist nicht von einem abgestürzten zu
+  // unterscheiden.
+  const letzter = document.createElement("div");
+  showLastRun(letzter, plan.last_run);
+  block.append(letzter);
+
+  const save = document.createElement("button");
+  save.type = "button";
+  save.textContent = "Übernehmen";
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    const sources = {};
+    for (const [i, pfad] of (setupState.status.file_roots ?? []).entries()) {
+      if ($(`#plan-quelle-${i}`)?.checked) sources[pfad] = "markdown";
+    }
+    try {
+      await api("/schedule", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: $("#plan-enabled").checked,
+          interval_minutes: Number($("#plan-interval").value) || undefined,
+          with_model: $("#plan-model").checked,
+          backup: $("#plan-backup").checked,
+          sources,
+        }),
+      });
+      await loadSetup();
+    } catch (err) {
+      result.textContent = err.message;
+      result.classList.add("error");
+      save.disabled = false;
+    }
+  });
+
+  const jetzt = document.createElement("button");
+  jetzt.type = "button";
+  jetzt.className = "ghost small";
+  jetzt.textContent = "Jetzt einmal laufen";
+  jetzt.addEventListener("click", async () => {
+    jetzt.disabled = true;
+    result.textContent = "Läuft…";
+    result.classList.remove("error");
+    try {
+      const report = await api("/schedule/run", { method: "POST" });
+      result.textContent = report.summary;
+      result.classList.toggle("error", !report.ok);
+      showLastRun(letzter, report);
+      await loadDashboard();
+    } catch (err) {
+      result.textContent = err.message;
+      result.classList.add("error");
+    } finally {
+      jetzt.disabled = false;
+    }
+  });
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.append(save, jetzt);
+  block.append(row, result);
+  panel.append(block);
 }
 
 // -- Erststart --------------------------------------------------------------
@@ -1445,9 +1960,9 @@ async function refreshStatus() {
 }
 
 async function start() {
-  const info = await invoke("sidecar_info");
-  base = `http://127.0.0.1:${info.port}`;
-  token = info.token;
+  // Über `connectionInfo()`, nicht direkt über Tauri: Dieselbe Oberfläche läuft
+  // im Container in einem normalen Browser, und dort gibt es kein `invoke`.
+  ({ base, token } = await connectionInfo());
 
   const health = await refreshStatus();
   setupState = await api("/setup");

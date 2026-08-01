@@ -30,12 +30,22 @@ from .backup import BackupError, export_model, import_model, list_snapshots, sna
 from . import config
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
+from .scheduler import (
+    Scheduler,
+    backup_job,
+    consolidation_job,
+    ingest_job,
+    summary_job,
+)
+from .summaries import MIN_EPISODES, Summarizer
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
-from .ingest import ADAPTERS, ingest_directory
+from .ingest import ADAPTERS, TEXT_SUFFIXES, ingest_directory
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
 from .policy import Policy, PolicyError
 from .providers import from_env as provider_from_env
+from .providers_mail import catalogue as mail_catalogue
+from .providers_mail import guess as guess_mail_provider
 from .secrets import Keychain, load_into_env
 from .security import SecurityError, file_roots_from_env
 from .store import ConflictError, SelfModelStore
@@ -249,8 +259,23 @@ class SetupIn(BaseModel):
     calendar_password: str | None = None
 
 
+class ScheduleIn(BaseModel):
+    enabled: bool | None = None
+    interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    with_model: bool | None = None
+    sources: dict[str, str] | None = None
+    backup: bool | None = None
+
+
 class ConsolidateIn(BaseModel):
     limit: int = Field(default=20, ge=1, le=200)
+    with_model: bool = True
+
+
+class SummariseIn(BaseModel):
+    # Wenige pro Lauf: Ein erster Durchgang über fünf Jahre Vault schriebe
+    # sonst sechzig Modellanfragen in einem Zug.
+    limit: int = Field(default=3, ge=1, le=24)
     with_model: bool = True
 
 
@@ -308,7 +333,43 @@ def _build_agent(app: FastAPI) -> Agent:
         proposals=app.state.proposals,
         provider=agent.provider,
     )
+    app.state.summarizer = Summarizer(
+        episodes=app.state.episodes, provider=agent.provider
+    )
+    _wire_scheduler(app)
     return agent
+
+
+def _wire_scheduler(app: FastAPI) -> None:
+    """Hängt den Zeitplan an die aktuellen Bausteine.
+
+    Muss nach jedem Agentenneubau erneut laufen: Der Verdichter darin ist ein
+    neues Objekt, und ein Zeitplan, der auf den alten zeigt, würde weiter das
+    abgemeldete Modell fragen.
+    """
+    settings: config.Settings = app.state.settings
+    plan = settings.schedule
+    roots = file_roots_from_env(os.environ.get(ROOTS_ENV))
+
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler is None:
+        scheduler = Scheduler()
+        app.state.scheduler = scheduler
+
+    scheduler._run_ingest = (  # noqa: SLF001 - bewusst neu verdrahtet
+        ingest_job(app.state.episodes, roots, dict(plan.sources))
+        if plan.sources else None
+    )
+    scheduler._run_consolidation = consolidation_job(app.state.consolidator)  # noqa: SLF001
+    scheduler._run_summary = summary_job(app.state.summarizer)  # noqa: SLF001
+    scheduler._run_backup = backup_job(_data_dir()) if plan.backup else None  # noqa: SLF001
+    scheduler.configure(
+        enabled=plan.enabled,
+        interval_minutes=plan.interval_minutes,
+        with_model=plan.with_model,
+    )
+    if plan.enabled:
+        scheduler.start()
 
 
 def create_app(
@@ -418,6 +479,9 @@ def create_app(
             "providers": [p for p in config.PROVIDERS],
             "default_models": config.DEFAULT_MODELS,
             "adapters": sorted(ADAPTERS),
+            # Damit niemand einen IMAP-Hostnamen kennen muss. Siehe
+            # providers_mail.py und CLAUDE.md, Grundsatz 1.
+            "mail_providers": mail_catalogue(),
             "status": {
                 "chat": provider is not None,
                 "provider": getattr(provider, "name", None),
@@ -434,6 +498,57 @@ def create_app(
     @app.get("/setup", dependencies=guard)
     def get_setup() -> dict[str, Any]:
         return _setup_state()
+
+    @app.get("/setup/folder", dependencies=guard)
+    def check_folder(path: str) -> dict[str, Any]:
+        """Sieht nach, ob ein Ordner da ist und was darin liegt.
+
+        Ein Pfad wird getippt, und getippte Pfade sind falsch. Heute merkt man
+        das erst, wenn die Aufnahme scheitert — drei Bildschirme später, mit
+        einer Fehlermeldung, die den Tippfehler nicht nennt.
+
+        Deshalb: beim Hinzufügen prüfen. „1.243 Dateien gefunden“ bestätigt
+        obendrein, dass es der *gemeinte* Ordner ist — ein Pfad, der existiert
+        und leer ist, ist meistens der falsche.
+
+        Bewusst **ohne** Freigabeprüfung: Hier wird noch nichts gelesen, nur
+        gezählt. Das ist die Auskunft, die der Nutzer braucht, *bevor* er
+        freigibt.
+        """
+        ziel = Path(path).expanduser()
+        if not ziel.exists():
+            return {"ok": False, "detail": "Diesen Ordner gibt es nicht."}
+        if not ziel.is_dir():
+            return {"ok": False, "detail": "Das ist eine Datei, kein Ordner."}
+        try:
+            dateien = sum(
+                1 for f in ziel.rglob("*")
+                if f.is_file() and f.suffix.lower() in TEXT_SUFFIXES
+            )
+        except PermissionError:
+            return {"ok": False, "detail": "Auf diesen Ordner fehlt der Zugriff."}
+        return {
+            "ok": True,
+            "path": str(ziel),
+            "files": dateien,
+            "detail": (
+                f"{dateien} lesbare Datei{'' if dateien == 1 else 'en'} gefunden."
+                if dateien else
+                "Der Ordner ist da, enthält aber keine lesbaren Textdateien."
+            ),
+        }
+
+    @app.get("/setup/mail-provider", dependencies=guard)
+    def mail_provider_for(address: str) -> dict[str, Any]:
+        """Rät den Anbieter aus der Mailadresse.
+
+        Damit ist der Regelfall **ein** Feld: Adresse eintippen, und Hosts,
+        Ports und der Hinweis auf ein nötiges App-Passwort stehen schon da. Wer
+        eine eigene Domain hat, bekommt `null` — das ist genau die Gruppe, die
+        einen IMAP-Host auch selbst einträgt.
+        """
+        treffer = guess_mail_provider(address)
+        return {"provider": treffer.to_dict() if treffer else None}
 
     @app.put("/setup", dependencies=guard)
     def put_setup(body: SetupIn) -> dict[str, Any]:
@@ -989,6 +1104,89 @@ def create_app(
         except ProposalError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return app.state.proposals.get(proposal_id).to_dict()
+
+    # -- Zusammenfassung ---------------------------------------------------
+    #
+    # Sie schreibt eine Episode, keine Aussage. Der Unterschied trägt das ganze
+    # Verfahren: Episoden behaupten nichts über die Person, und die Quellen
+    # bleiben liegen, statt ersetzt zu werden.
+
+    @app.get("/summaries", dependencies=guard)
+    def list_summaries() -> dict[str, Any]:
+        """Was zusammengefasst ist — und was es könnte, auch ohne Modell."""
+        return {
+            "items": [e.to_dict() for e in app.state.episodes.summaries()],
+            "candidates": [
+                k.to_dict() for k in app.state.summarizer.candidates()
+                if len(k.episodes) >= MIN_EPISODES
+            ],
+        }
+
+    @app.post("/summaries/run", dependencies=guard)
+    def run_summaries(body: SummariseIn) -> dict[str, Any]:
+        report = app.state.summarizer.run(
+            limit=body.limit, with_model=body.with_model
+        )
+        return {**report.to_dict(), "summary": report.summary()}
+
+    @app.delete("/summaries/{episode_id}", dependencies=guard)
+    def delete_summary(episode_id: str) -> dict[str, Any]:
+        """Nimmt sie zurück und holt die Quellen hervor.
+
+        Ohne diesen Weg wäre das Zusammenfassen eine Einbahnstraße — ein Monat,
+        den ein Modell falsch gelesen hat, wäre faktisch ersetzt.
+        """
+        try:
+            zurueck = app.state.episodes.delete_summary(episode_id)
+        except EpisodeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"restored": zurueck}
+
+    # -- Zeitplan ----------------------------------------------------------
+    #
+    # Er macht die Vorschlagsschlange voller, nie den Bestand. Das ist die
+    # Eigenschaft, die ihn unbedenklich macht: Im schlimmsten Fall entsteht
+    # Arbeit, die jemand ignoriert — nie ein falscher Fakt.
+
+    @app.get("/schedule", dependencies=guard)
+    def get_schedule() -> dict[str, Any]:
+        return {
+            **app.state.scheduler.state(),
+            "sources": dict(app.state.settings.schedule.sources),
+            "backup": app.state.settings.schedule.backup,
+        }
+
+    @app.put("/schedule", dependencies=guard)
+    def put_schedule(body: ScheduleIn) -> dict[str, Any]:
+        plan = app.state.settings.schedule
+        if body.enabled is not None:
+            plan.enabled = body.enabled
+        if body.interval_minutes is not None:
+            plan.interval_minutes = body.interval_minutes
+        if body.with_model is not None:
+            plan.with_model = body.with_model
+        if body.sources is not None:
+            unbekannt = sorted(set(body.sources.values()) - set(ADAPTERS))
+            if unbekannt:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unbekannte Quelle: {', '.join(unbekannt)}",
+                )
+            plan.sources = dict(body.sources)
+        if body.backup is not None:
+            plan.backup = body.backup
+
+        config.save(_data_dir(), app.state.settings)
+        if not plan.enabled:
+            app.state.scheduler.stop()
+        _wire_scheduler(app)
+        return get_schedule()
+
+    @app.post("/schedule/run", dependencies=guard)
+    def run_schedule() -> dict[str, Any]:
+        """Einen Durchgang von Hand auslösen — auch wenn der Plan aus ist."""
+        report = app.state.scheduler.run_once()
+        return {**report.to_dict(), "summary": report.summary()}
 
     # -- Werkzeuge ---------------------------------------------------------
     #

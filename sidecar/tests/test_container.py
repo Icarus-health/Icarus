@@ -261,3 +261,50 @@ def test_ohne_oberflaeche_laeuft_alles_weiter(tmp_path) -> None:
     client = TestClient(_app(tmp_path))
     assert client.get("/health").json()["status"] == "ok"
     assert client.get("/").status_code == 404
+
+
+# -- Die ausgelieferte Oberfläche selbst ------------------------------------
+#
+# Zwei Tests über den *Text* der Dateien, nicht über ihr Verhalten — für einen
+# echten DOM-Test bräuchte es einen Browser in der CI, und der wäre teurer als
+# das, was er hier prüft. Beide fangen einen Rückfall, der real passiert ist und
+# beim Lesen des Codes nicht auffällt: Die App startete, sah richtig aus und war
+# im Browser trotzdem unbenutzbar.
+
+
+def _frontend(name: str) -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[2] / "app" / "src" / name).read_text(
+        encoding="utf-8"
+    )
+
+
+def test_die_oberflaeche_findet_den_sidecar_auch_ohne_tauri() -> None:
+    """Im Container läuft dieselbe Seite in einem normalen Browser.
+
+    Dort gibt es kein `invoke`. Ein `await invoke("sidecar_info")` im Start
+    scheitert still — die Adresse bleibt `null`, jeder Aufruf geht gegen
+    `null/setup`, und der Nutzer sieht eine Oberfläche, die nichts tut.
+    """
+    js = _frontend("main.js")
+
+    assert "connectionInfo()" in js
+    # Tauri darf nur an einer Stelle vorkommen: in connectionInfo selbst.
+    assert js.count("__TAURI__") == 1
+    # Und nirgends ein nackter Aufruf daneben.
+    assert "await invoke(" not in js
+
+
+def test_verstecktes_bleibt_versteckt() -> None:
+    """`hidden` ist die schwächste Regel im Browser.
+
+    `#wizard { display: grid }` schlägt sie. Dann liegt der fertig durchlaufene
+    Einrichtungsassistent als unsichtbare Fläche über der ganzen App und
+    schluckt jeden Klick — ein Fehler, den man nicht sieht, sondern nur spürt.
+    """
+    css = _frontend("style.css")
+
+    assert "[hidden]" in css
+    regel = css.split("[hidden]", 1)[1].split("}", 1)[0]
+    assert "display: none" in regel and "!important" in regel

@@ -98,6 +98,30 @@ class CalendarSettings:
 
 
 @dataclass
+class ScheduleSettings:
+    """Der mitlaufende Prozess.
+
+    Standardmäßig aus, und die Modellnutzung darin noch einmal getrennt: Ein
+    Zeitplan, der ungefragt einen Anbieter ruft, gibt fremdes Geld aus.
+    """
+
+    enabled: bool = False
+    interval_minutes: int = 240
+    with_model: bool = False
+
+    sources: dict[str, str] = field(default_factory=dict)
+    """Ordner, die erneut eingelesen werden — Pfad auf Adapternamen.
+
+    Dass ein zweiter Lauf nichts doppelt anlegt, steckt im Digest der
+    Episodenschicht. Ohne diese Zusicherung wäre wiederholtes Einlesen keine
+    Option.
+    """
+
+    backup: bool = True
+    """Snapshot bei jedem Lauf. Der billigste Schritt mit dem größten Nutzen."""
+
+
+@dataclass
 class Settings:
     provider: str = ""
     model: str = ""
@@ -114,6 +138,7 @@ class Settings:
 
     mail: MailSettings = field(default_factory=MailSettings)
     calendar: CalendarSettings = field(default_factory=CalendarSettings)
+    schedule: ScheduleSettings = field(default_factory=ScheduleSettings)
 
     onboarded: bool = False
     """Hat jemand die Einrichtung einmal bis zum Ende durchlaufen?
@@ -136,6 +161,7 @@ class Settings:
         """
         mail = data.get("mail") or {}
         calendar = data.get("calendar") or {}
+        schedule = data.get("schedule") or {}
         return cls(
             provider=str(data.get("provider", "") or ""),
             model=str(data.get("model", "") or ""),
@@ -152,6 +178,13 @@ class Settings:
             calendar=CalendarSettings(
                 url=str(calendar.get("url", "") or ""),
                 user=str(calendar.get("user", "") or ""),
+            ),
+            schedule=ScheduleSettings(
+                enabled=bool(schedule.get("enabled", False)),
+                interval_minutes=int(schedule.get("interval_minutes") or 240),
+                with_model=bool(schedule.get("with_model", False)),
+                sources={str(k): str(v) for k, v in (schedule.get("sources") or {}).items()},
+                backup=bool(schedule.get("backup", True)),
             ),
             onboarded=bool(data.get("onboarded", False)),
         )
@@ -288,6 +321,7 @@ __all__ = [
     "PROVIDER_SECRET",
     "CalendarSettings",
     "MailSettings",
+    "ScheduleSettings",
     "Settings",
     "apply_to_env",
     "clear_secret",

@@ -15,8 +15,9 @@ image, so you can try it without a signed bundle; the app remains the real thing
 > you confirming exactly what goes out. It defends against prompt injection,
 > keeps keys in the OS keychain, and backs itself up. Other assistants on the
 > machine reach the same memory over MCP. Consolidation keeps the record honest —
-> by proposing, never by writing.
-> Missing: computer-use and a process that runs on its own.
+> by proposing, never by writing — and a background process now does that on a
+> schedule, so the memory keeps itself in order while you work.
+> Missing: computer-use.
 
 Detailed documentation is in German under [`docs/`](docs/).
 
@@ -87,6 +88,59 @@ answer too.
 
 Details, including the honest limits of the conflict finder:
 [`docs/10-verdichtung.md`](docs/10-verdichtung.md).
+
+## An agent that runs alongside
+
+What only happens when you remember to do it does not happen. So a background
+process re-reads your folders, runs consolidation, and takes a snapshot on a
+schedule — the same three steps you can trigger by hand, just without having to.
+
+It gets **no new rights**. It fills the proposal queue, never the record. That
+one property is what makes it safe to leave running: the worst case is work
+somebody ignores, never a wrong fact.
+
+It is **off by default**, for two reasons that are both real. Model use costs
+money, so it is a *second* switch — with the schedule on and the model off you
+still get ingest, staleness questions, conflict candidates and backups, with no
+API call at all. And noise is worse than silence: a process that hourly proposes
+junk grows a queue nobody looks into, which hides the useful part. Hence a floor
+of 15 minutes and a default of four hours.
+
+It is a thread in the sidecar, not a system service. It runs while the app runs.
+A daemon that phoned a provider at night with the app closed would be a
+different promise than the one this project makes.
+
+Details: [`docs/11-zeitplan.md`](docs/11-zeitplan.md).
+
+## Compression, the way memory actually works
+
+An episode layer only ever grows. After a year there are thousands of entries,
+archived but never read, and nothing was ever learned from them. Human memory
+does the opposite: it keeps a few things verbatim and compresses the rest into
+something you can still tell — *"April was almost entirely project A, stuck on a
+missing sign-off."*
+
+So Icarus writes a monthly retrospective from old episodes. The question that
+decides whether you may let such a thing run at all is whether it can lose
+something. It cannot: **the sources are archived, never deleted**, and one click
+takes the retrospective back and brings them out again. A bad summary is an
+annoyance, not data loss.
+
+Two things are never folded in. **Anything the record draws on** — if an episode
+produced an accepted assertion, it stays whole, because the assertion points back
+at it and that chain is the one thing this project does not negotiate. And
+**anything nobody has looked at yet**, for the same reason archiving skips it.
+
+A summary is also never a source for an assertion. Feed one back into
+consolidation and the model would check its quote against text it wrote itself —
+the evidence check would still pass and would mean nothing. Retrospectives are
+for reading, not for deriving.
+
+Grouped by month, not by topic: finding topics means measuring similarity of
+*meaning*, and what the project has today is word overlap, which would carve a
+month into groups nobody recognises.
+
+Details: [`docs/12-zusammenfassung.md`](docs/12-zusammenfassung.md).
 
 ## One app, not a folder of them
 
@@ -245,7 +299,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 327 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation
+make test            # 392 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -290,16 +344,34 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-327 tests, no network and no model required — including a test that plays out a
+392 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
 a vault containing an injection payload and asserts the record stayed empty, and
 one that proves no secret ever reaches the settings file, and one that proves
 serving the interface does not expose the data behind it, and three that prove
-consolidation cannot reach the record without a human saying yes.
+consolidation cannot reach the record without a human saying yes, and one that
+runs the whole background schedule and asserts the record came out unchanged,
+and three that prove compressing a month cannot lose anything.
 
 ## Connecting mail and calendar
+
+**Type your address; Icarus finds the rest.** A field labelled "IMAP host" asks
+for knowledge nobody outside IT has — and worse, if you don't know it you don't
+know what to search for. So Icarus recognises a dozen providers by the domain
+and fills in hosts and ports itself. Server settings stay available, collapsed,
+for custom domains — which is exactly the group that knows them.
+
+It also says the thing that saves the most grief: Gmail, iCloud, Outlook, Yahoo
+and Fastmail reject your account password and need an app password. Without that
+hint you type your correct password three times, get "login failed" three times,
+and conclude the program is broken. The hint and its link are shown *before* you
+first hit "check".
+
+The calendar is derived from the same provider. Where CalDAV genuinely isn't
+available any more — Google and Microsoft turned off simple authentication —
+Icarus says so instead of leaving you to search for a quarter of an hour.
 
 Open protocols, not vendor APIs — IMAP, SMTP and CalDAV work with iCloud,
 Fastmail, Nextcloud, your own server, and (with an app password) Gmail and
@@ -366,16 +438,20 @@ sidecar/             Python: memory, policy, agent
     secrets.py       OS keychain: macOS, Windows DPAPI, secret-tool
     backup.py        Snapshots, restore, encrypted export
     currency.py      Per-kind staleness horizons; the age verdict on every fact
+    scheduler.py     The process that runs on its own — proposes, never writes
+    summaries.py     Monthly retrospectives; sources archived, never deleted
+    providers_mail.py  Known mail providers, so nobody has to know an IMAP host
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             327 tests, no network and no model required
+  tests/             392 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
-                     memory layers, setup, consolidation, roadmap, ADRs
+                     memory layers, setup, consolidation, schedule,
+                     summaries, usability, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

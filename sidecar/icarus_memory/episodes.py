@@ -67,6 +67,19 @@ class EpisodeKind(str, Enum):
     OBSERVATION = "observation"
     """Was das System selbst bemerkt hat. Trägt nie fremden Text."""
 
+    SUMMARY = "summary"
+    """Was aus mehreren Episoden zusammengezogen wurde.
+
+    Die einzige Art, die Icarus selbst schreibt, und deshalb die einzige, die
+    wieder verschwinden darf — die Quellen bleiben unangetastet, es geht nichts
+    verloren.
+
+    Sie ist **nie Quelle für eine Aussage**. Eine Zusammenfassung ist bereits
+    eine Deutung; würde daraus abgeleitet, prüfte die Belegprüfung das Zitat
+    gegen einen Text, den das Modell selbst geschrieben hat. Der Beleg zeigte
+    dann auf eine Behauptung statt auf Material. Siehe docs/12-zusammenfassung.md.
+    """
+
 
 class EpisodeState(str, Enum):
     NEW = "new"
@@ -121,6 +134,21 @@ class Episode:
     consolidated_at: datetime | None = None
     tags: list[str] = field(default_factory=list)
 
+    covers: list[str] = field(default_factory=list)
+    """Nur bei `summary`: die Episoden, die darin aufgegangen sind.
+
+    Der Weg zurück ins Rohmaterial. Ohne ihn wäre eine Zusammenfassung eine
+    Behauptung ohne Herkunft — also genau das, was dieses Projekt vermeidet.
+    """
+
+    period: str = ""
+    """Nur bei `summary`: der Zeitraum als `JJJJ-MM`.
+
+    Nicht Schmuck, sondern die Bedingung für Wiederholbarkeit: Ein zweiter Lauf
+    erkennt daran, dass es den April schon gibt. Über den Digest ginge das nicht
+    — ein Modell schreibt zweimal denselben Monat mit anderen Worten.
+    """
+
     def __post_init__(self) -> None:
         if not self.digest:
             self.digest = digest_of(self.body)
@@ -148,6 +176,8 @@ class Episode:
             "produced": list(self.produced),
             "consolidated_at": iso(self.consolidated_at),
             "tags": list(self.tags),
+            "covers": list(self.covers),
+            "period": self.period,
         }
 
 
@@ -291,6 +321,111 @@ class EpisodeStore:
             self._put(episode)
         return len(betroffen)
 
+    # -- Zusammenfassungen -------------------------------------------------
+    #
+    # Die einzigen Episoden, die Icarus selbst schreibt. Deshalb gelten für sie
+    # zwei Regeln, die für Rohmaterial nicht gälten: Sie kommen nie in die
+    # Verdichtung, und sie dürfen wieder verschwinden.
+
+    def record_summary(
+        self,
+        title: str,
+        body: str,
+        period: str,
+        covers: list[str],
+        *,
+        extracted_by: str = "",
+        at: datetime | None = None,
+    ) -> Episode:
+        """Legt eine Zusammenfassung an und archiviert, was darin aufgeht.
+
+        Sie entsteht direkt als `consolidated`, nicht als `new`. Eine
+        Zusammenfassung, die auf Verdichtung wartet, wäre der Kreis, den die
+        Belegprüfung nicht mehr schließen kann: Das Modell prüfte sein Zitat
+        gegen einen Text, den es selbst geschrieben hat.
+        """
+        if not covers:
+            raise EpisodeError(
+                "Eine Zusammenfassung ohne Quellen ist eine Behauptung ohne Herkunft."
+            )
+        zeit = ensure_aware(at) or now()
+        episode = Episode(
+            id=f"z-{uuid.uuid4().hex[:12]}",
+            kind=EpisodeKind.SUMMARY,
+            title=title,
+            body=body,
+            provenance=Provenance(
+                source_type=SourceType.INFERENCE,
+                source_ref=f"episoden:{len(covers)}",
+                captured_at=zeit,
+                extracted_by=extracted_by or None,
+            ),
+            recorded_at=zeit,
+            state=EpisodeState.CONSOLIDATED,
+            consolidated_at=zeit,
+            covers=list(covers),
+            period=period,
+        )
+        self._put(episode)
+
+        # Erst jetzt archivieren. Bricht das Anlegen ab, ist nichts weggeräumt,
+        # was danach niemand mehr in der Liste findet.
+        for quelle in covers:
+            original = self.get(quelle)
+            original.state = EpisodeState.ARCHIVED
+            self._put(original)
+        return episode
+
+    def summary_for(self, period: str) -> Episode | None:
+        """Gibt es den Monat schon? Die Bedingung für einen zweiten Lauf."""
+        for episode in self.summaries():
+            if episode.period == period:
+                return episode
+        return None
+
+    def summaries(self, limit: int = 200) -> list[Episode]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT document FROM episodes WHERE kind = ? "
+                "ORDER BY COALESCE(occurred_at, recorded_at) DESC LIMIT ?",
+                (EpisodeKind.SUMMARY.value, limit),
+            ).fetchall()
+        return [self._from_row(r) for r in rows]
+
+    def delete_summary(self, episode_id: str) -> int:
+        """Nimmt eine Zusammenfassung zurück und holt die Quellen hervor.
+
+        Der einzige Weg, auf dem eine Episode je verschwindet — und er gilt
+        ausschließlich für das, was Icarus selbst geschrieben hat. Rohmaterial
+        wird nie gelöscht: Es ist der Beleg, auf den sich alles andere beruft.
+
+        Ohne diesen Weg wäre die Zusammenfassung eine Einbahnstraße. Ein Modell,
+        das einen Monat falsch zusammenfasst, hätte den Monat dann faktisch
+        ersetzt, und niemand käme mehr an die Übersicht darüber heran.
+        """
+        episode = self.get(episode_id)
+        if episode.kind is not EpisodeKind.SUMMARY:
+            raise EpisodeError(
+                "Nur Zusammenfassungen dürfen gelöscht werden. "
+                f"{episode_id} ist Rohmaterial ({episode.kind.value})."
+            )
+
+        zurueck = 0
+        for quelle in episode.covers:
+            try:
+                original = self.get(quelle)
+            except EpisodeError:
+                continue
+            if original.state is EpisodeState.ARCHIVED:
+                original.state = EpisodeState.CONSOLIDATED
+                self._put(original)
+                zurueck += 1
+
+        with self._lock:
+            self._conn.execute("DELETE FROM episodes WHERE id = ?", (episode_id,))
+            self._conn.commit()
+        return zurueck
+
     def link_project(self, episode_id: str, project_id: str | None) -> Episode:
         episode = self.get(episode_id)
         episode.project_id = project_id
@@ -419,6 +554,11 @@ class EpisodeStore:
             produced=list(d.get("produced", [])),
             consolidated_at=_parse(d.get("consolidated_at")),
             tags=list(d.get("tags", [])),
+            # Mit Vorgabe gelesen: Episoden, die vor der Zusammenfassungsschicht
+            # entstanden sind, haben diese Felder nicht — und sollen deshalb
+            # nicht unlesbar werden.
+            covers=list(d.get("covers", [])),
+            period=str(d.get("period", "")),
         )
 
 

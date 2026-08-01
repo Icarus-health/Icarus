@@ -129,7 +129,9 @@
         </p>
 
         <form id="ingest-form">
-          <input id="ingest-path" type="text" placeholder="Ordner, z. B. ~/Dokumente/Vault" autocomplete="off" required />
+          <!-- Auswählen statt tippen: Die Ordner sind oben schon freigegeben,
+               ein zweites Mal danach zu fragen wäre einmal zu viel. -->
+          <select id="ingest-path" aria-label="Ordner"></select>
           <select id="ingest-adapter" aria-label="Quelle">
             <option value="obsidian">Obsidian-Vault</option>
             <option value="notion">Notion-Export</option>
@@ -139,6 +141,11 @@
           <button type="submit">Aufnehmen</button>
         </form>
         <p id="ingest-note" class="muted"></p>
+
+        <!-- Rückblicke: das Einzige, was Icarus hier selbst schreibt. Deshalb
+             oben und deutlich getrennt vom Rohmaterial darunter. -->
+        <p id="summary-note" class="muted"></p>
+        <ul id="summary-block"></ul>
 
         <ul id="episode-list"></ul>
         <p id="episode-empty" class="muted">Noch nichts aufgenommen.</p>

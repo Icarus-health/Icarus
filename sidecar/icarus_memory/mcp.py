@@ -233,6 +233,12 @@ def _heute(bridge: Bridge, arguments: dict[str, Any]) -> str:
         lines.append(
             f"Rohmaterial: {pending} Episoden warten auf Verdichtung."
         )
+    vorschlaege = data.get("proposals", {}).get("pending", 0)
+    if vorschlaege:
+        lines.append(
+            f"Vorschläge: {vorschlaege} warten auf eine Entscheidung des Nutzers. "
+            "Nichts davon steht im Bestand."
+        )
     return "\n".join(lines)
 
 

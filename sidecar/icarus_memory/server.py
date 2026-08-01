@@ -28,6 +28,8 @@ from .audit import AuditLog
 from .backends import CogneeBackend
 from .backup import BackupError, export_model, import_model, list_snapshots, snapshot
 from . import config
+from .consolidation import Consolidator
+from .proposals import ProposalError, ProposalKind, ProposalStore
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
 from .ingest import ADAPTERS, ingest_directory
@@ -247,6 +249,11 @@ class SetupIn(BaseModel):
     calendar_password: str | None = None
 
 
+class ConsolidateIn(BaseModel):
+    limit: int = Field(default=20, ge=1, le=200)
+    with_model: bool = True
+
+
 class ToolIn(BaseModel):
     """Argumente eines direkten Werkzeugaufrufs.
 
@@ -293,6 +300,14 @@ def _build_agent(app: FastAPI) -> Agent:
         provider=provider_from_env(),
     )
     app.state.agent = agent
+    # Der Verdichter hängt am selben Anbieter wie der Agent. Ohne Neubau würde
+    # er nach einem Anbieterwechsel weiter das alte Modell fragen.
+    app.state.consolidator = Consolidator(
+        store=app.state.store,
+        episodes=app.state.episodes,
+        proposals=app.state.proposals,
+        provider=agent.provider,
+    )
     return agent
 
 
@@ -303,6 +318,7 @@ def create_app(
     tasks: TaskStore | None = None,
     workspace: WorkspaceStore | None = None,
     episodes: EpisodeStore | None = None,
+    proposals: ProposalStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Icarus", version="0.1.0")
 
@@ -327,6 +343,10 @@ def create_app(
     if episodes is None:
         episodes = EpisodeStore(_data_dir() / "episodes.sqlite3")
     app.state.episodes = episodes
+
+    if proposals is None:
+        proposals = ProposalStore(_data_dir() / "proposals.sqlite3")
+    app.state.proposals = proposals
 
     if agent is None:
         # Schlüssel aus dem Schlüsselbund holen, bevor Anbieter und Konnektoren
@@ -699,6 +719,12 @@ def create_app(
         except Exception as exc:  # noqa: BLE001
             result["episodes"] = {"pending": 0, "counts": {}, "error": str(exc)}
 
+        try:
+            offen = app.state.proposals.counts().get("pending", 0)
+            result["proposals"] = {"pending": offen, "error": None}
+        except Exception as exc:  # noqa: BLE001
+            result["proposals"] = {"pending": 0, "error": str(exc)}
+
         usable = app.state.store.usable()
         result["memory"]["count"] = len(usable)
         result["memory"]["recent"] = [
@@ -914,6 +940,55 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return report.to_dict()
+
+    # -- Verdichtung -------------------------------------------------------
+    #
+    # Die Regel steht in docs/08-gedaechtnisschichten.md: Verdichtung schlägt
+    # vor, sie schreibt nicht. Deshalb gibt es hier keinen Endpunkt, der eine
+    # Aussage direkt aus einer Episode erzeugt — der Weg führt immer über einen
+    # Vorschlag und dessen Annahme.
+
+    @app.post("/consolidate", dependencies=guard)
+    def consolidate(body: ConsolidateIn) -> dict[str, Any]:
+        report = app.state.consolidator.run(
+            limit=body.limit, with_model=body.with_model
+        )
+        return {**report.to_dict(), "summary": report.summary()}
+
+    @app.get("/proposals", dependencies=guard)
+    def list_proposals(
+        kind: ProposalKind | None = None, all: bool = False, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        items = (
+            app.state.proposals.all_proposals(limit)
+            if all else app.state.proposals.pending(kind, limit)
+        )
+        return [p.to_dict() for p in items]
+
+    @app.get("/proposals/counts", dependencies=guard)
+    def proposal_counts() -> dict[str, int]:
+        return app.state.proposals.counts()
+
+    @app.post("/proposals/{proposal_id}/accept", dependencies=guard)
+    def accept_proposal(proposal_id: str) -> dict[str, Any]:
+        try:
+            assertion = app.state.consolidator.accept(proposal_id)
+        except ProposalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {
+            "proposal": app.state.proposals.get(proposal_id).to_dict(),
+            "assertion": assertion.to_dict() if assertion else None,
+        }
+
+    @app.post("/proposals/{proposal_id}/reject", dependencies=guard)
+    def reject_proposal(proposal_id: str) -> dict[str, Any]:
+        try:
+            app.state.consolidator.reject(proposal_id)
+        except ProposalError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return app.state.proposals.get(proposal_id).to_dict()
 
     # -- Werkzeuge ---------------------------------------------------------
     #

@@ -408,3 +408,34 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 
 #wizard-result:not(:empty) { margin-top: 0.9rem; }
 #wizard-result.error { color: var(--danger); }
+
+/* -- Vorschläge -------------------------------------------------------------- */
+
+#consolidate-note.error { color: var(--danger); }
+#proposal-feedback:not(:empty) {
+  padding: 0.5rem 0.7rem;
+  border-left: 2px solid var(--accent);
+  color: var(--fg);
+}
+
+.proposal {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--panel);
+}
+
+.proposal h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+
+/* Die drei Arten dürfen sich unterscheiden lassen, ohne dass die Ansicht
+   unruhig wirkt — ein schmaler Rand reicht, kein Farbfeld. */
+.proposal.assertion { border-left: 3px solid var(--accent); }
+.proposal.confirmation { border-left: 3px solid var(--warn); }
+.proposal.conflict { border-left: 3px solid var(--danger); }
+
+.proposal .statement + .statement { margin-top: 0.2rem; }
+.proposal .evidence { margin: 0.6rem 0; }
+.proposal .row { margin-top: 0.8rem; }
+.proposal .error { color: var(--danger); font-size: 0.8125rem; margin: 0.5rem 0 0; }

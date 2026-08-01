@@ -577,6 +577,7 @@ const EPISODE_KIND = {
   event: "Termin",
   interaction: "Kontakt",
   observation: "Beobachtung",
+  summary: "Rückblick",
 };
 
 const EPISODE_STATE = {
@@ -598,12 +599,18 @@ async function loadEpisodes() {
     api("/episodes/counts"),
   ]);
   setPendingBadge(counts.new);
+  await renderSummaries();
 
   const list = $("#episode-list");
   list.replaceChildren();
-  $("#episode-empty").hidden = episodes.length > 0;
+  $("#episode-empty").hidden = episodes.some((e) => e.kind !== "summary");
 
   for (const e of episodes) {
+    // Rückblicke stehen oben in ihrem eigenen Block. Sie hier ein zweites Mal
+    // zu zeigen, stellte sie neben das Rohmaterial, aus dem sie stammen — und
+    // genau diese Verwechslung soll die Trennung verhindern.
+    if (e.kind === "summary") continue;
+
     const el = document.createElement("li");
     el.className = `episode ${e.state}`;
 
@@ -644,6 +651,91 @@ async function loadEpisodes() {
     }
 
     list.append(el);
+  }
+}
+
+// -- Rückblicke -------------------------------------------------------------
+//
+// Sie stehen über dem Rohmaterial, nicht darin. Ein Rückblick ist die Antwort
+// auf „was war im April", und dafür taugt er nur, wenn man ihn nicht zwischen
+// vierzig Einzelnotizen suchen muss.
+//
+// Jeder trägt einen Knopf zum Zurücknehmen. Ohne den wäre das Zusammenfassen
+// eine Einbahnstraße: Ein Monat, den ein Modell falsch gelesen hat, wäre
+// faktisch ersetzt, und niemand käme mehr an die Übersicht heran.
+
+async function renderSummaries() {
+  const daten = await api("/summaries");
+  const block = $("#summary-block");
+  block.replaceChildren();
+
+  const note = $("#summary-note");
+  note.classList.remove("error");
+
+  if (daten.candidates.length) {
+    const wie_viele = daten.candidates.reduce((n, k) => n + k.count, 0);
+    const zeitraeume = daten.candidates.length === 1
+      ? "einem Zeitraum" : `${daten.candidates.length} Zeiträumen`;
+    note.textContent =
+      `${wie_viele} ältere Episoden in ${zeitraeume} könnten zu Rückblicken ` +
+      "werden. Die Quellen bleiben dabei erhalten.";
+    const knopf = document.createElement("button");
+    knopf.type = "button";
+    knopf.className = "small";
+    knopf.textContent = "Zusammenfassen";
+    knopf.addEventListener("click", async () => {
+      knopf.disabled = true;
+      note.textContent = "Läuft…";
+      try {
+        const report = await api("/summaries/run", {
+          method: "POST", body: JSON.stringify({}),
+        });
+        // Erst neu zeichnen, dann melden. Umgekehrt überschreibt das Neuzeichnen
+        // die Antwort, und ein Lauf ohne Modell sähe aus, als sei nichts
+        // passiert — der Nutzer drückt dann noch dreimal.
+        await loadEpisodes();
+        note.textContent = report.summary;
+        note.classList.toggle("error", Boolean(report.errors.length));
+      } catch (err) {
+        note.textContent = err.message;
+        note.classList.add("error");
+        knopf.disabled = false;
+      }
+    });
+    block.append(knopf);
+  } else {
+    note.textContent = "";
+  }
+
+  for (const s of daten.items) {
+    const el = document.createElement("li");
+    el.className = "episode summary";
+
+    const title = document.createElement("p");
+    title.className = "statement";
+    title.textContent = s.title;
+
+    const meta = document.createElement("p");
+    meta.className = "meta inferred";
+    meta.textContent =
+      `${s.period} · aus ${s.covers.length} Episoden` +
+      (s.provenance.extracted_by ? ` · ${s.provenance.extracted_by}` : "");
+
+    const text = document.createElement("p");
+    text.className = "statement";
+    text.textContent = s.body;
+
+    const zurueck = document.createElement("button");
+    zurueck.className = "ghost small";
+    zurueck.textContent = "Zurücknehmen";
+    zurueck.addEventListener("click", async () => {
+      zurueck.disabled = true;
+      await api(`/summaries/${s.id}`, { method: "DELETE" });
+      await loadEpisodes();
+    });
+
+    el.append(title, meta, text, zurueck);
+    block.append(el);
   }
 }
 

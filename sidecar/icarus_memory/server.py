@@ -30,7 +30,14 @@ from .backup import BackupError, export_model, import_model, list_snapshots, sna
 from . import config
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
-from .scheduler import Scheduler, backup_job, consolidation_job, ingest_job
+from .scheduler import (
+    Scheduler,
+    backup_job,
+    consolidation_job,
+    ingest_job,
+    summary_job,
+)
+from .summaries import MIN_EPISODES, Summarizer
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
 from .ingest import ADAPTERS, ingest_directory
@@ -263,6 +270,13 @@ class ConsolidateIn(BaseModel):
     with_model: bool = True
 
 
+class SummariseIn(BaseModel):
+    # Wenige pro Lauf: Ein erster Durchgang über fünf Jahre Vault schriebe
+    # sonst sechzig Modellanfragen in einem Zug.
+    limit: int = Field(default=3, ge=1, le=24)
+    with_model: bool = True
+
+
 class ToolIn(BaseModel):
     """Argumente eines direkten Werkzeugaufrufs.
 
@@ -317,6 +331,9 @@ def _build_agent(app: FastAPI) -> Agent:
         proposals=app.state.proposals,
         provider=agent.provider,
     )
+    app.state.summarizer = Summarizer(
+        episodes=app.state.episodes, provider=agent.provider
+    )
     _wire_scheduler(app)
     return agent
 
@@ -342,6 +359,7 @@ def _wire_scheduler(app: FastAPI) -> None:
         if plan.sources else None
     )
     scheduler._run_consolidation = consolidation_job(app.state.consolidator)  # noqa: SLF001
+    scheduler._run_summary = summary_job(app.state.summarizer)  # noqa: SLF001
     scheduler._run_backup = backup_job(_data_dir()) if plan.backup else None  # noqa: SLF001
     scheduler.configure(
         enabled=plan.enabled,
@@ -1030,6 +1048,43 @@ def create_app(
         except ProposalError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return app.state.proposals.get(proposal_id).to_dict()
+
+    # -- Zusammenfassung ---------------------------------------------------
+    #
+    # Sie schreibt eine Episode, keine Aussage. Der Unterschied trägt das ganze
+    # Verfahren: Episoden behaupten nichts über die Person, und die Quellen
+    # bleiben liegen, statt ersetzt zu werden.
+
+    @app.get("/summaries", dependencies=guard)
+    def list_summaries() -> dict[str, Any]:
+        """Was zusammengefasst ist — und was es könnte, auch ohne Modell."""
+        return {
+            "items": [e.to_dict() for e in app.state.episodes.summaries()],
+            "candidates": [
+                k.to_dict() for k in app.state.summarizer.candidates()
+                if len(k.episodes) >= MIN_EPISODES
+            ],
+        }
+
+    @app.post("/summaries/run", dependencies=guard)
+    def run_summaries(body: SummariseIn) -> dict[str, Any]:
+        report = app.state.summarizer.run(
+            limit=body.limit, with_model=body.with_model
+        )
+        return {**report.to_dict(), "summary": report.summary()}
+
+    @app.delete("/summaries/{episode_id}", dependencies=guard)
+    def delete_summary(episode_id: str) -> dict[str, Any]:
+        """Nimmt sie zurück und holt die Quellen hervor.
+
+        Ohne diesen Weg wäre das Zusammenfassen eine Einbahnstraße — ein Monat,
+        den ein Modell falsch gelesen hat, wäre faktisch ersetzt.
+        """
+        try:
+            zurueck = app.state.episodes.delete_summary(episode_id)
+        except EpisodeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"restored": zurueck}
 
     # -- Zeitplan ----------------------------------------------------------
     #

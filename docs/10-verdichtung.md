@@ -136,11 +136,6 @@ verbrennen.
 
 ## Was offen ist
 
-**Keine Zusammenfassung von Episoden.** Alte Episoden werden archiviert, nicht
-verdichtet. Für einen Bestand, der Jahre wächst, wird irgendwann eine
-Zusammenfassung nötig — und die ist selbst wieder eine Behauptung und braucht
-denselben Weg über einen Vorschlag.
-
 **Keine Neuprüfung vor der folgenreichen Aktion.** Der Digest liegt jetzt an
 jedem Beleg. Der Vergleich beim Einlösen einer Freigabe fehlt noch.
 
@@ -153,4 +148,5 @@ das ist eine Ebene mehr, als heute nötig ist.
 - [`06-gedaechtnis-kontrakt.md`](06-gedaechtnis-kontrakt.md) — die Regeln des Bestands
 - [`08-gedaechtnisschichten.md`](08-gedaechtnisschichten.md) — Kurzzeit, Mittelfrist, Bestand
 - [`11-zeitplan.md`](11-zeitplan.md) — derselbe Lauf, nur von selbst
+- [`12-zusammenfassung.md`](12-zusammenfassung.md) — wenn aus vielen Episoden eine wird
 - [`05-sicherheit.md`](05-sicherheit.md) — warum fremder Text eingerahmt wird

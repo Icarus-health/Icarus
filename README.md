@@ -112,6 +112,36 @@ different promise than the one this project makes.
 
 Details: [`docs/11-zeitplan.md`](docs/11-zeitplan.md).
 
+## Compression, the way memory actually works
+
+An episode layer only ever grows. After a year there are thousands of entries,
+archived but never read, and nothing was ever learned from them. Human memory
+does the opposite: it keeps a few things verbatim and compresses the rest into
+something you can still tell — *"April was almost entirely project A, stuck on a
+missing sign-off."*
+
+So Icarus writes a monthly retrospective from old episodes. The question that
+decides whether you may let such a thing run at all is whether it can lose
+something. It cannot: **the sources are archived, never deleted**, and one click
+takes the retrospective back and brings them out again. A bad summary is an
+annoyance, not data loss.
+
+Two things are never folded in. **Anything the record draws on** — if an episode
+produced an accepted assertion, it stays whole, because the assertion points back
+at it and that chain is the one thing this project does not negotiate. And
+**anything nobody has looked at yet**, for the same reason archiving skips it.
+
+A summary is also never a source for an assertion. Feed one back into
+consolidation and the model would check its quote against text it wrote itself —
+the evidence check would still pass and would mean nothing. Retrospectives are
+for reading, not for deriving.
+
+Grouped by month, not by topic: finding topics means measuring similarity of
+*meaning*, and what the project has today is word overlap, which would carve a
+month into groups nobody recognises.
+
+Details: [`docs/12-zusammenfassung.md`](docs/12-zusammenfassung.md).
+
 ## One app, not a folder of them
 
 Projects, tasks and notes live in Icarus itself — not in a second tool it syncs
@@ -269,7 +299,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 347 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule
+make test            # 369 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -314,7 +344,7 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-347 tests, no network and no model required — including a test that plays out a
+369 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
@@ -322,7 +352,8 @@ a vault containing an injection payload and asserts the record stayed empty, and
 one that proves no secret ever reaches the settings file, and one that proves
 serving the interface does not expose the data behind it, and three that prove
 consolidation cannot reach the record without a human saying yes, and one that
-runs the whole background schedule and asserts the record came out unchanged.
+runs the whole background schedule and asserts the record came out unchanged,
+and three that prove compressing a month cannot lose anything.
 
 ## Connecting mail and calendar
 
@@ -392,16 +423,18 @@ sidecar/             Python: memory, policy, agent
     backup.py        Snapshots, restore, encrypted export
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     scheduler.py     The process that runs on its own — proposes, never writes
+    summaries.py     Monthly retrospectives; sources archived, never deleted
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             347 tests, no network and no model required
+  tests/             369 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
-                     memory layers, setup, consolidation, schedule, roadmap, ADRs
+                     memory layers, setup, consolidation, schedule,
+                     summaries, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

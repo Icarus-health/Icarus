@@ -24,6 +24,7 @@ ist: **ordnen, nicht behaupten.**
 | Ordner erneut einlesen (der Digest verhindert Doppel) | Eine Aussage in den Bestand schreiben |
 | Regelbasierte Vorschläge erzeugen | Einen Vorschlag annehmen |
 | Mit Modell: Vorschläge aus Episoden ableiten | Zwei Aussagen als strittig markieren |
+| Mit Modell: alte Monate zusammenfassen | Eine Quelle löschen |
 | Eine Sicherung anlegen | Etwas Außenwirksames tun |
 
 Der Zeitplan macht die **Vorschlagsschlange** voller, nicht den Bestand. Das ist
@@ -37,7 +38,8 @@ als die, die dieses Projekt gibt. Er kann es nicht: Die Schritte rufen
 
 ```mermaid
 flowchart LR
-    T["Thread<br/><i>alle n Minuten</i>"] --> A["Aufnahme"] --> V["Verdichtung"] --> S["Sicherung"]
+    T["Thread<br/><i>alle n Minuten</i>"] --> A["Aufnahme"] --> V["Verdichtung"] --> Z["Zusammenfassung"] --> S["Sicherung"]
+    Z -.-> E
     A -.->|"Episoden"| E[("Episoden")]
     V -.->|"Vorschläge"| P[("Schlange")]
     S -.-> B[("Snapshots")]
@@ -46,7 +48,7 @@ flowchart LR
 
     classDef built fill:#dff5e1,stroke:#3b7a4b,color:#14311d
     classDef gate fill:#f7ecd5,stroke:#a8621f,color:#3a2a12
-    class T,A,V,S,E,P,B,R built
+    class T,A,V,Z,S,E,P,B,R built
     class M gate
 ```
 
@@ -113,7 +115,7 @@ Auch der Thread selbst darf nicht sterben. Ein Zeitplan, der nach einem
 Ausrutscher still aufhört, ist schlimmer als einer, der es erneut versucht:
 Beide liefern nichts, aber nur einer sieht so aus, als täte er es.
 
-## Die drei Schritte
+## Die vier Schritte
 
 ### Aufnahme
 
@@ -132,6 +134,15 @@ Ruft `consolidator.run(with_model=…)` — dasselbe Verfahren wie auf Zuruf,
 beschrieben in [`10`](10-verdichtung.md). Ohne Modell entstehen
 Fälligkeitsfragen und Widerspruchskandidaten, mit Modell zusätzlich Vorschläge
 aus Episoden.
+
+### Zusammenfassung
+
+Fasst Monate zusammen, die älter als ein Vierteljahr sind — **nach** der
+Verdichtung, nie davor. Zusammenfassen archiviert die Quellen; liefe es zuerst,
+verschwände Material aus der Verdichtung, das noch nie jemand angesehen hat.
+
+Die Quellen bleiben liegen und lassen sich zurückholen. Details in
+[`12`](12-zusammenfassung.md).
 
 ### Sicherung
 
@@ -167,9 +178,6 @@ neu und startet oder stoppt den Thread.
 
 ## Was offen ist
 
-**Keine Zusammenfassung von Episoden.** Der Zeitplan hält die Schlange in
-Bewegung, aber alte Episoden werden weiterhin archiviert, nicht verdichtet.
-
 **Keine Rückmeldung nach außen.** Wer die App zu hat, erfährt nichts von einem
 fehlgeschlagenen Lauf. Eine Benachrichtigung wäre möglich; sie wäre aber die
 erste Stelle, an der Icarus von sich aus etwas sendet, und das gehört bedacht,
@@ -185,3 +193,4 @@ anderes, aber der nächste Takt verschiebt sich entsprechend.
 - [`08-gedaechtnisschichten.md`](08-gedaechtnisschichten.md) — Episoden, Digest, Wiederholbarkeit
 - [`06-gedaechtnis-kontrakt.md`](06-gedaechtnis-kontrakt.md) — die Regeln des Bestands
 - [`09-einrichtung.md`](09-einrichtung.md) — wo die Einstellungen liegen
+- [`12-zusammenfassung.md`](12-zusammenfassung.md) — was der dritte Schritt tut

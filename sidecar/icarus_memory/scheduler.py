@@ -13,6 +13,7 @@ Genau das, was die Verdichtung ohnehin darf: **ordnen, nicht behaupten.**
 | --- | --- |
 | Ordner erneut einlesen (Digest verhindert Doppel) | Eine Aussage in den Bestand schreiben |
 | Regelbasierte Vorschläge erzeugen | Einen Vorschlag annehmen |
+| Alte Monate zusammenfassen (Quellen bleiben) | Eine Quelle löschen |
 | Sicherung anlegen | Etwas Außenwirksames tun |
 
 Der Zeitplan macht die Vorschlagsschlange voller, nicht den Bestand. Das ist
@@ -121,9 +122,11 @@ class Scheduler:
         run_ingest: Callable[[], list[JobResult]] | None = None,
         run_consolidation: Callable[[bool], JobResult] | None = None,
         run_backup: Callable[[], JobResult] | None = None,
+        run_summary: Callable[[bool], JobResult] | None = None,
     ) -> None:
         self._run_ingest = run_ingest
         self._run_consolidation = run_consolidation
+        self._run_summary = run_summary
         self._run_backup = run_backup
 
         self._enabled = False
@@ -205,6 +208,14 @@ class Scheduler:
             except Exception as exc:  # noqa: BLE001
                 report.jobs.append(
                     JobResult("verdichtung", False, f"{type(exc).__name__}: {exc}")
+                )
+
+        if self._run_summary is not None:
+            try:
+                report.jobs.append(self._run_summary(modell))
+            except Exception as exc:  # noqa: BLE001
+                report.jobs.append(
+                    JobResult("zusammenfassung", False, f"{type(exc).__name__}: {exc}")
                 )
 
         if self._run_backup is not None:
@@ -301,6 +312,21 @@ def consolidation_job(consolidator: Any) -> Callable[[bool], JobResult]:
     def run(with_model: bool) -> JobResult:
         report = consolidator.run(with_model=with_model)
         return JobResult("verdichtung", not report.errors, report.summary())
+
+    return run
+
+
+def summary_job(summarizer: Any) -> Callable[[bool], JobResult]:
+    """Fasst alte Monate zusammen — nach der Verdichtung, nicht davor.
+
+    Die Reihenfolge ist keine Feinheit: Zusammenfassen archiviert die Quellen.
+    Liefe es zuerst, verschwände Material aus der Verdichtung, das noch nie
+    jemand angesehen hat. So sieht die Verdichtung erst alles, und erst danach
+    wird gekürzt.
+    """
+    def run(with_model: bool) -> JobResult:
+        report = summarizer.run(with_model=with_model)
+        return JobResult("zusammenfassung", not report.errors, report.summary())
 
     return run
 

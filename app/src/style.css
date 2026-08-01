@@ -337,6 +337,17 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .episode.archived .statement,
 .episode.ignored .statement { opacity: 0.55; }
 
+/* Ein Rückblick ist das Einzige in dieser Liste, das Icarus selbst geschrieben
+   hat. Er sieht deshalb anders aus als Rohmaterial — wer beides verwechselt,
+   hält eine Deutung für einen Beleg. */
+.episode.summary {
+  border-left: 2px solid var(--accent);
+  padding-left: 0.7rem;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.episode.summary .statement { opacity: 1; }
+
 .episode details { margin-top: 0.4rem; }
 .episode summary {
   cursor: pointer;

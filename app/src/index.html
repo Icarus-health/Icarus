@@ -13,6 +13,7 @@
       <button data-view="projects" class="tab">Projekte</button>
       <button data-view="chat" class="tab">Gespräch</button>
       <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
+      <button data-view="proposals" class="tab">Vorschläge <span id="proposals-badge" class="badge" hidden></span></button>
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
       <button data-view="setup" class="tab">Einrichtung</button>
@@ -141,6 +142,25 @@
 
         <ul id="episode-list"></ul>
         <p id="episode-empty" class="muted">Noch nichts aufgenommen.</p>
+      </section>
+
+      <!-- Vorschläge: das Scharnier zwischen Rohmaterial und Bestand.
+           Verdichtung schlägt vor, sie schreibt nicht — nichts hier gilt als
+           gewusst, bis zugestimmt wird. -->
+      <section id="view-proposals" class="view" hidden>
+        <p class="muted">
+          Verdichtung schlägt vor, sie schreibt nicht. Nichts davon steht im
+          Gedächtnis, bis du zustimmst.
+        </p>
+
+        <div class="row">
+          <button id="consolidate-btn" type="button">Verdichten</button>
+        </div>
+        <p id="consolidate-note" class="muted"></p>
+        <p id="proposal-feedback" class="muted"></p>
+
+        <ul id="proposal-list"></ul>
+        <p id="proposal-empty" class="muted">Nichts offen. Kein Vorschlag wartet auf Zustimmung.</p>
       </section>
 
       <!-- Gedächtnis -->

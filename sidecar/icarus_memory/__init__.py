@@ -18,6 +18,8 @@ abgeschlossenes Projekt nicht „widerrufen":
 * `episodes`  — die Mittelfristschicht: rohe Aufzeichnungen mit Digest, die noch
                 nichts über die Person behaupten
 * `ingest`    — Adapter, die aus Obsidian, Notion oder Textdateien Episoden machen
+* `proposals` — die Vorschlagsschlange: Behauptungen auf Probe, ohne Wirkung
+* `consolidation` — was aus Episoden und Bestand Vorschläge macht
 
 Die Schichtung ist in docs/08-gedaechtnisschichten.md beschrieben. Die Regel für
 den Übergang in den Bestand steht dort in einem Satz: Verdichtung schlägt vor,
@@ -25,8 +27,10 @@ sie schreibt nicht.
 """
 
 from .backends import CogneeBackend, MemoryBackend, SqliteBackend
+from .consolidation import ConsolidationReport, Consolidator
 from .episodes import Episode, EpisodeKind, EpisodeState, EpisodeStore, digest_of
 from .ingest import IngestReport, ingest_directory
+from .proposals import Proposal, ProposalKind, ProposalState, ProposalStore
 from .model import (
     SCHEMA_VERSION,
     Assertion,
@@ -58,6 +62,8 @@ __all__ = [
     "Assertion",
     "CogneeBackend",
     "ConflictError",
+    "ConsolidationReport",
+    "Consolidator",
     "Episode",
     "EpisodeKind",
     "EpisodeState",
@@ -70,6 +76,10 @@ __all__ = [
     "Priority",
     "Project",
     "ProjectStatus",
+    "Proposal",
+    "ProposalKind",
+    "ProposalState",
+    "ProposalStore",
     "Provenance",
     "Redaction",
     "RedactionReason",

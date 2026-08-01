@@ -14,8 +14,9 @@ image, so you can try it without a signed bundle; the app remains the real thing
 > notes, reaches for current information, and nothing leaves your machine without
 > you confirming exactly what goes out. It defends against prompt injection,
 > keeps keys in the OS keychain, and backs itself up. Other assistants on the
-> machine reach the same memory over MCP.
-> Missing: computer-use and memory consolidation.
+> machine reach the same memory over MCP. Consolidation keeps the record honest —
+> by proposing, never by writing.
+> Missing: computer-use and a process that runs on its own.
 
 Detailed documentation is in German under [`docs/`](docs/).
 
@@ -48,6 +49,44 @@ rather than writes.
 Runs are deduplicated by digest, so re-reading the same vault every night only
 picks up what actually changed. That is what makes a process that runs
 continuously possible at all.
+
+## Consolidation proposes, it does not write
+
+This is what makes it a chief of staff rather than a filing cabinet: a system
+that knows more about you after six months than on day one, without having
+accumulated nonsense. It rests on one rule.
+
+> **Consolidation proposes. It does not write.**
+
+The line runs between *ordering* and *claiming*. Ordering is free — marking
+episodes as seen, archiving, finding candidates. Claiming needs a human. Even
+when the model is confident. Especially then.
+
+A system that silently derives facts and stores them has a memory nobody can
+watch, which is the failure this project exists to avoid. It does not go wrong
+because the model is bad; it goes wrong because nobody can trace where anything
+came from.
+
+Three kinds of proposal, and **two need no model at all**:
+
+| | Needs a model | What it asks |
+|---|---|---|
+| `confirmation` | no | "this is past its horizon — does it still hold?" |
+| `conflict` | no | "these two look contradictory — are they?" |
+| `assertion` | yes | "this follows from your notes" |
+
+A memory core whose upkeep requires an API key would not be one. Without a
+provider you still get a record that ages, asks, and surfaces contradictions.
+
+Evidence is mandatory. A model-proposed assertion is discarded before it reaches
+the queue unless its quote appears **verbatim** in the source — a model that
+invents its evidence is exactly what this layer exists to catch. Accepted
+proposals carry the chain into the record: source episode, quote, and which model
+proposed it. Rejected ones stay visible, so "why is this *not* in there" has an
+answer too.
+
+Details, including the honest limits of the conflict finder:
+[`docs/10-verdichtung.md`](docs/10-verdichtung.md).
 
 ## One app, not a folder of them
 
@@ -206,7 +245,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 295 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container
+make test            # 327 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -251,13 +290,14 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-295 tests, no network and no model required — including a test that plays out a
+327 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
 a vault containing an injection payload and asserts the record stayed empty, and
 one that proves no secret ever reaches the settings file, and one that proves
-serving the interface does not expose the data behind it.
+serving the interface does not expose the data behind it, and three that prove
+consolidation cannot reach the record without a human saying yes.
 
 ## Connecting mail and calendar
 
@@ -315,6 +355,8 @@ sidecar/             Python: memory, policy, agent
     workspace.py     Projects and notes — the layer tasks and knowledge hang on
     episodes.py      Mid-term layer: raw records with a digest, claiming nothing
     ingest.py        Adapters: Obsidian, Notion export, text files
+    proposals.py     The review queue — claims on probation, without effect
+    consolidation.py Turns episodes and record into proposals, never into facts
     config.py        Settings that survive a restart; secrets go to the keychain
     crypto.py        One place for encryption — exports and the key file share it
     connectors/      Mail (IMAP/SMTP) and calendar (CalDAV), open protocols
@@ -326,14 +368,14 @@ sidecar/             Python: memory, policy, agent
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             295 tests, no network and no model required
+  tests/             327 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback
 packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
-                     memory layers, setup, roadmap, ADRs
+                     memory layers, setup, consolidation, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

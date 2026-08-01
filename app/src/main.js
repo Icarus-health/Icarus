@@ -74,6 +74,7 @@ const REFRESH = {
   dashboard: loadDashboard,
   projects: loadProjects,
   ingest: loadEpisodes,
+  proposals: loadProposals,
   setup: loadSetup,
   memory: loadMemory,
   audit: loadAudit,
@@ -219,6 +220,7 @@ async function loadDashboard() {
   renderMail(data.mail);
   renderMemoryCard(data.memory);
   setPendingBadge(data.episodes?.pending);
+  setProposalsBadge(data.proposals?.pending);
 }
 
 $("#task-form").addEventListener("submit", async (event) => {
@@ -667,6 +669,216 @@ $("#ingest-form").addEventListener("submit", async (event) => {
     note.textContent =
       bits.join(", ") + ". Nichts davon gilt als gewusst — der Bestand ist unberührt.";
     await loadEpisodes();
+  } catch (err) {
+    note.textContent = err.message;
+    note.classList.add("error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// -- Vorschläge ---------------------------------------------------------------
+//
+// Das Scharnier zwischen Rohmaterial und Bestand (docs/08-gedaechtnisschichten.md).
+// Die eine Regel, die diese Ansicht tragen muss: Verdichtung schlägt vor, sie
+// schreibt nicht. Deshalb gibt es hier zwei Knöpfe statt eines Automatismus,
+// und der Beleg steht immer daneben, nie nur in einem Log.
+
+const PROPOSAL_KIND_LABELS = {
+  assertion: "Neue Aussage über dich",
+  confirmation: "Gilt das noch?",
+  conflict: "Widersprechen sich diese?",
+};
+
+// Dieselben Bezeichnungen wie im Formular unter „Gedächtnis“ — eine Art heißt
+// überall gleich, ob die Aussage schon im Bestand steht oder erst vorgeschlagen wird.
+const ASSERTION_KIND_LABELS = {
+  state: "Zustand",
+  identity: "Identität",
+  preference: "Vorliebe",
+  goal: "Ziel",
+  constraint: "Grenze",
+};
+
+// Je Art eine passende Beschriftung: „Übernehmen“ träfe eine Bestätigung nicht,
+// und bei einem Konflikt wäre es irreführend, weil Zustimmung nichts auflöst.
+const PROPOSAL_ACTIONS = {
+  assertion: { accept: "Übernehmen", reject: "Verwerfen" },
+  confirmation: { accept: "Gilt noch", reject: "Stimmt nicht mehr" },
+  conflict: { accept: "Als strittig markieren", reject: "Ignorieren" },
+};
+
+function setProposalsBadge(count) {
+  const badge = $("#proposals-badge");
+  badge.hidden = !count;
+  badge.textContent = String(count ?? 0);
+}
+
+/** „regel/…“ oder „modell/…“ — wer den Vorschlag gemacht hat, bleibt sichtbar. */
+function proposedByLabel(who) {
+  if (!who) return "Herkunft unbekannt";
+  const [art, rest] = who.split("/", 2);
+  if (art === "modell") return `Modell: ${rest || "?"}`;
+  if (art === "regel") return `Regel: ${rest || "?"}`;
+  return who;
+}
+
+/** Eine Karte je Vorschlag — im Aufbau nah an renderApproval: der Beleg voll
+    sichtbar, zwei Knöpfe, ein Fehler bleibt an der Karte statt zu verschwinden. */
+function renderProposal(p) {
+  const card = document.createElement("li");
+  card.className = `proposal ${p.kind}`;
+
+  const head = document.createElement("h3");
+  head.textContent = PROPOSAL_KIND_LABELS[p.kind] ?? p.kind;
+  card.append(head);
+
+  if (p.kind === "conflict") {
+    // Zwei Zeilen, nicht eine: sonst liest sich der Vorschlag wie eine
+    // einzelne Aussage statt wie ein möglicher Widerspruch zwischen zweien.
+    const [links, rechts] = p.statement.split(/\s*⟷\s*/);
+    const l1 = document.createElement("p");
+    l1.className = "statement";
+    l1.textContent = links ?? p.statement;
+    const l2 = document.createElement("p");
+    l2.className = "statement";
+    l2.textContent = rechts ?? "";
+    card.append(l1, l2);
+
+    const hint = document.createElement("p");
+    hint.className = "meta";
+    hint.textContent =
+      "Zustimmung markiert beide Seiten als strittig — sie löst den Widerspruch nicht auf.";
+    card.append(hint);
+  } else {
+    const statement = document.createElement("p");
+    statement.className = "statement";
+    statement.textContent = p.statement;
+    card.append(statement);
+
+    if (p.kind === "assertion") {
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      const bits = [ASSERTION_KIND_LABELS[p.assertion_kind] ?? p.assertion_kind];
+      if (typeof p.confidence === "number") bits.push(`${Math.round(p.confidence * 100)}% Zuversicht`);
+      meta.textContent = bits.join(" · ");
+      card.append(meta);
+    }
+  }
+
+  const rationale = document.createElement("p");
+  rationale.className = "muted";
+  rationale.textContent = p.rationale;
+  card.append(rationale);
+
+  // Der Beleg ist bei einer neuen Aussage Pflicht: ohne das wörtliche Zitat
+  // ließe sich nicht prüfen, worauf der Vorschlag beruht — die ganze Schicht
+  // wäre sonst eine Blackbox (docs/08-gedaechtnisschichten.md).
+  if (p.evidence?.length) {
+    const details = document.createElement("details");
+    details.className = "evidence";
+    const summary = document.createElement("summary");
+    summary.textContent = p.evidence.length > 1 ? "Belege" : "Beleg";
+    details.append(summary);
+    for (const ev of p.evidence) {
+      const pre = document.createElement("pre");
+      pre.className = "dry-run";
+      pre.textContent = ev.quote || "(kein Zitat hinterlegt)";
+      details.append(pre);
+    }
+    card.append(details);
+  } else if (p.kind === "assertion") {
+    // Sollte nie vorkommen — der Sidecar weist Aussagen ohne Beleg ab. Wenn
+    // doch eine ankommt, muss sie auffallen statt normal auszusehen: Ein
+    // unbelegter Vorschlag, der sich nicht von einem belegten unterscheidet,
+    // hebt genau die Prüfbarkeit auf, für die diese Ansicht existiert.
+    const warnung = document.createElement("p");
+    warnung.className = "meta error";
+    warnung.textContent =
+      "Ohne Beleg. Nicht nachprüfbar — im Zweifel verwerfen.";
+    card.append(warnung);
+  }
+
+  const proposer = document.createElement("p");
+  proposer.className = "meta";
+  proposer.textContent = proposedByLabel(p.proposed_by);
+  card.append(proposer);
+
+  const actions = document.createElement("div");
+  actions.className = "row";
+  const labels = PROPOSAL_ACTIONS[p.kind] ?? { accept: "Übernehmen", reject: "Verwerfen" };
+
+  const accept = document.createElement("button");
+  accept.type = "button";
+  accept.textContent = labels.accept;
+
+  const reject = document.createElement("button");
+  reject.type = "button";
+  reject.className = "ghost";
+  reject.textContent = labels.reject;
+
+  actions.append(accept, reject);
+  card.append(actions);
+
+  const decide = async (endpoint) => {
+    accept.disabled = reject.disabled = true;
+    try {
+      const result = await api(`/proposals/${p.id}/${endpoint}`, { method: "POST" });
+      card.remove();
+      await loadProposalCounts();
+      $("#proposal-empty").hidden = $("#proposal-list").children.length > 0;
+      if (endpoint === "accept" && p.kind === "assertion" && result?.assertion) {
+        $("#proposal-feedback").textContent =
+          `Jetzt im Gedächtnis: „${result.assertion.statement}“`;
+      }
+    } catch (err) {
+      accept.disabled = reject.disabled = false;
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = err.message;
+      card.append(error);
+    }
+  };
+
+  accept.addEventListener("click", () => decide("accept"));
+  reject.addEventListener("click", () => decide("reject"));
+
+  return card;
+}
+
+async function loadProposalCounts() {
+  const counts = await api("/proposals/counts");
+  setProposalsBadge(counts.pending);
+  return counts;
+}
+
+async function loadProposals() {
+  const [proposals] = await Promise.all([api("/proposals?limit=200"), loadProposalCounts()]);
+
+  const list = $("#proposal-list");
+  list.replaceChildren();
+  $("#proposal-empty").hidden = proposals.length > 0;
+  $("#proposal-feedback").textContent = "";
+
+  for (const p of proposals) list.append(renderProposal(p));
+}
+
+$("#consolidate-btn").addEventListener("click", async () => {
+  const button = $("#consolidate-btn");
+  const note = $("#consolidate-note");
+  button.disabled = true;
+  note.classList.remove("error");
+  // Ein Modelllauf über mehrere Episoden kann spürbar dauern — lieber das
+  // sagen, als den Knopf kommentarlos stehen zu lassen.
+  note.textContent = "Läuft — kann bei vielen Episoden etwas dauern…";
+
+  try {
+    const report = await api("/consolidate", {
+      method: "POST",
+      body: JSON.stringify({ limit: 20, with_model: true }),
+    });
+    note.textContent = report.summary;
+    await loadProposals();
   } catch (err) {
     note.textContent = err.message;
     note.classList.add("error");

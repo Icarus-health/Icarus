@@ -599,6 +599,7 @@ async function loadEpisodes() {
     api("/episodes/counts"),
   ]);
   setPendingBadge(counts.new);
+  await fillIngestFolders();
   await renderSummaries();
 
   const list = $("#episode-list");
@@ -737,6 +738,40 @@ async function renderSummaries() {
     el.append(title, meta, text, zurueck);
     block.append(el);
   }
+}
+
+/** Füllt die Ordnerauswahl aus dem, was schon freigegeben ist.
+ *
+ *  Den Pfad hier erneut abzufragen wäre dasselbe zweimal — und beim zweiten Mal
+ *  mit größerer Chance auf einen Tippfehler. Ist nichts freigegeben, sagt das
+ *  Feld das, statt den Nutzer in einen Fehler laufen zu lassen.
+ */
+async function fillIngestFolders() {
+  const { file_roots: roots } = await api("/ingest/adapters");
+  const auswahl = $("#ingest-path");
+  const vorher = auswahl.value;
+  auswahl.replaceChildren();
+
+  const knopf = $("#ingest-form").querySelector("button");
+  if (!roots.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Erst unter Einrichtung einen Ordner freigeben";
+    auswahl.append(opt);
+    auswahl.disabled = true;
+    knopf.disabled = true;
+    return;
+  }
+
+  auswahl.disabled = false;
+  knopf.disabled = false;
+  for (const pfad of roots) {
+    const opt = document.createElement("option");
+    opt.value = pfad;
+    opt.textContent = pfad;
+    auswahl.append(opt);
+  }
+  if (roots.includes(vorher)) auswahl.value = vorher;
 }
 
 $("#ingest-form").addEventListener("submit", async (event) => {
@@ -1130,6 +1165,12 @@ async function loadSetup() {
   panel.append(modell);
 
   // -- Ordner
+  // -- Ordnerzugriff
+  //
+  // Vorher ein Feld mit Doppelpunkt-Syntax. Pfade tippt niemand fehlerfrei, und
+  // die Syntax muss man auch noch wissen. Jetzt: eine Liste, ein Ordner pro
+  // Zeile — und jeder wird beim Hinzufügen geprüft, statt drei Bildschirme
+  // später an einer Fehlermeldung zu scheitern, die den Tippfehler nicht nennt.
   const ordner = document.createElement("section");
   ordner.className = "setup-block";
   const oh = document.createElement("h3");
@@ -1137,25 +1178,84 @@ async function loadSetup() {
   const onote = document.createElement("p");
   onote.className = "muted";
   onote.textContent =
-    "Leer heißt: gar kein Dateizugriff. Es gibt bewusst keinen Vorgabewert — " +
-    "ein voreingestelltes Home-Verzeichnis wäre die Bequemlichkeit, die den " +
-    "Schutz aufhebt.";
-  const oinput = field("Ordner, durch Doppelpunkt getrennt", "setup-roots", {
-    value: s.file_roots.join(":"),
+    "Aus diesen Ordnern darf Icarus lesen — und nur aus diesen. Es gibt " +
+    "bewusst keinen Vorgabewert: ein voreingestelltes Home-Verzeichnis wäre " +
+    "die Bequemlichkeit, die den Schutz aufhebt.";
+
+  const oliste = document.createElement("ul");
+  oliste.className = "roots";
+  const oresult = document.createElement("p");
+  oresult.className = "meta";
+
+  async function speichereOrdner(pfade) {
+    await saveSetup({ file_roots: pfade });
+    await loadSetup();
+  }
+
+  for (const pfad of s.file_roots) {
+    const zeile = document.createElement("li");
+    const name = document.createElement("p");
+    name.className = "statement";
+    name.textContent = pfad;
+
+    const weg = document.createElement("button");
+    weg.className = "ghost small";
+    weg.textContent = "Entfernen";
+    weg.addEventListener("click", async () => {
+      weg.disabled = true;
+      await speichereOrdner(s.file_roots.filter((x) => x !== pfad));
+    });
+
+    zeile.append(name, weg);
+    oliste.append(zeile);
+  }
+  if (!s.file_roots.length) {
+    const leer = document.createElement("p");
+    leer.className = "meta";
+    leer.textContent = "Noch kein Ordner freigegeben — Icarus liest keine Dateien.";
+    oliste.append(leer);
+  }
+
+  const oinput = field("Ordner hinzufügen", "setup-root-neu", {
     placeholder: "/Users/du/Dokumente/Notizen",
   });
-  const osave = document.createElement("button");
-  osave.type = "button";
-  osave.textContent = "Übernehmen";
-  osave.addEventListener("click", async () => {
-    const roots = $("#setup-roots").value.split(":").map((p) => p.trim()).filter(Boolean);
-    await saveSetup({ file_roots: roots });
-    await loadSetup();
+  const oadd = document.createElement("button");
+  oadd.type = "button";
+  oadd.textContent = "Prüfen und freigeben";
+  oadd.addEventListener("click", async () => {
+    const pfad = $("#setup-root-neu").value.trim();
+    if (!pfad) return;
+    oadd.disabled = true;
+    oresult.classList.remove("error");
+    oresult.textContent = "Wird geprüft…";
+    try {
+      // Erst nachsehen, dann freigeben. Ein Ordner, den es nicht gibt, ist
+      // fast immer ein Tippfehler — und den zeigt man am besten sofort.
+      const pruef = await api(`/setup/folder?path=${encodeURIComponent(pfad)}`);
+      if (!pruef.ok) {
+        oresult.textContent = pruef.detail;
+        oresult.classList.add("error");
+        oadd.disabled = false;
+        return;
+      }
+      oresult.textContent = pruef.detail;
+      await speichereOrdner([...s.file_roots, pruef.path]);
+    } catch (err) {
+      oresult.textContent = err.message;
+      oresult.classList.add("error");
+      oadd.disabled = false;
+    }
   });
-  ordner.append(oh, onote, oinput, osave);
+
+  ordner.append(oh, onote, oliste, oinput, oadd, oresult);
   panel.append(ordner);
 
   // -- Mail
+  //
+  // Vorher standen hier sieben Felder, von denen vier Wissen voraussetzten, das
+  // außerhalb der IT niemand hat. Jetzt: Adresse eintippen, Passwort, fertig.
+  // Die Serverangaben stehen darunter eingeklappt, für eigene Domains — das ist
+  // genau die Gruppe, die sie auch kennt.
   const mail = document.createElement("section");
   mail.className = "setup-block";
   const mah = document.createElement("h3");
@@ -1163,10 +1263,132 @@ async function loadSetup() {
   const manote = document.createElement("p");
   manote.className = "muted";
   manote.textContent =
-    "Offene Protokolle statt Anbieter-APIs. Nutze ein App-Passwort, niemals " +
-    "dein Hauptpasswort. Gelesene Nachrichten gelten immer als fremder Inhalt.";
+    "Trag deine Adresse ein — den Rest sucht Icarus. Gelesene Nachrichten " +
+    "gelten immer als fremder Inhalt.";
   const maresult = document.createElement("p");
   maresult.className = "meta";
+
+  // Der Hinweis auf ein nötiges App-Passwort. Er steht hier, bevor jemand das
+  // erste Mal prüft — wer ihn nicht kennt, tippt sonst dreimal sein richtiges
+  // Kennwort ein, bekommt dreimal „Anmeldung fehlgeschlagen“ und hält das
+  // Programm für kaputt.
+  const mahint = document.createElement("p");
+  mahint.className = "meta";
+
+  const adresse = field("Deine E-Mail-Adresse", "mail-user", {
+    value: s.mail.user, placeholder: "du@beispiel.de",
+  });
+
+  const server = document.createElement("details");
+  const serverSummary = document.createElement("summary");
+  serverSummary.textContent = "Serverangaben";
+  server.append(
+    serverSummary,
+    field("IMAP-Server", "mail-imap", { value: s.mail.imap_host, placeholder: "imap.beispiel.de" }),
+    field("IMAP-Port", "mail-imap-port", { value: s.mail.imap_port }),
+    field("SMTP-Server", "mail-smtp", { value: s.mail.smtp_host, placeholder: "leer lassen: nur lesen" }),
+    field("SMTP-Port", "mail-smtp-port", { value: s.mail.smtp_port }),
+    field("Absender", "mail-from", { value: s.mail.sender, hint: "Leer: die Adresse oben." })
+  );
+
+  // Was Icarus selbst eingetragen hat. Nur das darf es auch wieder ändern
+  // oder leeren — was der Nutzer getippt hat, bleibt stehen. Ohne diese
+  // Unterscheidung stünde nach einem Wechsel von @gmx.de auf die eigene Domain
+  // weiter imap.gmx.net da, und das Prüfen scheiterte an einer Angabe, die
+  // niemand eingetragen hat und deshalb auch niemand verdächtigt.
+  let selbstEingetragen = "";
+
+  /** Trägt die Serverangaben eines Anbieters ein und zeigt seinen Hinweis. */
+  function applyMailProvider(p) {
+    mahint.replaceChildren();
+    mahint.classList.remove("error");
+    const jetzt = $("#mail-imap").value.trim();
+    const unseres = !jetzt || jetzt === selbstEingetragen;
+
+    if (!p) {
+      if (!unseres) return;   // Handgetragenes bleibt unangetastet.
+      // Eigene Domain: aufräumen und aufklappen, statt den Nutzer raten zu
+      // lassen, warum das Prüfen scheitert.
+      $("#mail-imap").value = "";
+      $("#mail-smtp").value = "";
+      selbstEingetragen = "";
+      server.open = true;
+      mahint.textContent =
+        "Diesen Anbieter kennt Icarus nicht — trag die Serverangaben unten ein.";
+      return;
+    }
+
+    if (!unseres) {
+      // Der Nutzer hat eigene Angaben gemacht. Der Hinweis darf trotzdem
+      // kommen, die Felder nicht überschrieben werden.
+      selbstEingetragen = "";
+    } else {
+      $("#mail-imap").value = p.imap_host;
+      $("#mail-imap-port").value = p.imap_port;
+      $("#mail-smtp").value = p.smtp_host;
+      $("#mail-smtp-port").value = p.smtp_port;
+      selbstEingetragen = p.imap_host;
+    }
+    if (p.hint) {
+      mahint.append(document.createTextNode(p.hint + " "));
+      if (p.help_url) {
+        const a = document.createElement("a");
+        a.href = p.help_url;
+        a.target = "_blank";
+        a.rel = "noreferrer";
+        a.textContent = "Dort einrichten";
+        mahint.append(a);
+      }
+    }
+  }
+
+  const maprovider = document.createElement("label");
+  maprovider.className = "field";
+  const maproviderText = document.createElement("span");
+  maproviderText.textContent = "Anbieter";
+  const maselect = document.createElement("select");
+  maselect.id = "mail-provider";
+  for (const p of [{ id: "", label: "Aus der Adresse erkennen" },
+                   ...(setupState.mail_providers ?? []),
+                   { id: "eigen", label: "Anderer Anbieter" }]) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.label;
+    maselect.append(opt);
+  }
+  maselect.addEventListener("change", () => {
+    const gewaehlt = (setupState.mail_providers ?? [])
+      .find((p) => p.id === maselect.value);
+    if (maselect.value === "eigen") {
+      server.open = true;
+      mahint.replaceChildren();
+      return;
+    }
+    if (gewaehlt) {
+      // Von Hand gewählt ist eine ausdrückliche Ansage: Dann überschreiben wir
+      // auch, was schon dasteht.
+      selbstEingetragen = $("#mail-imap").value.trim();
+      applyMailProvider(gewaehlt);
+    }
+    else void erkenneAnbieter();
+  });
+  maprovider.append(maproviderText, maselect);
+
+  /** Fragt den Sidecar, welcher Anbieter zu der Adresse gehört. */
+  async function erkenneAnbieter() {
+    const adr = $("#mail-user").value.trim();
+    if (!adr.includes("@")) return;
+    const { provider } = await api(
+      `/setup/mail-provider?address=${encodeURIComponent(adr)}`
+    );
+    if (provider) maselect.value = provider.id;
+    applyMailProvider(provider);
+    // Der Kalender hängt am selben Anbieter. Ihn getrennt zu erfragen wäre
+    // dieselbe Entscheidung zweimal. (Funktionsdeklaration weiter unten im
+    // selben Gültigkeitsbereich — sie ist hier schon sichtbar.)
+    applyCalendarProvider(provider);
+  }
+
   const masave = document.createElement("button");
   masave.type = "button";
   masave.textContent = "Übernehmen";
@@ -1188,21 +1410,20 @@ async function loadSetup() {
   const marow = document.createElement("div");
   marow.className = "row";
   marow.append(masave, testButton("mail", "Posteingang prüfen", maresult));
+
   mail.append(
-    mah, manote,
-    field("IMAP-Server", "mail-imap", { value: s.mail.imap_host, placeholder: "imap.example.com" }),
-    field("IMAP-Port", "mail-imap-port", { value: s.mail.imap_port }),
-    field("SMTP-Server", "mail-smtp", { value: s.mail.smtp_host, placeholder: "leer lassen: nur lesen" }),
-    field("SMTP-Port", "mail-smtp-port", { value: s.mail.smtp_port }),
-    field("Benutzer", "mail-user", { value: s.mail.user, placeholder: "du@example.com" }),
+    mah, manote, adresse,
     field("Passwort", "mail-pass", {
       type: "password",
       placeholder: setupState.secrets.ICARUS_MAIL_PASSWORD ? "hinterlegt" : "App-Passwort",
     }),
-    field("Absender", "mail-from", { value: s.mail.sender, hint: "Leer: der Benutzer oben." }),
-    marow, maresult
+    maprovider, mahint, server, marow, maresult
   );
   panel.append(mail);
+
+  // Erst nach dem Anhängen: `applyMailProvider` greift über `$()` ins Dokument.
+  $("#mail-user").addEventListener("blur", erkenneAnbieter);
+  if (s.mail.user && !s.mail.imap_host) void erkenneAnbieter();
 
   // -- Kalender
   const kal = document.createElement("section");
@@ -1212,7 +1433,8 @@ async function loadSetup() {
   const knote = document.createElement("p");
   knote.className = "muted";
   knote.textContent =
-    "CalDAV. Termine ohne Gäste bleiben lokal; sobald jemand eingeladen wird, " +
+    "Wird aus deinem Mailanbieter oben abgeleitet. Termine ohne Gäste bleiben " +
+    "lokal; sobald jemand eingeladen wird, " +
     "ist es außenwirksam und verlangt die strenge Bestätigung.";
   const kresult = document.createElement("p");
   kresult.className = "meta";
@@ -1240,7 +1462,41 @@ async function loadSetup() {
     }),
     krow, kresult
   );
+  const khint = document.createElement("p");
+  khint.className = "meta";
+  khint.id = "cal-hint";
+  kal.insertBefore(khint, kal.querySelector(".row"));
   panel.append(kal);
+
+  /** Überträgt, was am Mailanbieter über den Kalender bekannt ist. */
+  function applyCalendarProvider(anbieter) {
+    khint.replaceChildren();
+    khint.classList.remove("error");
+    if (!anbieter) return;
+    if (anbieter.caldav_note) {
+      // Ehrlich sagen, dass es nicht geht, statt den Nutzer eine Viertelstunde
+      // suchen zu lassen, bevor er annimmt, das Programm könne es nicht.
+      khint.textContent = anbieter.caldav_note;
+      return;
+    }
+    if (anbieter.caldav_url && !$("#cal-url").value.trim()) {
+      $("#cal-url").value = anbieter.caldav_url;
+      khint.textContent =
+        `Adresse von ${anbieter.label} übernommen. Benutzer und Passwort sind ` +
+        "dieselben wie bei der Mail.";
+    }
+  }
+
+  // Der Anbieter ist schon erkannt — ihn für den Kalender erneut abzufragen
+  // wäre dieselbe Entscheidung ein zweites Mal.
+  const bekannt = (setupState.mail_providers ?? [])
+    .find((x) => x.id === maselect.value);
+  if (bekannt) applyCalendarProvider(bekannt);
+  maselect.addEventListener("change", () => {
+    applyCalendarProvider(
+      (setupState.mail_providers ?? []).find((x) => x.id === maselect.value)
+    );
+  });
 
   await renderSchedule(panel);
 }
@@ -1325,13 +1581,23 @@ async function renderSchedule(panel) {
       "Nur damit entstehen neue Aussagen aus deinen Notizen — und nur damit " +
         "kostet der Lauf etwas beim Anbieter."
     ),
-    checkbox("Bei jedem Lauf sichern", "plan-backup", plan.backup),
-    field("Ordner erneut einlesen", "plan-sources", {
-      value: Object.keys(plan.sources ?? {}).join(":"),
-      placeholder: "durch Doppelpunkt getrennt, leer = keine",
-      hint: "Müssen oben freigegeben sein. Bereits Bekanntes wird nicht doppelt aufgenommen.",
-    })
+    checkbox("Bei jedem Lauf sichern", "plan-backup", plan.backup)
   );
+
+  // Die Ordner ein drittes Mal abzutippen wäre zweimal zu viel. Sie stehen
+  // schon in der Freigabe — hier wird nur angehakt, welche mitlaufen sollen.
+  const quellen = document.createElement("div");
+  const qh = document.createElement("p");
+  qh.className = "meta";
+  const roots = setupState.status.file_roots ?? [];
+  qh.textContent = roots.length
+    ? "Diese Ordner bei jedem Lauf erneut einlesen:"
+    : "Kein Ordner freigegeben — es gibt nichts einzulesen.";
+  quellen.append(qh);
+  for (const [i, pfad] of roots.entries()) {
+    quellen.append(checkbox(pfad, `plan-quelle-${i}`, pfad in (plan.sources ?? {})));
+  }
+  block.append(quellen);
 
   const result = document.createElement("p");
   result.className = "meta";
@@ -1349,8 +1615,8 @@ async function renderSchedule(panel) {
   save.addEventListener("click", async () => {
     save.disabled = true;
     const sources = {};
-    for (const pfad of $("#plan-sources").value.split(":").map((p) => p.trim()).filter(Boolean)) {
-      sources[pfad] = "markdown";
+    for (const [i, pfad] of (setupState.status.file_roots ?? []).entries()) {
+      if ($(`#plan-quelle-${i}`)?.checked) sources[pfad] = "markdown";
     }
     try {
       await api("/schedule", {

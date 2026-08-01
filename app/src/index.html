@@ -129,7 +129,9 @@
         </p>
 
         <form id="ingest-form">
-          <input id="ingest-path" type="text" placeholder="Ordner, z. B. ~/Dokumente/Vault" autocomplete="off" required />
+          <!-- Auswählen statt tippen: Die Ordner sind oben schon freigegeben,
+               ein zweites Mal danach zu fragen wäre einmal zu viel. -->
+          <select id="ingest-path" aria-label="Ordner"></select>
           <select id="ingest-adapter" aria-label="Quelle">
             <option value="obsidian">Obsidian-Vault</option>
             <option value="notion">Notion-Export</option>

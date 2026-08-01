@@ -40,10 +40,12 @@ from .scheduler import (
 from .summaries import MIN_EPISODES, Summarizer
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
 from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
-from .ingest import ADAPTERS, ingest_directory
+from .ingest import ADAPTERS, TEXT_SUFFIXES, ingest_directory
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
 from .policy import Policy, PolicyError
 from .providers import from_env as provider_from_env
+from .providers_mail import catalogue as mail_catalogue
+from .providers_mail import guess as guess_mail_provider
 from .secrets import Keychain, load_into_env
 from .security import SecurityError, file_roots_from_env
 from .store import ConflictError, SelfModelStore
@@ -477,6 +479,9 @@ def create_app(
             "providers": [p for p in config.PROVIDERS],
             "default_models": config.DEFAULT_MODELS,
             "adapters": sorted(ADAPTERS),
+            # Damit niemand einen IMAP-Hostnamen kennen muss. Siehe
+            # providers_mail.py und CLAUDE.md, Grundsatz 1.
+            "mail_providers": mail_catalogue(),
             "status": {
                 "chat": provider is not None,
                 "provider": getattr(provider, "name", None),
@@ -493,6 +498,57 @@ def create_app(
     @app.get("/setup", dependencies=guard)
     def get_setup() -> dict[str, Any]:
         return _setup_state()
+
+    @app.get("/setup/folder", dependencies=guard)
+    def check_folder(path: str) -> dict[str, Any]:
+        """Sieht nach, ob ein Ordner da ist und was darin liegt.
+
+        Ein Pfad wird getippt, und getippte Pfade sind falsch. Heute merkt man
+        das erst, wenn die Aufnahme scheitert — drei Bildschirme später, mit
+        einer Fehlermeldung, die den Tippfehler nicht nennt.
+
+        Deshalb: beim Hinzufügen prüfen. „1.243 Dateien gefunden“ bestätigt
+        obendrein, dass es der *gemeinte* Ordner ist — ein Pfad, der existiert
+        und leer ist, ist meistens der falsche.
+
+        Bewusst **ohne** Freigabeprüfung: Hier wird noch nichts gelesen, nur
+        gezählt. Das ist die Auskunft, die der Nutzer braucht, *bevor* er
+        freigibt.
+        """
+        ziel = Path(path).expanduser()
+        if not ziel.exists():
+            return {"ok": False, "detail": "Diesen Ordner gibt es nicht."}
+        if not ziel.is_dir():
+            return {"ok": False, "detail": "Das ist eine Datei, kein Ordner."}
+        try:
+            dateien = sum(
+                1 for f in ziel.rglob("*")
+                if f.is_file() and f.suffix.lower() in TEXT_SUFFIXES
+            )
+        except PermissionError:
+            return {"ok": False, "detail": "Auf diesen Ordner fehlt der Zugriff."}
+        return {
+            "ok": True,
+            "path": str(ziel),
+            "files": dateien,
+            "detail": (
+                f"{dateien} lesbare Datei{'' if dateien == 1 else 'en'} gefunden."
+                if dateien else
+                "Der Ordner ist da, enthält aber keine lesbaren Textdateien."
+            ),
+        }
+
+    @app.get("/setup/mail-provider", dependencies=guard)
+    def mail_provider_for(address: str) -> dict[str, Any]:
+        """Rät den Anbieter aus der Mailadresse.
+
+        Damit ist der Regelfall **ein** Feld: Adresse eintippen, und Hosts,
+        Ports und der Hinweis auf ein nötiges App-Passwort stehen schon da. Wer
+        eine eigene Domain hat, bekommt `null` — das ist genau die Gruppe, die
+        einen IMAP-Host auch selbst einträgt.
+        """
+        treffer = guess_mail_provider(address)
+        return {"provider": treffer.to_dict() if treffer else None}
 
     @app.put("/setup", dependencies=guard)
     def put_setup(body: SetupIn) -> dict[str, Any]:

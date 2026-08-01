@@ -412,6 +412,15 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 
 .field.check .meta { grid-column: 2; }
 
+/* Freigegebene Ordner: eine Zeile je Ordner, Pfad links, Entfernen rechts.
+   Vorher stand hier ein Feld mit Doppelpunkt-Syntax. */
+.roots { margin: 0 0 0.7rem; }
+.roots li { padding: 0.5rem 0; align-items: center; }
+.roots .statement {
+  font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
 .meta.error { color: var(--danger); }
 
 /* -- Erststart ------------------------------------------------------------- */

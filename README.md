@@ -299,7 +299,7 @@ Requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 369 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries
+make test            # 392 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -344,7 +344,7 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-369 tests, no network and no model required — including a test that plays out a
+392 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
@@ -356,6 +356,22 @@ runs the whole background schedule and asserts the record came out unchanged,
 and three that prove compressing a month cannot lose anything.
 
 ## Connecting mail and calendar
+
+**Type your address; Icarus finds the rest.** A field labelled "IMAP host" asks
+for knowledge nobody outside IT has — and worse, if you don't know it you don't
+know what to search for. So Icarus recognises a dozen providers by the domain
+and fills in hosts and ports itself. Server settings stay available, collapsed,
+for custom domains — which is exactly the group that knows them.
+
+It also says the thing that saves the most grief: Gmail, iCloud, Outlook, Yahoo
+and Fastmail reject your account password and need an app password. Without that
+hint you type your correct password three times, get "login failed" three times,
+and conclude the program is broken. The hint and its link are shown *before* you
+first hit "check".
+
+The calendar is derived from the same provider. Where CalDAV genuinely isn't
+available any more — Google and Microsoft turned off simple authentication —
+Icarus says so instead of leaving you to search for a quarter of an hour.
 
 Open protocols, not vendor APIs — IMAP, SMTP and CalDAV work with iCloud,
 Fastmail, Nextcloud, your own server, and (with an app password) Gmail and
@@ -424,9 +440,10 @@ sidecar/             Python: memory, policy, agent
     currency.py      Per-kind staleness horizons; the age verdict on every fact
     scheduler.py     The process that runs on its own — proposes, never writes
     summaries.py     Monthly retrospectives; sources archived, never deleted
+    providers_mail.py  Known mail providers, so nobody has to know an IMAP host
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             369 tests, no network and no model required
+  tests/             392 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback
@@ -434,7 +451,7 @@ packaging/           PyInstaller spec for the bundled sidecar
 schema/              Self-model JSON Schema and a worked example
 docs/                Architecture, self-model, delegation, security, MCP door,
                      memory layers, setup, consolidation, schedule,
-                     summaries, roadmap, ADRs
+                     summaries, usability, roadmap, ADRs
 .github/workflows/   CI, and a signed + notarised macOS build
 ```
 

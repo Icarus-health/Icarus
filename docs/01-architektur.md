@@ -33,17 +33,25 @@ Beide Wege verwenden denselben Kern:
 - dieselbe Policy,
 - denselben Audit-Vertrag,
 - dieselben Gedächtnisregeln,
-- dieselben HTTP-Endpunkte.
+- dieselben HTTP-Endpunkte,
+- denselben Produktionsstart einschließlich Wartungsschranke.
 
 Der Container ist kein gleichwertiger Ersatz für spätere native Funktionen wie
 Computer-Use oder Betriebssystemintegration.
+
+Der aktuell geprüfte native macOS-Build unterstützt **Apple Silicon**. Tauri-
+Hauptprogramm und PyInstaller-Sidecar werden als `aarch64` gebaut und vor dem
+Veröffentlichen auf dieselbe Architektur geprüft. Intel- beziehungsweise echte
+Universal-Unterstützung benötigt einen separaten x86_64-Build und steht in
+Issue #18; ein ARM-Sidecar wird nicht als Universal-App ausgegeben.
 
 ## Aufbau
 
 ```mermaid
 flowchart LR
     U[Person] --> UI[Icarus-Oberfläche]
-    UI --> API[Lokaler Sidecar]
+    UI --> RUNTIME[Produktionslauf und Wartungsschranke]
+    RUNTIME --> API[Lokaler Sidecar]
     API --> ORCH[Agent und Orchestrierung]
 
     ORCH --> STORE[(Verbindlicher SQLite-Bestand)]
@@ -59,6 +67,11 @@ flowchart LR
 
 Der Sidecar bindet standardmäßig nur an Loopback. Ein zufälliger Port und ein
 Token pro App-Start schützen gegen andere lokale Prozesse.
+
+Der installierte Konsolenbefehl, der Container und die eingefrorene macOS-Binary
+starten über `icarus_memory.runtime`. `server.py` bleibt die fachliche HTTP-
+Anwendung; der Runtime-Rahmen ergänzt ausschließlich betriebliche Garantien und
+erzeugt keinen zweiten Daten- oder Policy-Pfad.
 
 ## Datenebenen
 
@@ -133,7 +146,7 @@ Die unverhandelbare Regel lautet:
 
 > **Verdichtung schlägt vor. Sie schreibt nicht.**
 
-## Sicherung und Portabilität
+## Sicherung, Wiederherstellung und Wartungsmodus
 
 Ein reales Icarus-Backup umfasst inzwischen:
 
@@ -144,6 +157,21 @@ Ein reales Icarus-Backup umfasst inzwischen:
 
 Vor einer Wiederherstellung werden Archiv, Prüfsummen und SQLite-Integrität
 vollständig geprüft. Der vorhandene Stand wird vorher beiseitegelegt.
+
+Da die sechs Datenbanken einen gemeinsamen Produktzustand bilden, laufen
+vollständige Sicherung und Restore exklusiv gegenüber normalen API-Anfragen:
+
+1. Bereits laufende Anfragen dürfen geordnet fertig werden.
+2. Sobald Wartung wartet oder läuft, werden neue Nutzdatenanfragen mit HTTP 503
+   und `Retry-After` abgewiesen.
+3. `/health` bleibt erreichbar und kennzeichnet den Wartungszustand im Header.
+4. Nach Abschluss wird der normale Betrieb automatisch wieder geöffnet.
+5. Der automatische Backup-Job des Schedulers verwendet dieselbe Schranke.
+
+Damit kann keine Aufgabe oder Einstellung zwischen zwei Datenbank-Snapshots in
+einen scheinbar vollständigen Mischstand rutschen. Die Garantie gilt innerhalb
+eines Sidecar-Prozesses. Mehrere Prozesse auf demselben Datenverzeichnis bleiben
+unzulässig und benötigen künftig einen separaten Instanz-Lock.
 
 Geheimnisse aus dem Betriebssystem-Schlüsselbund sind nicht exportierbar und
 müssen auf einem neuen Gerät erneut eingetragen werden.
@@ -156,8 +184,9 @@ müssen auf einem neuen Gerät erneut eingetragen werden.
 - Connector-Manifeste für differenzierte reale Folgen,
 - Browser- und Computersteuerung,
 - sichere Identität und Synchronisation über mehrere Geräte,
-- Consumer-Navigation und onboardingbasierter erster Nutzen,
-- Praxistests gegen reale Mail-, Kalender- und Betriebssystemumgebungen.
+- priorisierende Consumer-Tagesansicht, Terminbriefings und validiertes Onboarding,
+- Intel-/Universal-Build für macOS,
+- Praxistests gegen reale Mail- und Kalenderumgebungen.
 
 Diese Punkte stehen in der Roadmap. Sie dürfen den heutigen Kern nicht umgehen
 oder eine zweite Speicher-, Policy- oder Identitätsschicht erzeugen.

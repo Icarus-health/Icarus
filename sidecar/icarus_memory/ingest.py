@@ -51,6 +51,10 @@ TEXT_SUFFIXES = {".md", ".markdown", ".txt", ".org", ".rst", ".csv"}
 #: Bestand nicht fluten; die Grenze ist großzügig für echte Notizen.
 MAX_FILE_BYTES = 512 * 1024
 
+#: Wie viele Begründungen für Übersprungenes mitgeführt werden. Genug, um das
+#: Muster zu erkennen, wenig genug, um lesbar zu bleiben.
+MAX_SKIP_REASONS = 20
+
 #: Ordner, die nie gelesen werden. `.obsidian` enthält die Konfiguration des
 #: Programms, nicht die Notizen des Menschen.
 SKIP_DIRS = {
@@ -82,6 +86,15 @@ class IngestReport:
     recorded: int = 0
     duplicates: int = 0
     skipped: int = 0
+
+    skipped_reasons: list[str] = field(default_factory=list)
+    """Warum etwas übersprungen wurde — für den Nutzer, nicht fürs Protokoll.
+
+    Ohne diese Liste sieht jemand „5 übersprungen" und erfährt nie, welche
+    Dateien fehlen. Wer seinen Vault aufnimmt, glaubt danach, alles sei drin.
+    Genau das stille Vergessen, das dieses Projekt an anderer Stelle verbietet.
+    """
+
     errors: list[str] = field(default_factory=list)
     episode_ids: list[str] = field(default_factory=list)
 
@@ -96,8 +109,12 @@ class IngestReport:
             "duplicates": self.duplicates,
             "skipped": self.skipped,
             "seen": self.seen,
+            "skipped_reasons": self.skipped_reasons,
             "errors": self.errors,
-            "episode_ids": self.episode_ids,
+            # `episode_ids` bewusst **nicht** hier: Die Aufnahme eines Vaults
+            # liefert sonst Tausende Kennungen, die niemand benutzt. Wer sie
+            # braucht, bekommt sie im Bericht selbst — die HTTP-Antwort ist
+            # dafür der falsche Ort.
         }
 
     def summary(self) -> str:
@@ -423,6 +440,11 @@ def ingest_directory(
             break
         if isinstance(item, str):
             report.skipped += 1
+            # Gedeckelt: Bei einem Vault mit tausend Bildern wäre die volle
+            # Liste selbst wieder unlesbar. Die ersten paar sagen, *woran* es
+            # liegt; die Zahl daneben sagt, wie oft.
+            if len(report.skipped_reasons) < MAX_SKIP_REASONS:
+                report.skipped_reasons.append(item)
             continue
 
         try:

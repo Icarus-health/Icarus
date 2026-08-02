@@ -360,3 +360,37 @@ def test_unbekanntes_werkzeug_bricht_nicht_ab(store, audit) -> None:
         Reply(text="Ging nicht."),
     )
     assert agent.send("Tu was.").reply == "Ging nicht."
+
+
+def test_ein_falsch_benannter_parameter_wird_erklaert() -> None:
+    """Der Nutzer sah bisher `build_registry.<locals>.remember() missing 1
+    required positional argument: 'statement'` im Gespräch.
+
+    Ein interner Funktionsname für ihn, und für das Modell kein Signal, womit
+    es den Aufruf reparieren könnte. Kleine Modelle benennen Parameter
+    regelmäßig falsch — sie sollen erfahren, wie die Felder heißen.
+    """
+    from icarus_memory.agent import _fehlende_pflichtfelder
+    from icarus_memory.policy import ActionClass
+    from icarus_memory.tools import Tool
+
+    werkzeug = Tool(
+        name="merken",
+        description="x",
+        parameters={
+            "type": "object",
+            "properties": {"statement": {"type": "string"}, "kind": {"type": "string"}},
+            "required": ["statement"],
+        },
+        action_class=ActionClass.WRITE_LOCAL,
+        run=lambda **_: "ok",
+        dry_run=lambda _: "x",
+    )
+
+    # Deutsch benannt statt englisch — der häufige Fall.
+    assert _fehlende_pflichtfelder(werkzeug, {"aussage": "x"}) == ["statement"]
+    # Richtig benannt: nichts fehlt.
+    assert _fehlende_pflichtfelder(werkzeug, {"statement": "x"}) == []
+    # Ein Werkzeug ohne Pflichtfelder verlangt nichts.
+    werkzeug.parameters = {"type": "object", "properties": {}}
+    assert _fehlende_pflichtfelder(werkzeug, {}) == []

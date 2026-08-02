@@ -986,8 +986,33 @@ $("#ingest-form").addEventListener("submit", async (event) => {
     const bits = [`${report.recorded} aufgenommen`];
     if (report.duplicates) bits.push(`${report.duplicates} schon bekannt`);
     if (report.skipped) bits.push(`${report.skipped} übersprungen`);
-    note.textContent =
-      bits.join(", ") + ". Nichts davon gilt als gewusst — der Bestand ist unberührt.";
+    note.replaceChildren(document.createTextNode(
+      bits.join(", ") + ". Nichts davon gilt als gewusst — der Bestand ist unberührt."
+    ));
+
+    // Warum etwas übersprungen wurde, gehört sichtbar hierher. „5
+    // übersprungen" allein lässt jemanden glauben, sein Vault sei vollständig
+    // drin — und die fehlenden fünf sind womöglich die langen, wichtigen.
+    if (report.skipped_reasons?.length) {
+      const warum = document.createElement("details");
+      const kopf = document.createElement("summary");
+      kopf.textContent = "Was übersprungen wurde";
+      const liste = document.createElement("ul");
+      for (const grund of report.skipped_reasons) {
+        const zeile = document.createElement("li");
+        zeile.className = "meta";
+        zeile.textContent = grund;
+        liste.append(zeile);
+      }
+      if (report.skipped > report.skipped_reasons.length) {
+        liste.append(meldung(
+          `… und ${report.skipped - report.skipped_reasons.length} weitere.`
+        ));
+      }
+      warum.append(kopf, liste);
+      note.append(warum);
+    }
+
     await loadEpisodes();
   } catch (err) {
     note.textContent = err.message;

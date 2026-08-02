@@ -401,6 +401,14 @@ def _restore_installation(snapshot_path: Path, data_dir: Path) -> None:
             elif target.is_file():
                 target.unlink()
 
+        # Die Datei allein reicht in einem laufenden Prozess nicht. Der Server
+        # hält dieselbe Settings-Instanz und baut direkt nach `restore()` Agent,
+        # Mail und Kalender neu. Deshalb muss diese Instanz vorher auf den
+        # wiederhergestellten Stand gebracht werden.
+        from . import config
+
+        config.reload_registered(data_dir)
+
 
 # -- Export ----------------------------------------------------------------
 

@@ -48,6 +48,14 @@ SERVICE = "health.icarus.desktop"
 SECRETS_FILE = "schluessel.icarus"
 SECRETS_MAGIC = "icarus-secrets-v1"
 PASSPHRASE_ENV = "ICARUS_SECRETS_PASSPHRASE"
+BACKEND_ENV = "ICARUS_KEYCHAIN_BACKEND"
+"""Explizite Auswahl für isolierte Builds und Container.
+
+Erlaubt sind nur ``none`` und ``file``. Betriebssystem-Backends lassen sich
+nicht erzwingen: Ein Build darf nicht behaupten, ein Schlüsselbund sei da, wenn
+das zugehörige Systemwerkzeug fehlt. Ohne diese Variable bleibt die automatische
+Auswahl unverändert.
+"""
 
 #: Schlüssel, die aus dem Schlüsselbund kommen dürfen.
 KNOWN = (
@@ -98,7 +106,17 @@ class Keychain:
         Benutzerkonto gebunden und braucht keine Passphrase, die irgendwo
         stehen müsste. Die verschlüsselte Datei kommt erst danach — sie ist die
         Antwort auf „es gibt keinen", nicht die bessere Lösung.
+
+        CI und reproduzierbare Builds dürfen den System-Schlüsselbund explizit
+        ausschalten. Sonst teilen Tests auf macOS unbeabsichtigt den echten
+        Schlüsselbund des Runner-Kontos und beeinflussen einander.
         """
+        forced = os.environ.get(BACKEND_ENV, "").strip().casefold()
+        if forced == "none":
+            return "none"
+        if forced == "file":
+            return "file" if os.environ.get(PASSPHRASE_ENV) else "none"
+
         system = platform.system()
         if system == "Darwin" and shutil.which("security"):
             return "macos"
@@ -297,6 +315,7 @@ def migrate_env_file(path: Path, keychain: Keychain | None = None) -> list[str]:
 
 
 __all__ = [
+    "BACKEND_ENV",
     "KNOWN",
     "PASSPHRASE_ENV",
     "SECRETS_FILE",

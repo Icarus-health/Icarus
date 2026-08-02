@@ -5,12 +5,13 @@ starten. Das Modul verwendet bewusst relative Paketimporte; als einzelnes
 Skript fehlt ihm jedoch der Paketkontext und die Binary bricht vor dem Start
 mit ``attempted relative import with no known parent package`` ab.
 
-Dieser Launcher bleibt außerhalb des Pakets, importiert dessen öffentliche
-Startfunktion absolut und bildet damit denselben Weg ab wie der installierte
-Konsolenbefehl ``icarus-sidecar``.
+Dieser Launcher bleibt außerhalb des Pakets, importiert den Produktionsstart
+absolut und bildet damit denselben Weg ab wie der installierte Konsolenbefehl
+``icarus-sidecar``. Dazu gehört insbesondere die Wartungsschranke für
+vollständige Sicherung und Wiederherstellung.
 """
 
-from icarus_memory.server import main
+from icarus_memory.runtime import main
 
 
 if __name__ == "__main__":

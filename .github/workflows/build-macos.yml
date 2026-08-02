@@ -110,7 +110,18 @@ jobs:
           SIDECAR_PID=$!
 
           cleanup() {
+            if ! kill -0 "$SIDECAR_PID" 2>/dev/null; then
+              wait "$SIDECAR_PID" 2>/dev/null || true
+              return
+            fi
             kill "$SIDECAR_PID" 2>/dev/null || true
+            for i in $(seq 1 20); do
+              kill -0 "$SIDECAR_PID" 2>/dev/null || break
+              sleep 0.25
+            done
+            if kill -0 "$SIDECAR_PID" 2>/dev/null; then
+              kill -9 "$SIDECAR_PID" 2>/dev/null || true
+            fi
             wait "$SIDECAR_PID" 2>/dev/null || true
           }
           trap cleanup EXIT

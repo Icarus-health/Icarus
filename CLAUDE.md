@@ -1,5 +1,9 @@
 # Für Claude Code in diesem Projekt
 
+## Vor jeder Arbeit
+
+Lies zuerst [`docs/00-produktvision.md`](docs/00-produktvision.md). Das Dokument beschreibt den Zielzustand von Icarus, die Produktgrenzen und die Prioritäten, an denen jede neue Funktion und Architekturentscheidung zu messen ist. Technische Detaildokumente erklären die heutige Umsetzung; die Produktvision erklärt, worauf sie langfristig einzahlen muss.
+
 ## Der oberste Grundsatz
 
 > **Immer die für den Nutzer einfachste Lösung.**

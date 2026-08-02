@@ -159,7 +159,10 @@ def _mail_sink(app: FastAPI):
                 "Kein Mailzugang eingerichtet. Die Freigabe war erteilt, "
                 "aber es gibt keinen Kanal (ICARUS_SMTP_HOST fehlt)."
             )
-        return mail.send(payload["to"], payload["subject"], payload["body"])
+        return mail.send(
+            payload["to"], payload["subject"], payload["body"],
+            in_reply_to=payload.get("in_reply_to", "") or "",
+        )
 
     return send
 
@@ -418,7 +421,9 @@ def create_app(
         # Und dann die Einstellungen des Nutzers. Gesetzte Umgebungsvariablen
         # gewinnen, siehe config.apply_to_env.
         app.state.settings = config.load(_data_dir())
-        config.apply_to_env(app.state.settings)
+        # Merken, welche Namen *aus der Datei* kamen. Nur die dürfen beim
+        # Speichern wieder verschwinden — siehe put_setup.
+        app.state.env_from_settings = config.apply_to_env(app.state.settings)
 
         _build_agent(app)
     else:
@@ -615,16 +620,18 @@ def create_app(
 
         config.save(_data_dir(), settings)
 
-        # Die Umgebung neu setzen. Die aus der Datei stammenden Werte müssen
-        # weichen, sonst gewinnt für immer die erste Einstellung.
-        for name in (
-            "ICARUS_PROVIDER", "ICARUS_MODEL", "ICARUS_BASE_URL", ROOTS_ENV,
-            "ICARUS_IMAP_HOST", "ICARUS_IMAP_PORT", "ICARUS_SMTP_HOST",
-            "ICARUS_SMTP_PORT", "ICARUS_MAIL_USER", "ICARUS_MAIL_FROM",
-            "ICARUS_CALDAV_URL", "ICARUS_CALDAV_USER",
-        ):
+        # Die Umgebung neu setzen. **Nur** die Namen, die beim Start aus der
+        # Datei kamen — sonst gewinnt für immer die erste Einstellung.
+        #
+        # Nicht alle: Wer `ICARUS_IMAP_HOST=…` vor den Start setzt, hat damit
+        # ausdrücklich etwas anderes gemeint als das, was in der Datei steht.
+        # Diese Werte hier mit wegzuräumen hieß, dass sein Posteingang beim
+        # ersten Speichern verschwindet — und zwar still. Genau das ist beim
+        # Prüfen passiert: Der Einrichtungsassistent hat beim Überspringen den
+        # per Umgebung eingerichteten Mailzugang gelöscht.
+        for name in getattr(app.state, "env_from_settings", []):
             os.environ.pop(name, None)
-        config.apply_to_env(settings)
+        app.state.env_from_settings = config.apply_to_env(settings)
         _build_agent(app)
 
         return _setup_state()
@@ -702,6 +709,88 @@ def create_app(
             ).to_dict()
         except PolicyError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # -- Posteingang -------------------------------------------------------
+    #
+    # Mail im Gesprächsfenster: lesen, antworten, ins Gedächtnis nehmen.
+    #
+    # Die Sicherheitsregel bleibt unangetastet und ist hier die wichtigste im
+    # ganzen System: **Jeder kann dir eine Mail schreiben.** Der Inhalt ist
+    # ausnahmslos fremd, wird nie zur Anweisung, und der Versand geht durch
+    # dieselbe Freigabe wie jede andere außenwirksame Handlung — der Knopf hier
+    # ist kein zweiter Weg daran vorbei, sondern derselbe Weg, kürzer.
+
+    def _mail_or_404():
+        mail = getattr(app.state, "mail", None)
+        if mail is None:
+            raise HTTPException(
+                status_code=409,
+                detail="Kein Mailzugang eingerichtet. Unter „Einrichtung“ deine "
+                       "Adresse eintragen — den Rest sucht Icarus.",
+            )
+        return mail
+
+    @app.get("/mail", dependencies=guard)
+    def mail_inbox(limit: int = 15, unread_only: bool = False) -> dict[str, Any]:
+        mail = _mail_or_404()
+        try:
+            nachrichten = mail.inbox(limit=limit, unread_only=unread_only)
+        except Exception as exc:  # noqa: BLE001 - Netzwerk, Anmeldung, Serverlaune
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Die Liste trägt keinen Volltext. Zwanzig ganze Mails sind ein
+        # Vielfaches der Datenmenge, und sie stehen ohnehin zusammengefaltet
+        # da. Hier abgeschnitten und nicht im Konnektor: So hängt die Zusage
+        # am Endpunkt, statt daran, dass `inbox()` den Text zufällig nicht füllt.
+        return {
+            "items": [{**m.to_dict(), "body": ""} for m in nachrichten],
+            "unread": sum(1 for m in nachrichten if m.unread),
+            # Aus der Umgebung, nicht aus der Einstellungsdatei: Daraus liest
+            # `MailConfig.from_env`, und nur das ist die tatsächlich wirksame
+            # Konfiguration. Wer SMTP über die Umgebung setzt, bekam sonst ein
+            # graues Antwortfeld mit „Kein SMTP eingerichtet“ — obwohl es
+            # eingerichtet war.
+            "can_send": bool(os.environ.get("ICARUS_SMTP_HOST")),
+        }
+
+    @app.get("/mail/{uid}", dependencies=guard)
+    def mail_message(uid: str) -> dict[str, Any]:
+        try:
+            return _mail_or_404().message(uid).to_dict()
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @app.post("/mail/{uid}/remember", dependencies=guard, status_code=201)
+    def remember_mail(uid: str) -> dict[str, Any]:
+        """Nimmt eine Nachricht als Episode auf — nicht in den Bestand.
+
+        Der Unterschied ist der ganze Punkt. Eine Episode hält fest, **dass
+        etwas vorlag**; sie behauptet nichts über die Person. Ob aus einer Mail
+        eine dauerhafte Aussage folgt, entscheidet die Verdichtung, und die legt
+        vor, statt zu schreiben.
+
+        Deshalb ist dieser Knopf unbedenklich, obwohl der Inhalt von einem
+        Fremden stammt: Er füllt Rohmaterial, keine Fakten.
+
+        Bewusst **auf Zuruf** und nicht automatisch. Ein Posteingang, der
+        vollständig in die Episoden liefe, brächte Werbung und Newsletter mit —
+        und jedes Stück davon ginge später als Material ins Modell.
+        """
+        nachricht = _mail_or_404().message(uid)
+        episode, neu = app.state.episodes.record(
+            EpisodeKind.MESSAGE,
+            nachricht.subject or "(kein Betreff)",
+            nachricht.body or nachricht.preview,
+            Provenance(
+                source_type=SourceType.EMAIL,
+                source_ref=nachricht.message_id or f"imap:{uid}",
+                captured_at=nachricht.date,
+            ),
+            occurred_at=nachricht.date,
+            participants=[nachricht.sender] if nachricht.sender else [],
+        )
+        return {"episode": episode.to_dict(), "new": neu}
 
     # -- Audit -------------------------------------------------------------
 

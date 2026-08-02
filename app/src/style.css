@@ -139,6 +139,27 @@ button.small { padding: 0.3rem 0.55rem; font-size: 0.8125rem; }
   white-space: pre-wrap;
 }
 
+/* -- Posteingang im Gespräch ---------------------------------------------- */
+
+#mailbox { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+#mailbox summary { display: flex; align-items: center; gap: 0.5rem; }
+#mailbox-list li { padding: 0.6rem 0; }
+
+/* Die geöffnete Nachricht über die volle Breite. `li` ist ein zweispaltiges
+   Raster; ohne das landet der Wortlaut in der schmalen rechten Spalte. */
+#mailbox-list details { grid-column: 1 / -1; margin: 0.4rem 0 0; }
+#mailbox-list details .row { width: auto; }
+
+/* Das Antwortfeld gehört zur Nachricht, nicht daneben. */
+textarea.reply {
+  display: block;
+  width: 100%;
+  margin: 0.6rem 0 0.5rem;
+  resize: vertical;
+}
+
+textarea.reply:disabled { opacity: 0.6; }
+
 /* -- Freigaben ----------------------------------------------------------- */
 
 .approval {

@@ -319,3 +319,34 @@ def test_einstellungsdatei_enthaelt_nie_ein_geheimnis(client: TestClient, tmp_pa
     assert "auch-geheim" not in inhalt
     # Das Unkritische steht drin, sonst wäre die Datei nutzlos.
     assert "imap.example.com" in inhalt
+
+
+def test_umgebungswerte_ueberleben_das_speichern(client: TestClient, monkeypatch) -> None:
+    """Die Falle, die beim Prüfen im Browser auffiel.
+
+    Wer `ICARUS_IMAP_HOST=…` vor den Start setzt, hat ausdrücklich etwas
+    anderes gemeint als das, was in der Datei steht. Bis eben räumte jedes
+    Speichern **alle** bekannten Namen weg — und damit auch die. Der
+    Einrichtungsassistent löschte so beim Überspringen den per Umgebung
+    eingerichteten Mailzugang, still und ohne Meldung.
+    """
+    monkeypatch.setenv("ICARUS_IMAP_HOST", "imap.aus-der-umgebung.de")
+    monkeypatch.setenv("ICARUS_PROVIDER", "ollama")
+
+    # Irgendetwas ganz anderes speichern — hier passiert der Schaden.
+    client.put("/setup", json={"onboarded": True})
+
+    assert os.environ["ICARUS_IMAP_HOST"] == "imap.aus-der-umgebung.de"
+    assert os.environ["ICARUS_PROVIDER"] == "ollama"
+
+
+def test_die_oberflaeche_kann_ihre_eigenen_werte_weiter_aendern(
+    client: TestClient,
+) -> None:
+    """Die Gegenprobe: Ohne Umgebungsvorgabe muss ein zweites Speichern den
+    ersten Wert ersetzen — sonst gälte für immer die erste Eingabe."""
+    client.put("/setup", json={"mail": {"imap_host": "imap.erst.de", "user": "a@b.de"}})
+    assert os.environ["ICARUS_IMAP_HOST"] == "imap.erst.de"
+
+    client.put("/setup", json={"mail": {"imap_host": "imap.dann.de", "user": "a@b.de"}})
+    assert os.environ["ICARUS_IMAP_HOST"] == "imap.dann.de"

@@ -78,8 +78,15 @@ const REFRESH = {
   setup: loadSetup,
   memory: loadMemory,
   audit: loadAudit,
-  chat: loadApprovals,
+  chat: loadChat,
 };
+
+/** Gespräch: Freigaben und Posteingang. Der Posteingang darf dabei nicht das
+ *  Gespräch mitreißen, wenn kein Mailkonto eingerichtet ist. */
+async function loadChat() {
+  await loadApprovals();
+  await loadMailbox().catch(() => {});
+}
 
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -537,6 +544,192 @@ function renderApproval(approval) {
 async function loadApprovals() {
   const pending = await api("/approvals");
   $("#approvals").replaceChildren(...pending.map(renderApproval));
+}
+
+// -- Posteingang ------------------------------------------------------------
+//
+// Mail dort, wo man ohnehin schreibt. Die Sicherheitsregel bleibt unangetastet
+// und ist hier die wichtigste im ganzen System: **Jeder kann dir eine Mail
+// schreiben.** Der Text wird deshalb sichtbar als fremd gerahmt, und der
+// Sendeknopf ist kein zweiter Weg an der Freigabe vorbei — er ist derselbe Weg,
+// nur kürzer: Antwort tippen, senden, und die Freigabe mit vollem Trockenlauf
+// steht direkt darüber.
+
+let mailboxState = { items: [], can_send: false };
+
+async function loadMailbox() {
+  const note = $("#mailbox-note");
+  const liste = $("#mailbox-list");
+  note.classList.remove("error");
+
+  try {
+    mailboxState = await api("/mail");
+  } catch (err) {
+    liste.replaceChildren();
+    note.textContent = err.message;
+    note.classList.add("error");
+    setMailboxBadge(0);
+    return;
+  }
+
+  setMailboxBadge(mailboxState.unread);
+  note.textContent = mailboxState.items.length
+    ? (mailboxState.can_send ? "" : "Kein SMTP eingerichtet — Lesen geht, Senden nicht.")
+    : "Nichts im Posteingang.";
+
+  liste.replaceChildren(...mailboxState.items.map(renderMailItem));
+}
+
+function setMailboxBadge(count) {
+  const badge = $("#mailbox-badge");
+  badge.hidden = !count;
+  badge.textContent = `${count ?? 0} ungelesen`;
+}
+
+function renderMailItem(m) {
+  const el = document.createElement("li");
+  if (m.unread) el.classList.add("unread");
+
+  const kopf = document.createElement("p");
+  kopf.className = "statement";
+  kopf.textContent = m.subject || "(kein Betreff)";
+
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  const wann = m.date
+    ? new Date(m.date).toLocaleString("de-DE",
+        { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : "";
+  meta.textContent = [m.from, wann].filter(Boolean).join(" · ");
+
+  const auf = document.createElement("details");
+  const zeile = document.createElement("summary");
+  zeile.textContent = "Öffnen";
+  auf.append(zeile);
+
+  const inhalt = document.createElement("div");
+  auf.append(inhalt);
+  let geladen = false;
+  auf.addEventListener("toggle", async () => {
+    if (!auf.open || geladen) return;
+    geladen = true;
+    inhalt.replaceChildren(meldung("Wird geladen…"));
+    try {
+      inhalt.replaceChildren(...(await mailBody(m)));
+    } catch (err) {
+      geladen = false;   // Ein Netzwerkfehler darf den Knopf nicht verbrauchen.
+      inhalt.replaceChildren(meldung(err.message, true));
+    }
+  });
+
+  el.append(kopf, meta, auf);
+  return el;
+}
+
+function meldung(text, fehler = false) {
+  const p = document.createElement("p");
+  p.className = fehler ? "meta error" : "meta";
+  p.textContent = text;
+  return p;
+}
+
+/** Baut die geöffnete Nachricht: Wortlaut, Antwortfeld, „Ins Gedächtnis". */
+async function mailBody(m) {
+  const voll = await api(`/mail/${encodeURIComponent(m.uid)}`);
+  const teile = [];
+
+  // Der Wortlaut steht monospaced und gerahmt, wie jeder fremde Inhalt: Er
+  // darf nie so aussehen, als hätte Icarus ihn geschrieben.
+  const text = document.createElement("pre");
+  text.className = "dry-run";
+  text.textContent = voll.body || voll.preview || "(kein Text)";
+  teile.push(text);
+
+  const antwort = document.createElement("textarea");
+  antwort.rows = 4;
+  antwort.className = "reply";
+  antwort.placeholder = mailboxState.can_send
+    ? `Antwort an ${voll.answer_to}…`
+    : "Kein SMTP eingerichtet — Senden geht nicht.";
+  antwort.disabled = !mailboxState.can_send;
+
+  const ergebnis = meldung("");
+
+  const senden = document.createElement("button");
+  senden.type = "button";
+  senden.textContent = "Senden";
+  senden.disabled = !mailboxState.can_send;
+  senden.addEventListener("click", async () => {
+    const body = antwort.value.trim();
+    if (!body) {
+      ergebnis.textContent = "Die Antwort ist leer.";
+      ergebnis.classList.add("error");
+      return;
+    }
+    senden.disabled = true;
+    ergebnis.classList.remove("error");
+    ergebnis.textContent = "Wird vorgelegt…";
+    try {
+      // Über dasselbe Werkzeug wie das Modell — also durch Policy, Freigabe
+      // und Protokoll. Nichts geht hier direkt hinaus.
+      await api("/tools/mail_senden", {
+        method: "POST",
+        body: JSON.stringify({
+          to: voll.answer_to,
+          subject: betreffFuerAntwort(voll.subject),
+          body,
+          in_reply_to: voll.message_id,
+        }),
+      });
+      ergebnis.textContent =
+        "Liegt als Freigabe oben — dort steht, was genau hinausgeht.";
+      await loadApprovals();
+      $("#approvals").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+    } finally {
+      senden.disabled = !mailboxState.can_send;
+    }
+  });
+
+  const merken = document.createElement("button");
+  merken.type = "button";
+  merken.className = "ghost small";
+  merken.textContent = "Ins Gedächtnis";
+  merken.addEventListener("click", async () => {
+    merken.disabled = true;
+    try {
+      const { new: neu } = await api(
+        `/mail/${encodeURIComponent(m.uid)}/remember`, { method: "POST" }
+      );
+      // Genau sagen, was passiert ist. „Gemerkt" wäre falsch: Es liegt als
+      // Rohmaterial, nicht als Wissen über dich.
+      ergebnis.classList.remove("error");
+      ergebnis.textContent = neu
+        ? "Als Rohmaterial aufgenommen. Nichts davon gilt als gewusst."
+        : "Lag schon als Rohmaterial vor.";
+      await loadEpisodes().catch(() => {});
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+      merken.disabled = false;
+    }
+  });
+
+  const reihe = document.createElement("div");
+  reihe.className = "row";
+  reihe.append(senden, merken);
+
+  teile.push(antwort, reihe, ergebnis);
+  return teile;
+}
+
+/** „Re: Betreff" — aber nicht „Re: Re: Re:". */
+function betreffFuerAntwort(betreff) {
+  const rein = (betreff || "").trim();
+  if (!rein) return "Re:";
+  return /^(re|aw|antw)\s*:/i.test(rein) ? rein : `Re: ${rein}`;
 }
 
 $("#chat-form").addEventListener("submit", async (event) => {

@@ -749,13 +749,21 @@ def build_registry(
             f"- {a.statement} (Herkunft: {a.provenance.source_type.value})" for a in hits
         )
 
-    def send_email(to: str, subject: str, body: str, **_: Any) -> str:
+    def send_email(
+        to: str, subject: str, body: str, in_reply_to: str = "", **_: Any
+    ) -> str:
         if outward_sink is None:
             raise RuntimeError(
                 "Kein Mailversand angebunden. Die Freigabe war erteilt, "
                 "aber es gibt keinen Kanal."
             )
-        return outward_sink({"to": to, "subject": subject, "body": body})
+        # Ausdrücklich aufgezählt statt `**kwargs` durchgereicht: Was an den
+        # Versand geht, soll hier lesbar dastehen. Was im Trockenlauf zu sehen
+        # war, ist genau das, was gesendet wird — und nichts sonst.
+        return outward_sink({
+            "to": to, "subject": subject, "body": body,
+            "in_reply_to": in_reply_to,
+        })
 
     tools = [
         Tool(
@@ -845,17 +853,26 @@ def build_registry(
                     "to": {"type": "string"},
                     "subject": {"type": "string"},
                     "body": {"type": "string"},
+                    "in_reply_to": {
+                        "type": "string",
+                        "description": "Message-ID der Nachricht, auf die geantwortet wird.",
+                    },
                 },
                 "required": ["to", "subject", "body"],
             },
             action_class=ActionClass.OUTWARD,
             run=send_email,
             # Vollständiger Trockenlauf: Empfänger, Betreff und der ganze Text.
+            # Vollständig, weil der Trockenlauf die einzige Stelle ist, an der
+            # jemand sieht, was wirklich hinausgeht. Eine gekürzte Vorschau
+            # wäre eine Freigabe für etwas Ungesehenes.
             dry_run=lambda a: (
                 f"E-Mail senden\n"
                 f"An:      {a.get('to')}\n"
                 f"Betreff: {a.get('subject')}\n"
-                f"---\n{a.get('body')}"
+                + (f"Antwort auf: {a.get('in_reply_to')}\n"
+                   if a.get("in_reply_to") else "")
+                + f"---\n{a.get('body')}"
             ),
         ),
     ]

@@ -117,6 +117,15 @@
           <input id="chat-input" type="text" placeholder="Schreib etwas…" autocomplete="off" />
           <button type="submit">Senden</button>
         </form>
+
+        <!-- Posteingang. Aufklappbar, damit er das Gespräch nicht verdrängt —
+             wer ihn braucht, hat ihn hier; wer nicht, sieht eine Zeile.
+             Der Inhalt ist ausnahmslos fremd: Jeder kann dir schreiben. -->
+        <details id="mailbox">
+          <summary>Posteingang <span id="mailbox-badge" class="badge" hidden></span></summary>
+          <p id="mailbox-note" class="muted"></p>
+          <ul id="mailbox-list"></ul>
+        </details>
       </section>
 
       <!-- Rohmaterial: die Mittelfristschicht.

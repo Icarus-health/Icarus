@@ -47,15 +47,9 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
 
-    # Auf Job-Ebene, damit `if:` der Schritte sie sehen kann. Ein `env:` am
-    # Schritt selbst steht dessen eigener `if:`-Bedingung noch nicht zur
-    # Verfügung — der Signierschritt würde sonst immer übersprungen.
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      # Tests und Build-Proben dürfen niemals den echten Schlüsselbund des
-      # Runner-Kontos lesen oder beschreiben. Die veröffentlichte App erkennt
-      # ihn zur Laufzeit weiterhin automatisch.
       ICARUS_KEYCHAIN_BACKEND: none
 
     steps:
@@ -81,7 +75,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ./sidecar pyinstaller
-          if [ "${{ inputs.bundle_cognee }}" = "true" ]; then
+          if [ "${{ inputs.bundle_cogNEE }}" = "true" ]; then
             pip install "cognee>=1.4.0"
           fi
 
@@ -174,14 +168,36 @@ jobs:
       - name: App für Apple Silicon bauen
         working-directory: app
         env:
-          # Sind die Secrets leer, baut Tauri unsigniert weiter.
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          npm install
-          npx tauri build --target aarch64-apple-darwin
+          set -o pipefail
+          npm install 2>&1 | tee "$RUNNER_TEMP/npm-install.log"
+          npx tauri build --target aarch64-apple-darwin 2>&1 \
+            | tee "$RUNNER_TEMP/tauri-build.log"
+
+      - name: Tauri-Builddiagnose ausgeben
+        if: always()
+        run: |
+          echo "--- Letzte Zeilen des Tauri-Builds ---"
+          if [ -f "$RUNNER_TEMP/tauri-build.log" ]; then
+            tail -n 180 "$RUNNER_TEMP/tauri-build.log"
+          else
+            echo "Kein Tauri-Buildlog vorhanden."
+          fi
+
+      - name: Tauri-Buildlog hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-build-log-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/npm-install.log
+            ${{ runner.temp }}/tauri-build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: App-Inhalt und Architektur prüfen
         run: |
@@ -199,7 +215,6 @@ jobs:
         run: |
           APP=$(find app/src-tauri/target/aarch64-apple-darwin -type d -name "Icarus.app" | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
-          # Der eigentliche Test: Würde Gatekeeper die App durchlassen?
           spctl --assess --type execute --verbose "$APP"
 
       - name: Unsignierten Build kennzeichnen

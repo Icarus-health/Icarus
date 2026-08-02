@@ -5,7 +5,7 @@ const baseURL = process.env.ICARUS_E2E_BASE ?? "http://127.0.0.1:8901";
 const token = process.env.ICARUS_E2E_TOKEN ?? "macos-test";
 const dataDir = process.env.ICARUS_E2E_DATA_DIR;
 
-async function call(method, path, data) {
+async function call(method, path, data, timeoutMs = 30_000) {
   const response = await fetch(`${baseURL}${path}`, {
     method,
     headers: {
@@ -13,6 +13,7 @@ async function call(method, path, data) {
       "x-icarus-token": token,
     },
     body: data === undefined ? undefined : JSON.stringify(data),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const text = await response.text();
   assert.equal(
@@ -26,7 +27,7 @@ async function call(method, path, data) {
 async function waitForHealth() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      const health = await call("GET", "/health");
+      const health = await call("GET", "/health", undefined, 2_000);
       if (health.status === "ok") return;
     } catch {
       // PyInstaller braucht auf einem kalten Runner einen Moment zum Starten.
@@ -93,7 +94,12 @@ await call("PUT", "/setup", {
   model: "llama3.1",
 });
 
-const restored = await call("POST", "/backups/restore", { name: created.name });
+const restored = await call(
+  "POST",
+  "/backups/restore",
+  { name: created.name },
+  60_000
+);
 assert.equal(restored.restored, created.name);
 assert.equal(restored.assertions, 1);
 

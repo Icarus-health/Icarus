@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import zipfile
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from icarus_memory import backup as backup_module
+from icarus_memory import config
 from icarus_memory.backup import BackupError, list_snapshots, restore, snapshot
 
 
@@ -138,6 +140,39 @@ def test_restore_staging_liegt_im_beschreibbaren_datenverzeichnis(
     restore(target, installation / "self-model.sqlite3")
 
     assert restore_directories == [installation]
+
+
+def test_restore_aktualisiert_laufende_einstellungen(
+    installation: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Datei, Settings-Objekt und Provider-Umgebung müssen denselben Stand haben."""
+    monkeypatch.delenv("ICARUS_PROVIDER", raising=False)
+    monkeypatch.delenv("ICARUS_MODEL", raising=False)
+
+    running = config.load(installation)
+    config.apply_to_env(running)
+    assert running.provider == "ollama"
+    assert os.environ["ICARUS_PROVIDER"] == "ollama"
+
+    target = snapshot(
+        installation / "self-model.sqlite3",
+        installation / "sicherungen",
+    )
+
+    running.provider = "anthropic"
+    running.model = "claude-test"
+    config.save(installation, running)
+    config.apply_to_env(running)
+    assert os.environ["ICARUS_PROVIDER"] == "anthropic"
+    assert os.environ["ICARUS_MODEL"] == "claude-test"
+
+    restore(target, installation / "self-model.sqlite3")
+
+    assert running.provider == "ollama"
+    assert running.model == ""
+    assert os.environ["ICARUS_PROVIDER"] == "ollama"
+    assert "ICARUS_MODEL" not in os.environ
 
 
 def test_pruefsummenfehler_wird_vor_der_wiederherstellung_erkannt(

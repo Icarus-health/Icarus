@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import weakref
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -190,22 +191,77 @@ class Settings:
         )
 
 
+# Geladene Settings-Objekte bleiben in der laufenden App referenziert. Ein
+# Restore ersetzt deshalb nicht einfach das Objekt, sondern aktualisiert genau
+# diese Instanz. Schwache Referenzen verhindern, dass Tests oder beendete Apps
+# durch dieses Register am Leben gehalten werden.
+_LIVE_SETTINGS: dict[Path, list[weakref.ReferenceType[Settings]]] = {}
+_APPLIED_ENV: dict[int, set[str]] = {}
+
+
 def path_for(data_dir: Path) -> Path:
     return Path(data_dir) / DATEINAME
 
 
-def load(data_dir: Path) -> Settings:
-    """Liest die Einstellungen. Eine kaputte Datei blockiert den Start nicht.
-
-    Wenn hier eine Ausnahme hochginge, käme ein Nutzer mit beschädigter Datei
-    nie wieder in seine App — und damit auch nicht an seinen Bestand. Ein leeres
-    Formular ist reparierbar, ein Programm, das nicht startet, nicht.
-    """
+def _read(data_dir: Path) -> Settings:
     target = path_for(data_dir)
     try:
         return Settings.from_dict(json.loads(target.read_text(encoding="utf-8")))
     except (OSError, ValueError, TypeError):
         return Settings()
+
+
+def _register(data_dir: Path, settings: Settings) -> None:
+    key = path_for(data_dir).resolve()
+    alive = [reference for reference in _LIVE_SETTINGS.get(key, []) if reference()]
+    alive.append(weakref.ref(settings))
+    _LIVE_SETTINGS[key] = alive
+
+
+def load(data_dir: Path) -> Settings:
+    """Liest und registriert die Einstellungen der laufenden Installation.
+
+    Eine kaputte Datei blockiert den Start nicht. Ein leeres Formular ist
+    reparierbar, ein Programm, das nicht mehr an seinen Bestand kommt, nicht.
+    """
+    settings = _read(data_dir)
+    _register(data_dir, settings)
+    return settings
+
+
+def reload_registered(data_dir: Path) -> int:
+    """Aktualisiert laufende Settings-Objekte nach einer Wiederherstellung.
+
+    Der Server hält ``app.state.settings`` über seine gesamte Lebensdauer. Würde
+    nur die JSON-Datei zurückgespielt, blieben Agent, Mail und Kalender bis zum
+    Neustart auf dem alten Stand. Hier wird die vorhandene Instanz in-place
+    ersetzt und anschließend ihre von Icarus gesetzte Umgebung neu aufgebaut.
+    """
+    key = path_for(data_dir).resolve()
+    restored = _read(data_dir)
+    alive: list[weakref.ReferenceType[Settings]] = []
+
+    for reference in _LIVE_SETTINGS.get(key, []):
+        current = reference()
+        if current is None:
+            continue
+        fresh = Settings.from_dict(restored.to_dict())
+        current.provider = fresh.provider
+        current.model = fresh.model
+        current.endpoint = fresh.endpoint
+        current.file_roots = fresh.file_roots
+        current.mail = fresh.mail
+        current.calendar = fresh.calendar
+        current.schedule = fresh.schedule
+        current.onboarded = fresh.onboarded
+        apply_to_env(current)
+        alive.append(reference)
+
+    if alive:
+        _LIVE_SETTINGS[key] = alive
+    else:
+        _LIVE_SETTINGS.pop(key, None)
+    return len(alive)
 
 
 def save(data_dir: Path, settings: Settings) -> Path:
@@ -236,11 +292,16 @@ def apply_to_env(settings: Settings, environ: dict[str, str] | None = None) -> l
     `MailConfig.from_env()` und `file_roots_from_env()` wissen nichts von dieser
     Datei und müssen es auch nicht.
 
-    **Gesetzte Umgebungsvariablen gewinnen.** Wer `ICARUS_PROVIDER=ollama` vor
-    den Start setzt, bekommt Ollama, egal was in der Datei steht — der Weg, einen
-    Testlauf zu fahren, ohne die Einstellungen des Nutzers anzufassen.
+    Werte, die dieser Settings-Instanz bei einem früheren Aufruf entstammen,
+    werden zuerst entfernt. Echte externe Umgebungsvariablen bleiben bestehen
+    und schlagen weiterhin die Datei.
     """
     environ = os.environ if environ is None else environ
+    manages_process_environment = environ is os.environ
+    if manages_process_environment:
+        for name in _APPLIED_ENV.pop(id(settings), set()):
+            environ.pop(name, None)
+
     gesetzt: list[str] = []
 
     def put(name: str, value: str | None) -> None:
@@ -263,6 +324,9 @@ def apply_to_env(settings: Settings, environ: dict[str, str] | None = None) -> l
 
     put("ICARUS_CALDAV_URL", settings.calendar.url)
     put("ICARUS_CALDAV_USER", settings.calendar.user or settings.mail.user)
+
+    if manages_process_environment:
+        _APPLIED_ENV[id(settings)] = set(gesetzt)
     return gesetzt
 
 
@@ -327,6 +391,7 @@ __all__ = [
     "clear_secret",
     "load",
     "path_for",
+    "reload_registered",
     "save",
     "secret_name_for_provider",
     "secret_status",

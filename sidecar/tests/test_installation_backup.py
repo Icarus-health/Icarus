@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from icarus_memory import backup as backup_module
 from icarus_memory.backup import BackupError, list_snapshots, restore, snapshot
 
 
@@ -104,6 +105,39 @@ def test_installationsbackup_stellt_arbeitskontext_wieder_her(
     assert len(recovery) == 1
     assert _value(recovery[0] / "tasks.sqlite3", "tasks") == "veraendert"
     assert (recovery[0] / "einstellungen.json").is_file()
+
+
+def test_restore_staging_liegt_im_beschreibbaren_datenverzeichnis(
+    installation: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Im Container ist das Elternverzeichnis von `/daten` nicht beschreibbar.
+
+    Das Restore-Staging muss deshalb innerhalb des Icarus-Datenverzeichnisses
+    entstehen. Sonst funktioniert die Sicherung, aber ausgerechnet die
+    Wiederherstellung scheitert erst im realen Containerbetrieb.
+    """
+    target = snapshot(
+        installation / "self-model.sqlite3",
+        installation / "sicherungen",
+    )
+    real_temporary_directory = backup_module.tempfile.TemporaryDirectory
+    restore_directories: list[Path] = []
+
+    def temporary_directory(*args, **kwargs):
+        if str(kwargs.get("prefix", "")).startswith(".icarus-restore-"):
+            restore_directories.append(Path(kwargs["dir"]))
+        return real_temporary_directory(*args, **kwargs)
+
+    monkeypatch.setattr(
+        backup_module.tempfile,
+        "TemporaryDirectory",
+        temporary_directory,
+    )
+
+    restore(target, installation / "self-model.sqlite3")
+
+    assert restore_directories == [installation]
 
 
 def test_pruefsummenfehler_wird_vor_der_wiederherstellung_erkannt(

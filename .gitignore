@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 
+# Token und Passphrase des Containerbetriebs, von `make start` erzeugt.
+# Eigene Zeile, weil weder `.env` noch `.env.*` darauf passen — der Name
+# beginnt nicht mit `.env`.
+.icarus.env
+
 # Laufzeitdaten des Selbstmodells — niemals committen
 .icarus-data/
 *.sqlite3

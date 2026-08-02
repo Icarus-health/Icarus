@@ -986,8 +986,33 @@ $("#ingest-form").addEventListener("submit", async (event) => {
     const bits = [`${report.recorded} aufgenommen`];
     if (report.duplicates) bits.push(`${report.duplicates} schon bekannt`);
     if (report.skipped) bits.push(`${report.skipped} übersprungen`);
-    note.textContent =
-      bits.join(", ") + ". Nichts davon gilt als gewusst — der Bestand ist unberührt.";
+    note.replaceChildren(document.createTextNode(
+      bits.join(", ") + ". Nichts davon gilt als gewusst — der Bestand ist unberührt."
+    ));
+
+    // Warum etwas übersprungen wurde, gehört sichtbar hierher. „5
+    // übersprungen" allein lässt jemanden glauben, sein Vault sei vollständig
+    // drin — und die fehlenden fünf sind womöglich die langen, wichtigen.
+    if (report.skipped_reasons?.length) {
+      const warum = document.createElement("details");
+      const kopf = document.createElement("summary");
+      kopf.textContent = "Was übersprungen wurde";
+      const liste = document.createElement("ul");
+      for (const grund of report.skipped_reasons) {
+        const zeile = document.createElement("li");
+        zeile.className = "meta";
+        zeile.textContent = grund;
+        liste.append(zeile);
+      }
+      if (report.skipped > report.skipped_reasons.length) {
+        liste.append(meldung(
+          `… und ${report.skipped - report.skipped_reasons.length} weitere.`
+        ));
+      }
+      warum.append(kopf, liste);
+      note.append(warum);
+    }
+
     await loadEpisodes();
   } catch (err) {
     note.textContent = err.message;
@@ -1692,6 +1717,7 @@ async function loadSetup() {
   });
 
   await renderSchedule(panel);
+  await renderBackups(panel);
 }
 
 // -- Der mitlaufende Prozess ------------------------------------------------
@@ -1857,6 +1883,119 @@ async function renderSchedule(panel) {
   row.append(save, jetzt);
   block.append(row, result);
   panel.append(block);
+}
+
+// -- Sicherungen ------------------------------------------------------------
+//
+// Der Zeitplan legt bei jedem Lauf eine an. Bis eben waren sie unsichtbar und
+// unbenutzbar — ein Sicherungsnetz ohne Griff ist eine Beruhigung ohne Deckung.
+//
+// Das Zurückspielen ersetzt den aktuellen Stand, also wird gefragt. Es ist aber
+// nicht unumkehrbar: Der ersetzte Stand landet daneben, nicht im Nichts. Genau
+// das steht auch in der Rückfrage — sonst klingt sie schlimmer als sie ist.
+
+async function renderBackups(panel) {
+  const block = document.createElement("section");
+  block.className = "setup-block";
+
+  const head = document.createElement("h3");
+  head.textContent = "Sicherungen";
+
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent =
+    "Ein Gedächtnis, das Jahre halten soll, hat genau einen katastrophalen " +
+    "Fehlerfall. Beim Zurückspielen wird der aktuelle Stand nicht gelöscht, " +
+    "sondern danebengelegt.";
+
+  const ergebnis = document.createElement("p");
+  ergebnis.className = "meta";
+
+  const liste = document.createElement("ul");
+
+  async function zeichnen() {
+    const sicherungen = await api("/backups");
+    liste.replaceChildren();
+    if (!sicherungen.length) {
+      liste.append(meldung("Noch keine Sicherung."));
+      return;
+    }
+    for (const s of sicherungen) {
+      const el = document.createElement("li");
+      const name = document.createElement("p");
+      name.className = "statement";
+      name.textContent = lesbarerZeitpunkt(s.name);
+
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      meta.textContent = s.name;
+
+      const zurueck = document.createElement("button");
+      zurueck.className = "ghost small";
+      zurueck.textContent = "Zurückspielen";
+      zurueck.addEventListener("click", async () => {
+        // Eine Rückfrage, die sein muss, in einem Satz — und sie sagt, dass
+        // nichts verloren geht. Ohne das lehnt jeder vernünftige Mensch ab.
+        const ok = window.confirm(
+          `Den Stand von ${lesbarerZeitpunkt(s.name)} zurückspielen?\n\n` +
+          "Der aktuelle Stand wird nicht gelöscht — er landet als eigene " +
+          "Datei daneben."
+        );
+        if (!ok) return;
+        zurueck.disabled = true;
+        ergebnis.classList.remove("error");
+        ergebnis.textContent = "Wird zurückgespielt…";
+        try {
+          const r = await api("/backups/restore", {
+            method: "POST", body: JSON.stringify({ name: s.name }),
+          });
+          ergebnis.textContent =
+            `Zurückgespielt: ${r.assertions} Aussagen. ${r.detail}`;
+          await loadMemory().catch(() => {});
+          await refreshStatus().catch(() => {});
+        } catch (err) {
+          ergebnis.textContent = err.message;
+          ergebnis.classList.add("error");
+        } finally {
+          zurueck.disabled = false;
+        }
+      });
+
+      el.append(name, meta, zurueck);
+      liste.append(el);
+    }
+  }
+
+  const jetzt = document.createElement("button");
+  jetzt.type = "button";
+  jetzt.textContent = "Jetzt sichern";
+  jetzt.addEventListener("click", async () => {
+    jetzt.disabled = true;
+    ergebnis.classList.remove("error");
+    try {
+      const { name } = await api("/backups", { method: "POST" });
+      ergebnis.textContent = `Gesichert: ${name}`;
+      await zeichnen();
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+    } finally {
+      jetzt.disabled = false;
+    }
+  });
+
+  block.append(head, note, liste, jetzt, ergebnis);
+  panel.append(block);
+  await zeichnen();
+}
+
+/** „self-model-20260802T122954Z.sqlite3" → „2.8.2026, 12:29". */
+function lesbarerZeitpunkt(name) {
+  const m = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(name);
+  if (!m) return name;
+  const [, j, mo, ta, st, mi, se] = m;
+  return new Date(Date.UTC(+j, +mo - 1, +ta, +st, +mi, +se))
+    .toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
 }
 
 // -- Erststart --------------------------------------------------------------

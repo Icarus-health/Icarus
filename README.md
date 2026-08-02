@@ -13,7 +13,8 @@ image, so you can try it without a signed bundle; the app remains the real thing
 > no config file, no account. It remembers with provenance, reads your existing
 > notes, reaches for current information, and nothing leaves your machine without
 > you confirming exactly what goes out. It defends against prompt injection,
-> keeps keys in the OS keychain, and backs itself up. Other assistants on the
+> keeps keys in the OS keychain, backs itself up — and restores from those
+> backups, which is the half of that promise most projects skip. Other assistants on the
 > machine reach the same memory over MCP. Consolidation keeps the record honest —
 > by proposing, never by writing — and a background process now does that on a
 > schedule, so the memory keeps itself in order while you work. Mail lives in
@@ -296,11 +297,22 @@ Details: [`docs/09-einrichtung.md`](docs/09-einrichtung.md).
 
 ## Getting started
 
-Requires Python 3.10+ and, for the app itself, Rust and Node.
+**One command, if you have Docker:**
+
+```bash
+make start NOTIZEN=~/Documents/Obsidian   # the folder is optional and read-only
+```
+
+It generates a token and a passphrase once, reuses them on every later start,
+builds the image, waits until the sidecar answers, and prints the URL with the
+token. `make stop` halts it; the memory and the keys stay. Details in German:
+[`docs/15-loslegen.md`](docs/15-loslegen.md).
+
+**From source**, requires Python 3.10+ and, for the app itself, Rust and Node.
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 407 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability, inbox
+make test            # 417 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability, inbox, restore
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -345,7 +357,7 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-407 tests, no network and no model required — including a test that plays out a
+417 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
@@ -473,7 +485,7 @@ sidecar/             Python: memory, policy, agent
     providers_mail.py  Known mail providers, so nobody has to know an IMAP host
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             407 tests, no network and no model required
+  tests/             417 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback

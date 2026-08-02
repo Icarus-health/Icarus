@@ -330,3 +330,63 @@ def test_alles_landet_als_episode_nichts_im_bestand(
     assert any("Angreifer" in e.body for e in episoden)
     # Alles wartet auf Verdichtung; nichts ist als gewusst eingetragen.
     assert all(e.state.value == "new" for e in episoden)
+
+
+# -- Warum etwas fehlt ------------------------------------------------------
+
+
+def test_uebersprungenes_nennt_seinen_grund(tmp_path) -> None:
+    """„5 übersprungen" ohne Begründung ist stilles Vergessen.
+
+    Wer seinen Vault aufnimmt, glaubt danach, alles sei drin — und die
+    fehlenden Dateien sind womöglich gerade die langen, wichtigen.
+    """
+    from icarus_memory.ingest import MAX_FILE_BYTES, ingest_directory
+
+    vault = tmp_path / "Vault"
+    vault.mkdir()
+    (vault / "gut.md").write_text("Ein brauchbarer Satz.", encoding="utf-8")
+    (vault / "riesig.md").write_text("x" * (MAX_FILE_BYTES + 1), encoding="utf-8")
+
+    store = EpisodeStore(tmp_path / "e.sqlite3")
+    report = ingest_directory(store, vault, "markdown", roots=[tmp_path])
+
+    assert report.recorded == 1
+    assert report.skipped == 1
+    assert report.skipped_reasons, "Der Grund wurde weggeworfen"
+    assert "riesig.md" in report.skipped_reasons[0]
+    assert "512 KB" in report.skipped_reasons[0]
+
+
+def test_die_gruende_sind_gedeckelt(tmp_path) -> None:
+    """Bei einem Vault voller Bilder wäre die volle Liste selbst unlesbar."""
+    from icarus_memory.ingest import MAX_SKIP_REASONS, ingest_directory
+
+    vault = tmp_path / "Vault"
+    vault.mkdir()
+    for i in range(MAX_SKIP_REASONS + 10):
+        (vault / f"leer{i}.md").write_text("", encoding="utf-8")
+
+    store = EpisodeStore(tmp_path / "e.sqlite3")
+    report = ingest_directory(store, vault, "markdown", roots=[tmp_path])
+
+    assert report.skipped == MAX_SKIP_REASONS + 10
+    assert len(report.skipped_reasons) == MAX_SKIP_REASONS
+
+
+def test_die_antwort_traegt_keine_kennungen(tmp_path) -> None:
+    """Die Aufnahme eines echten Vaults lieferte sonst Tausende Kennungen
+    zurück, die die Oberfläche nicht benutzt."""
+    from icarus_memory.ingest import ingest_directory
+
+    vault = tmp_path / "Vault"
+    vault.mkdir()
+    (vault / "a.md").write_text("Ein Satz.", encoding="utf-8")
+
+    store = EpisodeStore(tmp_path / "e.sqlite3")
+    report = ingest_directory(store, vault, "markdown", roots=[tmp_path])
+
+    # Im Bericht selbst sind sie da, in der HTTP-Antwort nicht.
+    assert report.episode_ids
+    assert "episode_ids" not in report.to_dict()
+    assert report.to_dict()["skipped_reasons"] == []

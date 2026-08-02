@@ -432,6 +432,25 @@ class Agent:
         model_name: str | None,
         approved_by: str | None = None,
     ) -> str:
+        fehlend = _fehlende_pflichtfelder(tool, arguments)
+        if fehlend:
+            # Vor dem Aufruf prüfen statt den TypeError abzufangen. Sonst steht
+            # im Gespräch „build_registry.<locals>.remember() missing 1
+            # required positional argument" — ein interner Funktionsname für
+            # den Nutzer, und für das Modell kein Signal, womit es den Aufruf
+            # reparieren könnte. Kleine Modelle benennen Parameter regelmäßig
+            # falsch; sie sollen erfahren, wie die Felder heißen.
+            erwartet = ", ".join(tool.parameters.get("properties", {})) or "keine"
+            detail = (
+                f"Dem Aufruf von {tool.name} fehlt: {', '.join(fehlend)}. "
+                f"Erwartete Felder: {erwartet}."
+            )
+            self._audit.record(
+                tool.name, tool.classify(arguments).value, level.value, "failed",
+                arguments, model=model_name, detail=detail, approved_by=approved_by,
+            )
+            return f"Fehlgeschlagen: {detail}"
+
         try:
             result = tool.run(**arguments)
         except Exception as exc:
@@ -503,6 +522,12 @@ class Agent:
 
     def reset(self) -> None:
         self._history.clear()
+
+
+def _fehlende_pflichtfelder(tool: Any, arguments: dict[str, Any]) -> list[str]:
+    """Welche im Schema geforderten Felder im Aufruf fehlen."""
+    erforderlich = tool.parameters.get("required", []) or []
+    return [name for name in erforderlich if name not in arguments]
 
 
 __all__ = ["Agent", "Turn", "SYSTEM_PROMPT"]

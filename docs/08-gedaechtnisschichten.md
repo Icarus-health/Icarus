@@ -1,179 +1,117 @@
 # Gedächtnisschichten
 
-Stand 2026-07-31. Verbindlich für `sidecar/icarus_memory`.
-
-Bis hierher hatte Icarus zwei Zustände: Etwas ist eine **Aussage über die
-Person** — dauerhaft, mit Herkunft, append-only — oder es existiert nicht. Das
-ist eine gute Regel für den Bestand und eine unmögliche für den Alltag. Zwischen
-„eine Mail ist angekommen" und „diese Person arbeitet bei X" liegt Arbeit, und
-die hatte bisher keinen Ort.
-
-Dieses Dokument beschreibt die Schichten dazwischen und die Regel, nach der
-etwas von einer in die nächste wandert.
+> **Status:** aktueller Systemvertrag  
+> **Gültig seit:** 2026-08-02  
+> **Verbindlich für:** Gespräch, Episoden, Vorschläge und Selbstmodell  
+> **Zuletzt gegen den Code geprüft:** 2026-08-02
 
 ## Drei Schichten
 
 ```mermaid
-flowchart TB
-    Q["Mail · Kalender · Vault · Notion<br/>Gespräch · Datei · Web"] --> E
-
-    subgraph kurz["Kurzzeit — flüchtig"]
-        H["Gesprächsverlauf<br/><i>lebt eine Runde</i>"]
-    end
-
-    subgraph mittel["Mittelfrist — Episoden"]
-        E["Rohe Aufzeichnung<br/><i>Inhalt, Herkunft, Digest</i>"]
-    end
-
-    subgraph lang["Langzeit — Bestand"]
-        A["Aussagen<br/><i>append-only, mit Provenienz</i>"]
-    end
-
-    E -->|"Verdichtung schlägt vor"| V{{"Der Mensch<br/>bestätigt"}}
-    V --> A
-    A -->|"Kontext"| H
-    E -->|"Rückfrage"| H
-
-    classDef built fill:#dff5e1,stroke:#3b7a4b,color:#14311d
-    classDef gate fill:#f7ecd5,stroke:#a8621f,color:#3a2a12
-    class H,E,A,Q built
-    class V gate
+flowchart LR
+    SOURCES[Mail, Kalender, Datei, Web, Chat] --> SHORT[Gesprächskontext]
+    SOURCES --> EPISODES[Episoden mit Herkunft und Digest]
+    EPISODES --> CONSOLIDATION[Verdichtung]
+    CONSOLIDATION --> PROPOSALS[Vorschläge]
+    PROPOSALS --> HUMAN{{Mensch entscheidet}}
+    HUMAN --> ASSERTIONS[Bestätigte Aussagen]
 ```
 
-### Kurzzeit — der Gesprächsverlauf
+### Kurzzeit
 
-`Agent._history`. Lebt eine Runde, wird beim nächsten Beitrag zurückgesetzt oder
-per `reset()` verworfen. Nichts davon ist Bestand, und das ist Absicht: Was im
-Gespräch gesagt wurde, ist noch keine Behauptung über die Person.
+Der Gesprächsverlauf hält den unmittelbaren Arbeitskontext. Er ist kein
+dauerhaftes Wissen und darf nicht still in das Selbstmodell übergehen.
 
-### Mittelfrist — Episoden
+### Mittelfrist
 
-**Neu.** Eine Episode ist eine rohe Aufzeichnung dessen, was passiert ist: eine
-eingegangene Mail, ein Termin, eine importierte Notiz, ein Gesprächsausschnitt,
-den jemand festhalten wollte. Sie behauptet nichts über die Person — sie hält
-fest, dass etwas vorlag.
+Episoden halten fest, dass etwas vorlag:
 
-Drei Eigenschaften machen die Schicht tragfähig:
+- Nachricht,
+- Termin,
+- Notiz,
+- Datei,
+- Gesprächsausschnitt,
+- später weitere Ereignisse.
 
-**Digest.** Jede Episode trägt einen SHA-256 ihres Inhalts. Das schließt die
-erste offene Lücke aus dem [Gedächtnis-Kontrakt](06-gedaechtnis-kontrakt.md):
-Ohne Digest ist keine Neuprüfung vor einer folgenreichen Aktion möglich, weil
-niemand feststellen kann, ob die Quelle sich seither geändert hat.
+Sie tragen Rohinhalt, Herkunft und Digest. Ein Digest verhindert doppelte
+Aufnahme und ermöglicht spätere Neuprüfung. Eine Episode behauptet nichts über
+die Person.
 
-**Entdopplung über den Digest.** Denselben Vault zweimal importieren erzeugt
-keine zweite Kopie. Ohne das ist kein Prozess denkbar, der dauerhaft mitläuft —
-und genau der ist das Ziel.
+### Langzeit
 
-**Zustand statt Löschen.** `new → consolidated → archived`, dazu `ignored` für
-das, was bewusst nichts hergab. Eine Episode verschwindet nie; sie hört nur auf,
-Arbeit zu erzeugen. Wer wissen will, warum eine Aussage im Bestand steht, findet
-über `produced` den Weg zurück zum Rohtext.
+Bestätigte Aussagen beschreiben, was Icarus als Wissen behandeln darf. Für sie
+gelten Append-only-Inhalt, Provenienz, Zeitbezug, Ersetzung, Konflikte und
+Widerruf.
 
-### Langzeit — der Bestand
+Projekte, Aufgaben und Notizen liegen daneben als Arbeitskontext. Sie haben
+andere Lebenszyklen, werden aber über IDs und Herkunft mit Episoden und Aussagen
+verbunden.
 
-Unverändert: `Assertion` mit Provenienz, append-only, per SQLite-Trigger
-erzwungen. Alle Regeln aus dem Gedächtnis-Kontrakt gelten weiter.
-
-## Die Regel für den Übergang
+## Übergang zwischen den Schichten
 
 > **Verdichtung schlägt vor. Sie schreibt nicht.**
 
-Das ist die wichtigste Entscheidung in diesem Dokument, und sie ist unbequem.
+Die Verdichtung darf ohne Zustimmung:
 
-Ein System, das aus Mails und Notizen stillschweigend Fakten über eine Person
-ableitet und in den Bestand schreibt, hat wieder ein Gedächtnis, dem niemand
-zusehen kann — genau das Versagen, gegen das dieses Projekt gebaut ist. Die
-Roadmap hat den Punkt von Anfang an als kritisch markiert, und daran ändert
-sich nichts, wenn die Bequemlichkeit lockt.
+- Episoden ordnen und Kandidaten finden,
+- Fälligkeitsfragen erzeugen,
+- mögliche Widersprüche vorlegen,
+- reversible Zusammenfassungen erzeugen,
+- verarbeitete Episoden kennzeichnen.
 
-Also: Die Verdichtung liest Episoden und erzeugt **Vorschläge**. Jeder trägt
-seinen Beleg — welche Episode, welche Stelle. Der Mensch bestätigt, ändert oder
-verwirft. Bestätigtes wird zur Aussage, mit `derived_from` auf die Episode.
+Sie darf ohne Zustimmung nicht:
 
-Was die Verdichtung **ohne** Rückfrage darf, weil es nichts behauptet:
+- eine Aussage in den Bestand aufnehmen,
+- eine bestehende Aussage bestätigen,
+- einen Widerspruch als `disputed` festschreiben,
+- eine Quelle löschen,
+- eine Außenwirkung auslösen.
 
-- Episoden zusammenfassen und ältere archivieren
-- Widersprüche im Bestand als `disputed` markieren — nicht auflösen, nur
-  sichtbar machen
-- Alterungsurteile fortschreiben (`currency.py`)
-- Aussagen zur Bestätigung vorlegen, deren Horizont abgelaufen ist
+Auch ein Konfliktfinder ist ein Vorschlagsverfahren. Erst die menschliche
+Annahme setzt den Status `disputed`.
 
-Die Grenze verläuft zwischen *ordnen* und *behaupten*. Ordnen ist frei,
-Behaupten braucht einen Menschen.
+## Vorschlagsarten
 
-## Warum das die eigentliche Arbeit ist
+- `assertion`: aus einer Episode könnte eine dauerhafte Aussage folgen;
+- `confirmation`: eine bestehende Aussage sollte erneut bestätigt werden;
+- `conflict`: Aussagen könnten einander widersprechen.
 
-Konnektoren sind endlos. Man kann Jahre damit verbringen und hat am Ende einen
-Aggregator, keinen Chief of Staff. Der Unterschied liegt genau hier: ob das
-System nach sechs Monaten mehr über einen weiß als am ersten Tag, ohne dabei
-Unsinn angesammelt zu haben.
+Jeder Ableitungsvorschlag braucht einen wörtlichen Beleg, der tatsächlich in der
+Quelle vorkommt. Abgelehnte Vorschläge bleiben sichtbar und werden nicht bei
+jedem Lauf erneut vorgelegt.
 
-Beides zugleich schafft nur eine Schicht, die roh mitschreibt, und ein
-Verfahren, das daraus mit Zustimmung Bestand macht.
+## Zusammenfassungen
 
-## Aufnahme: eine Pipeline für Import und Betrieb
+Zusammenfassungen sind Episoden, keine Aussagen. Sie dürfen Quellen archivieren,
+aber nicht löschen. Quellen, die eine bestätigte Aussage belegen, werden nicht
+eingeschmolzen. Eine Zusammenfassung wird nie selbst zum Beleg einer Aussage.
 
-Ein bestehender Obsidian-Vault und die Mails von heute Morgen sind derselbe
-Fall: fremder Text mit einer Herkunft, aus dem vielleicht etwas folgt. Deshalb
-gibt es **eine** Pipeline, nicht zwei.
+## Aufnahme
 
+Alle Quellen folgen derselben Pipeline:
+
+```text
+Quelle → Adapter → Episode → Vorschlag → menschliche Entscheidung → Aussage
 ```
-Quelle → Adapter → Episode (Digest, Herkunft) → Verdichtung → Vorschlag → Bestand
-```
 
-Adapter für den Anfang:
+Adapter sollen möglichst wenig interpretieren. Bedeutung entsteht erst in der
+prüfbaren Verdichtung.
 
-| Quelle | Was gelesen wird |
-| --- | --- |
-| Markdown-Ordner / Obsidian-Vault | `.md` mit YAML-Frontmatter, `[[Wikilinks]]` als Verweise |
-| Notion-Export | Markdown-Export samt UUID-Suffixen und Datenbank-CSVs |
-| Textdateien | alles Lesbare, ohne Struktur-Annahmen |
-| Mail, Kalender | die vorhandenen Konnektoren |
+## Produktfolgen
 
-Adapter sind bewusst dumm: Sie machen aus einer Datei eine Episode und raten
-nicht, was sie bedeutet. Die Deutung ist Sache der Verdichtung, und die legt
-vor.
+- Ein Nutzer muss seine bisherige Ablage nicht zuerst aufgeben.
+- Icarus funktioniert ohne Modell; nur modellgestützte Vorschläge fehlen.
+- Es gibt keine eingebauten Lebensbereiche, die für jeden Nutzer gelten müssen.
+- Neue Konnektoren füllen Episoden oder Arbeitsobjekte, nicht heimlich den
+  Bestand.
+- Semantischer Index und künftiger Graph bleiben Projektionen über diesen
+  Schichten.
 
-Damit gilt: Wer Icarus benutzt, muss seine bisherige Ablage nicht aufgeben,
-bevor er sieht, ob es trägt. Das ist keine Nettigkeit — ein Produkt, das als
-ersten Schritt den Umzug des ganzen Lebens verlangt, wird nicht ausprobiert.
+## Offene Punkte
 
-## Was daraus folgt für ein Produkt, das anderen gehört
-
-Icarus darf nichts über *einen bestimmten* Menschen voraussetzen. Konkret:
-
-- **Keine eingebauten Bereiche, Projekte oder Rollen.** `Project.area` ist ein
-  freier Text und bleibt es. Wer feste Aufzählungen einbaut, schreibt ein
-  Lebensmodell fest, das für den nächsten Nutzer falsch ist.
-- **Kein Zwang zu einer Ablage.** Notion, Obsidian, ein Ordner mit Textdateien
-  oder nichts davon — alles führt über dieselbe Pipeline.
-- **Der erste Start muss ohne alles funktionieren.** Ohne Modell, ohne
-  Schlüssel, ohne Konnektor. Was fehlt, wird benannt, nicht kaschiert.
-- **Erweitern ohne Fork.** Konnektoren und Adapter sind Schnittstellen, keine
-  Sonderfälle im Kern.
-
-## Reihenfolge
-
-Was zuerst gebaut wird, ergibt sich aus den Abhängigkeiten, nicht aus dem Reiz.
-
-1. **Episodenschicht und Aufnahme** — ohne Rohschicht gibt es nichts zu
-   verdichten. Enthält den Digest und schließt damit einen offenen Punkt des
-   Gedächtnis-Kontrakts nebenbei.
-2. **Verdichtung mit Vorschlagsschlange** — das Herzstück. Dazu der
-   `disputed`-Status, weil Widersprüche sonst unsichtbar bleiben.
-3. **Ein Prozess, der mitläuft** — Verdichtung nach Zeitplan statt auf Zuruf.
-   Erst sinnvoll, wenn 1 und 2 im Alltag tragen.
-4. **Onboarding** — Erststart, Import-Assistent, Erklärung der Freigaben.
-5. **Reichweite** — Mail im Gespräch mit Senden-Knopf, Kontakte und Verläufe
-   (CRM), Kalender schreibend.
-6. **Computer-Use** — hinter der strengsten Freigabestufe, zuletzt. Ein Agent,
-   der Software installiert und ausprobiert, ist genau der Fall, für den die
-   Policy-Schicht existiert. Er kommt, wenn die Freigaben im Betrieb
-   nachweislich tragen — nicht davor.
-
-## Verwandte Dokumente
-
-- [`01-architektur.md`](01-architektur.md) — die zwei Speicher und ihr Verhältnis
-- [`02-selbstmodell.md`](02-selbstmodell.md) — Datenmodell und Korrekturoperationen
-- [`06-gedaechtnis-kontrakt.md`](06-gedaechtnis-kontrakt.md) — die Regeln des Bestands
-- [`07-mcp-tuer.md`](07-mcp-tuer.md) — dasselbe Gedächtnis für andere Assistenten
+- Neuprüfung einer Quelle unmittelbar vor folgenreicher Ausführung;
+- skalierbare Verdichtung bei sehr großen Beständen;
+- jährliche beziehungsweise thematische Zusammenfassungsebenen;
+- verbindliche Entitäten und Beziehungen für die Graphprojektion;
+- bessere Verbindung zwischen Rohquelle, Projekt und Entscheidung in der
+  Oberfläche.

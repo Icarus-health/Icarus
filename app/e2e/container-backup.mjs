@@ -195,13 +195,36 @@ try {
 
   // Der nach dem Restore neu geladene Browser muss denselben Stand zeigen.
   await page.locator('button[data-view="dashboard"]').click();
-  await page.getByText("Projekt vor Sicherung", { exact: true }).waitFor();
-  await page.getByText("Aufgabe vor Sicherung", { exact: true }).waitFor();
-  assert.equal(await page.getByText("Projekt nach Sicherung", { exact: true }).count(), 0);
+  const dashboard = page.locator("#view-dashboard");
+  await dashboard
+    .locator("#project-teaser")
+    .getByText("Projekt vor Sicherung", { exact: true })
+    .waitFor();
+  await dashboard
+    .locator("#task-list")
+    .getByText("Aufgabe vor Sicherung", { exact: true })
+    .waitFor();
+  assert.equal(
+    await dashboard
+      .locator("#project-teaser")
+      .getByText("Projekt nach Sicherung", { exact: true })
+      .count(),
+    0
+  );
 
   await page.locator('button[data-view="projects"]').click();
-  await page.getByText("Projekt vor Sicherung", { exact: true }).waitFor();
-  assert.equal(await page.getByText("Projekt nach Sicherung", { exact: true }).count(), 0);
+  const projectView = page.locator("#view-projects");
+  await projectView
+    .locator("#project-list")
+    .getByText("Projekt vor Sicherung", { exact: true })
+    .waitFor();
+  assert.equal(
+    await projectView
+      .locator("#project-list")
+      .getByText("Projekt nach Sicherung", { exact: true })
+      .count(),
+    0
+  );
 
   console.log("Browser-Backup/Restore: vollständig bestanden.");
 } finally {

@@ -49,10 +49,6 @@ jobs:
 
     env:
       ICARUS_KEYCHAIN_BACKEND: none
-      # Nur das Vorhandensein darf global sichtbar sein. Das Zertifikat selbst
-      # wird ausschließlich im Import-Schritt gesetzt. Eine leere Variable
-      # `APPLE_CERTIFICATE` reicht Tauri sonst bereits, um einen ungültigen
-      # Zertifikatsimport zu versuchen.
       HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
 
     steps:
@@ -180,6 +176,14 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           set -o pipefail
+          # Tauri prüft die Existenz dieser Variablen, nicht nur ihren Inhalt.
+          # Ein leerer Wert löst deshalb einen Signierversuch mit Identität ""
+          # beziehungsweise einen ungültigen Notarisierungsweg aus.
+          for variable in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_PASSWORD; do
+            if [ -z "${!variable:-}" ]; then
+              unset "$variable"
+            fi
+          done
           npm install 2>&1 | tee "$RUNNER_TEMP/npm-install.log"
           npx tauri build --target aarch64-apple-darwin 2>&1 \
             | tee "$RUNNER_TEMP/tauri-build.log"

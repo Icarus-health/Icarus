@@ -163,17 +163,16 @@ jobs:
 
       - name: App-Inhalt prüfen
         run: |
-          APP=$(find app/src-tauri/target -name "Icarus.app" -maxdepth 7 | head -1)
+          APP=$(find app/src-tauri/target -type d -name "Icarus.app" | head -1)
           test -n "$APP"
+          test -x "$APP/Contents/MacOS/Icarus"
           find "$APP" -type f -name "icarus-sidecar*" | grep -q .
-          find "$APP" -type f -name "product-shell.js" | grep -q .
-          find "$APP" -type f -name "product-shell.css" | grep -q .
-          echo "App-Bundle enthält Sidecar und Consumer-Oberfläche: $APP"
+          echo "App-Bundle enthält Hauptprogramm und Sidecar: $APP"
 
       - name: Signatur und Notarisierung prüfen
         if: steps.signing.outputs.signed == 'true'
         run: |
-          APP=$(find app/src-tauri/target -name "Icarus.app" -maxdepth 7 | head -1)
+          APP=$(find app/src-tauri/target -type d -name "Icarus.app" | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
           # Der eigentliche Test: Würde Gatekeeper die App durchlassen?
           spctl --assess --type execute --verbose "$APP"

@@ -5,10 +5,10 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from icarus_memory.server import main
+from icarus_memory.runtime import main
 
 
-def test_packaging_entrypoint_importiert_oeffentliche_startfunktion() -> None:
+def test_packaging_entrypoint_importiert_produktionsstart() -> None:
     path = (
         Path(__file__).resolve().parents[2]
         / "packaging"

@@ -128,5 +128,27 @@ jobs:
           curl -fsS http://127.0.0.1:8765/ | grep -q "Icarus" \
             || scheitern "Die Oberfläche wird nicht ausgeliefert."
 
-          echo "Rauchtest bestanden."
-          docker rm -f icarus-smoke
+          echo "Rauchtest bestanden. Container bleibt für den Browser-Test aktiv."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Browser für End-to-End-Test installieren
+        working-directory: app
+        run: |
+          npm install --no-save --no-package-lock playwright@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Vollständiges Backup und Restore im Browser
+        working-directory: app
+        env:
+          ICARUS_E2E_BASE: http://127.0.0.1:8765
+          ICARUS_E2E_TOKEN: rauchtest
+        run: node e2e/container-backup.mjs
+
+      - name: Container aufräumen
+        if: always()
+        run: |
+          docker logs icarus-smoke || true
+          docker rm -f icarus-smoke || true

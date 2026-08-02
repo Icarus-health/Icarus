@@ -23,11 +23,13 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
 
-# SPECPATH wird von PyInstaller gesetzt. Absolute Pfade machen den Build
-# unabhängig davon, ob er aus dem Repository, aus `packaging/` oder durch eine
-# CI-Aktion gestartet wird.
-REPOSITORY = Path(SPECPATH).resolve().parent.parent
-ENTRYPOINT = REPOSITORY / "packaging" / "icarus_sidecar_entry.py"
+# PyInstaller-Versionen stellen SPECPATH teils als Verzeichnis und teils als
+# Pfad zur Spec-Datei bereit. Beides wird akzeptiert; danach liegt REPOSITORY
+# stets genau eine Ebene oberhalb von `packaging/`.
+SPEC_LOCATION = Path(SPECPATH).resolve()
+SPEC_DIRECTORY = SPEC_LOCATION if SPEC_LOCATION.is_dir() else SPEC_LOCATION.parent
+REPOSITORY = SPEC_DIRECTORY.parent
+ENTRYPOINT = SPEC_DIRECTORY / "icarus_sidecar_entry.py"
 SIDECAR = REPOSITORY / "sidecar"
 
 # cognee ist optional: ICARUS_BUNDLE_COGNEE=1 nimmt die semantische Suche mit.

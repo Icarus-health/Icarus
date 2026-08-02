@@ -42,19 +42,22 @@ Implemented today:
 - prompt-injection containment for untrusted content;
 - OS keychain support with an encrypted file fallback;
 - MCP access to the same memory, policy and audit trail;
+- a first consumer shell with four primary areas and progressively disclosed technical views;
 - Tauri desktop application and a container-based secondary path;
-- full installation backups containing all local databases and settings.
+- full installation backups containing all local databases and settings;
+- automated browser, container and bundled-sidecar backup/restore verification.
 
 Still missing or not yet product-grade:
 
-- consumer-level navigation and onboarding;
-- a prioritising daily Chief-of-Staff experience;
+- validated consumer onboarding and information architecture with real target users;
+- a prioritising daily Chief-of-Staff experience rather than aggregated cards;
+- meeting briefs and systematic open-loop detection;
 - a binding entity and knowledge-graph model;
 - intelligent model routing and model evaluation;
 - current-world search with source comparison and personal relevance;
 - browser automation and controlled computer use;
 - encrypted multi-device synchronisation and mobile access;
-- broad testing against real mail, calendar and operating-system environments.
+- broad testing against real mail and calendar providers.
 
 ## First product stage
 
@@ -168,6 +171,19 @@ be entered again on another device.
 
 ## Getting started
 
+### Packaged macOS application
+
+The currently verified native artifact targets **Apple Silicon Macs only**
+(`aarch64`: M1 and newer). The Tauri application and its bundled PyInstaller
+sidecar are built and tested for the same architecture.
+
+Intel Macs are not currently supported by the packaged application. A genuine
+universal release requires a separately built and tested x86_64 application and
+x86_64 sidecar; Icarus does not label an ARM-only bundle as universal.
+
+Without Apple signing secrets, CI produces an explicitly marked unsigned build
+for testing. A public download must be signed and notarised before release.
+
 ### Container
 
 ```bash
@@ -236,8 +252,13 @@ Tests run without network access and without a live model. Guarantees should be
 validated with sabotage probes where practical: deliberately break the
 guarantee and confirm that the intended test fails.
 
-The CI also verifies that runtime enums match the public JSON Schema and that a
-disputed self-model export remains schema-valid.
+CI additionally verifies:
+
+- runtime enums match the public JSON Schema;
+- a disputed self-model export remains schema-valid;
+- full backup and restore through a real Chromium UI flow;
+- full backup and restore in the frozen macOS sidecar;
+- the packaged macOS application and sidecar share the Apple-Silicon architecture.
 
 ## Contribution rule
 

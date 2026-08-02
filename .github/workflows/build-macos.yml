@@ -48,9 +48,12 @@ jobs:
     timeout-minutes: 60
 
     env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       ICARUS_KEYCHAIN_BACKEND: none
+      # Nur das Vorhandensein darf global sichtbar sein. Das Zertifikat selbst
+      # wird ausschließlich im Import-Schritt gesetzt. Eine leere Variable
+      # `APPLE_CERTIFICATE` reicht Tauri sonst bereits, um einen ungültigen
+      # Zertifikatsimport zu versuchen.
+      HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -149,7 +152,10 @@ jobs:
 
       - name: Signaturzertifikat einrichten
         id: signing
-        if: env.APPLE_CERTIFICATE != ''
+        if: env.HAS_APPLE_CERTIFICATE == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           KEYCHAIN="$RUNNER_TEMP/build.keychain"
           PASSWORD=$(openssl rand -base64 24)
@@ -179,7 +185,7 @@ jobs:
             | tee "$RUNNER_TEMP/tauri-build.log"
 
       - name: Tauri-Builddiagnose ausgeben
-        if: always()
+        if: failure()
         run: |
           echo "--- Letzte Zeilen des Tauri-Builds ---"
           if [ -f "$RUNNER_TEMP/tauri-build.log" ]; then
@@ -189,7 +195,7 @@ jobs:
           fi
 
       - name: Tauri-Buildlog hochladen
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: tauri-build-log-${{ github.run_attempt }}
@@ -218,7 +224,7 @@ jobs:
           spctl --assess --type execute --verbose "$APP"
 
       - name: Unsignierten Build kennzeichnen
-        if: steps.signing.outputs.signed != 'true'
+        if: env.HAS_APPLE_CERTIFICATE != 'true'
         run: |
           echo "::warning title=Unsigniert::Ohne Apple-Secrets gebaut. Gatekeeper wird diese App auf fremden Rechnern blockieren."
 

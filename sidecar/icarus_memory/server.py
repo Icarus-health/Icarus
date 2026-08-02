@@ -26,7 +26,14 @@ from pydantic import BaseModel, Field
 from .agent import Agent
 from .audit import AuditLog
 from .backends import CogneeBackend
-from .backup import BackupError, export_model, import_model, list_snapshots, snapshot
+from .backup import (
+    BackupError,
+    export_model,
+    import_model,
+    list_snapshots,
+    restore,
+    snapshot,
+)
 from . import config
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
@@ -138,6 +145,12 @@ class ResolveIn(BaseModel):
 
 class ExportIn(BaseModel):
     passphrase: str | None = None
+
+
+class RestoreIn(BaseModel):
+    # Nur der Dateiname, nie ein Pfad. `Path(name).name` wirft alles davor weg;
+    # so ist „../../etc/passwd" schlicht „passwd" und findet sich nicht.
+    name: str = Field(min_length=1)
 
 
 class VerifyIn(BaseModel):
@@ -1305,6 +1318,55 @@ def create_app(
         except BackupError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"path": str(path), "name": path.name}
+
+    @app.post("/backups/restore", dependencies=guard)
+    def restore_backup(body: RestoreIn) -> dict[str, Any]:
+        """Spielt eine Sicherung zurück.
+
+        Ohne diesen Weg wäre das Sichern eine Beruhigung ohne Deckung: Der
+        Zeitplan legt bei jedem Lauf einen Snapshot an, und am Tag, an dem man
+        ihn braucht, käme man nicht heran.
+
+        `restore()` legt den bestehenden Stand vorher zur Seite, statt ihn zu
+        überschreiben — eine Wiederherstellung, die den aktuellen Stand
+        vernichtet, wäre ein zweiter Weg, alles zu verlieren.
+
+        Nur ein Name, kein Pfad: Sonst wäre dies ein Weg, jede beliebige Datei
+        des Rechners zur Datenbank zu erklären.
+        """
+        ordner = _data_dir() / "sicherungen"
+        ziel = ordner / Path(body.name).name
+        if not ziel.is_file():
+            raise HTTPException(
+                status_code=404, detail=f"Keine Sicherung namens {body.name}."
+            )
+        try:
+            restore(ziel, _data_dir() / "self-model.sqlite3")
+        except BackupError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        # Der Store hält eine offene Verbindung auf die alte Datei. Ohne
+        # Neuaufbau liest die App weiter den Stand, den sie gerade ersetzt hat —
+        # die Wiederherstellung sähe aus, als hätte sie nichts getan.
+        #
+        # Genau so aufgebaut wie beim Start, nicht „irgendein SQLite-Backend":
+        # Mit `SqliteBackend` verlöre ein Nutzer mit cognee still die
+        # semantische Suche, und `subject_id` muss derselbe bleiben, sonst
+        # gehört der wiederhergestellte Bestand plötzlich jemand anderem.
+        #
+        # Nur wenn wir das Backend selbst angelegt haben. Wurde eines von außen
+        # hereingereicht (Tests), gehört es nicht uns.
+        if getattr(app.state, "backend", None) is not None:
+            app.state.backend = CogneeBackend(_data_dir() / "self-model.sqlite3")
+            app.state.store = SelfModelStore(app.state.backend, subject_id="local")
+            _build_agent(app)
+
+        return {
+            "restored": ziel.name,
+            "assertions": len(app.state.store.export().assertions),
+            "detail": "Der vorherige Stand liegt daneben als "
+                      "self-model.vor-wiederherstellung-….sqlite3.",
+        }
 
     @app.post("/export/file", dependencies=guard)
     def export_file(body: ExportIn) -> dict[str, Any]:

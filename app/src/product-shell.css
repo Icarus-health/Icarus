@@ -1,0 +1,110 @@
+/* Consumer-Schale: Alltag zuerst, technische Tiefe auf Wunsch. */
+
+nav { flex-wrap: wrap; }
+
+.nav-more {
+  position: relative;
+  color: var(--muted);
+}
+
+.nav-more > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  user-select: none;
+}
+
+.nav-more > summary::-webkit-details-marker { display: none; }
+.nav-more > summary::after { content: " ▾"; font-size: 0.75em; }
+.nav-more[open] > summary,
+.nav-more > summary:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.nav-more-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  position: absolute;
+  right: 0;
+  min-width: 11rem;
+  margin-top: 0.35rem;
+  padding: 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--panel);
+  box-shadow: 0 0.75rem 2rem color-mix(in srgb, var(--fg) 14%, transparent);
+  z-index: 10;
+}
+
+.nav-more-menu .tab {
+  width: 100%;
+  text-align: left;
+}
+
+.goal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.goal-choice {
+  min-height: 5rem;
+  text-align: left;
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+.goal-choice[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+}
+
+.decision-summary {
+  margin: 1rem 0;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel);
+}
+
+.decision-summary h3,
+.decision-summary p { margin: 0 0 0.45rem; }
+.decision-summary p:last-child { margin-bottom: 0; }
+
+.backup-members {
+  grid-column: 1 / -1;
+  margin-top: 0.35rem;
+}
+
+.backup-members summary {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.restore-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 46rem;
+  margin: 1rem auto 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.75rem;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+@media (max-width: 760px) {
+  nav strong { width: 100%; }
+  nav .status { width: 100%; margin-left: 0; }
+  .nav-more { margin-left: auto; }
+  .nav-more-menu { right: 0; }
+  .goal-grid { grid-template-columns: 1fr; }
+  .restore-toast { margin-inline: 1rem; align-items: flex-start; }
+}

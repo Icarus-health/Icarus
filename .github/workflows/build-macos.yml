@@ -47,6 +47,10 @@ jobs:
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      # Tests und Build-Proben dürfen niemals den echten Schlüsselbund des
+      # Runner-Kontos lesen oder beschreiben. Die veröffentlichte App erkennt
+      # ihn zur Laufzeit weiterhin automatisch.
+      ICARUS_KEYCHAIN_BACKEND: none
 
     steps:
       - uses: actions/checkout@v4

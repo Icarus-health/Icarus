@@ -99,10 +99,11 @@ def test_installationsbackup_stellt_arbeitskontext_wieder_her(
     )
     assert settings["provider"] == "ollama"
 
-    assert list(installation.glob("tasks.vor-wiederherstellung-*.sqlite3"))
-    assert list(
-        installation.glob("einstellungen.json.vor-wiederherstellung-*")
-    )
+    assert list(installation.glob("self-model.vor-wiederherstellung-*.sqlite3"))
+    recovery = list(installation.glob(".icarus-recovery-*"))
+    assert len(recovery) == 1
+    assert _value(recovery[0] / "tasks.sqlite3", "tasks") == "veraendert"
+    assert (recovery[0] / "einstellungen.json").is_file()
 
 
 def test_pruefsummenfehler_wird_vor_der_wiederherstellung_erkannt(

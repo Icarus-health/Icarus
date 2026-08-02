@@ -17,6 +17,13 @@
 name: macOS-Build
 
 on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "app/**"
+      - "sidecar/**"
+      - "packaging/**"
+      - ".github/workflows/build-macos.yml"
   push:
     tags: ["v*"]
   workflow_dispatch:
@@ -84,17 +91,45 @@ jobs:
             --noconfirm
           ls -lh app/src-tauri/binaries/
 
-      - name: Sidecar startet überhaupt
-        # Ein Bündel, das baut, aber nicht startet, ist der häufigste
-        # PyInstaller-Fehler. Lieber hier auffallen als beim Nutzer.
+      - name: Gebündelten Sidecar mit Backup und Restore prüfen
         run: |
+          set -euo pipefail
+          DATA="$RUNNER_TEMP/icarus-bundle-test"
+          LOG="$RUNNER_TEMP/icarus-sidecar.log"
+          mkdir -p "$DATA"
+
           ICARUS_SIDECAR_PORT=8901 \
-          ICARUS_DATA_DIR="$RUNNER_TEMP/icarus" \
-            ./app/src-tauri/binaries/icarus-sidecar &
-          for i in $(seq 1 40); do
-            curl -fsS localhost:8901/health && break || sleep 0.5
+          ICARUS_SIDECAR_TOKEN=macos-test \
+          ICARUS_SECRETS_PASSPHRASE=macos-test \
+          ICARUS_DATA_DIR="$DATA" \
+            ./app/src-tauri/binaries/icarus-sidecar >"$LOG" 2>&1 &
+          SIDECAR_PID=$!
+
+          cleanup() {
+            kill "$SIDECAR_PID" 2>/dev/null || true
+            wait "$SIDECAR_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for i in $(seq 1 60); do
+            if curl -fsS localhost:8901/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.5
           done
-          curl -fsS localhost:8901/health | tee /dev/stderr | grep -q '"status":"ok"'
+
+          if ! curl -fsS localhost:8901/health | grep -q '"status":"ok"'; then
+            cat "$LOG"
+            exit 1
+          fi
+
+          ICARUS_E2E_BASE=http://127.0.0.1:8901 \
+          ICARUS_E2E_TOKEN=macos-test \
+          ICARUS_E2E_DATA_DIR="$DATA" \
+            node app/e2e/bundled-sidecar-backup.mjs
+
+          cleanup
+          trap - EXIT
 
       - name: Signaturzertifikat einrichten
         id: signing
@@ -126,10 +161,19 @@ jobs:
           npm install
           npx tauri build --target universal-apple-darwin
 
+      - name: App-Inhalt prüfen
+        run: |
+          APP=$(find app/src-tauri/target -name "Icarus.app" -maxdepth 7 | head -1)
+          test -n "$APP"
+          find "$APP" -type f -name "icarus-sidecar*" | grep -q .
+          find "$APP" -type f -name "product-shell.js" | grep -q .
+          find "$APP" -type f -name "product-shell.css" | grep -q .
+          echo "App-Bundle enthält Sidecar und Consumer-Oberfläche: $APP"
+
       - name: Signatur und Notarisierung prüfen
         if: steps.signing.outputs.signed == 'true'
         run: |
-          APP=$(find app/src-tauri/target -name "Icarus.app" -maxdepth 5 | head -1)
+          APP=$(find app/src-tauri/target -name "Icarus.app" -maxdepth 7 | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
           # Der eigentliche Test: Würde Gatekeeper die App durchlassen?
           spctl --assess --type execute --verbose "$APP"

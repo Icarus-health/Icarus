@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Icarus-health/Icarus/schema/self-model.schema.json",
   "title": "Icarus Selbstmodell",
-  "description": "Speicherunabhängiges Format für das überprüfbare digitale Modell einer Person. Jede Aussage trägt ihre Herkunft, ihre zeitliche Gültigkeit und ihren Widerrufspfad mit sich. Das Format ist bewusst nicht an Mem0 oder eine andere Ablage gebunden: die Ablage darf ausgetauscht werden, das Modell überlebt sie.",
+  "description": "Speicherunabhängiges Format für das überprüfbare digitale Modell einer Person. Jede Aussage trägt ihre Herkunft, ihre zeitliche Gültigkeit, mögliche Widersprüche und ihren Widerrufspfad mit sich.",
   "type": "object",
   "required": ["schema_version", "subject_id", "created_at", "assertions"],
   "additionalProperties": false,
@@ -11,7 +11,8 @@
     "schema_version": {
       "description": "Version dieses Schemas, nicht der Daten. Erlaubt Migrationen über Jahre.",
       "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "examples": ["0.2.0"]
     },
     "subject_id": {
       "description": "Stabile, interne Kennung der Person. Bewusst kein Name und keine E-Mail — identifizierende Angaben sind selbst Aussagen und gehören nach assertions.",
@@ -29,7 +30,7 @@
       "format": "date-time"
     },
     "assertions": {
-      "description": "Alle Aussagen über die Person. Eine flache Liste, weil Beziehungen über supersedes/derived_from ausgedrückt werden und nicht über Verschachtelung.",
+      "description": "Alle Aussagen über die Person. Eine flache Liste, weil Beziehungen über supersedes, derived_from und disputed_with ausgedrückt werden und nicht über Verschachtelung.",
       "type": "array",
       "items": { "$ref": "#/$defs/assertion" }
     }
@@ -42,12 +43,12 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "description": "Eindeutige, stabile Kennung dieser Aussage. Wird von supersedes und derived_from referenziert.",
+          "description": "Eindeutige, stabile Kennung dieser Aussage. Wird von supersedes, derived_from und disputed_with referenziert.",
           "type": "string",
           "minLength": 1
         },
         "kind": {
-          "description": "Zeitliche Natur der Aussage. Die Unterscheidung ist der Kern der Überprüfbarkeit: ein System, das 'wohnt in Berlin' und 'ist heute erkältet' gleich behandelt, erzeugt Widersprüche statt Wissen.",
+          "description": "Zeitliche Natur der Aussage. Die Unterscheidung ist der Kern der Überprüfbarkeit.",
           "type": "string",
           "enum": [
             "identity",
@@ -66,7 +67,7 @@
           "minLength": 1
         },
         "structured": {
-          "description": "Optionale maschinenlesbare Form derselben Aussage. Bewusst offen gehalten — die Verdichtung zu Tripeln ist ein späterer Schritt und darf das Format nicht vorab einschränken.",
+          "description": "Optionale maschinenlesbare Form derselben Aussage. Bewusst offen gehalten — ein späterer Graph darf nicht zur zweiten Wahrheit neben dem Bestand werden.",
           "type": "object"
         },
         "provenance": { "$ref": "#/$defs/provenance" },
@@ -87,34 +88,50 @@
           "format": "date-time"
         },
         "expires_at": {
-          "description": "Ab wann die Aussage nicht mehr ungeprüft verwendet werden darf. Für kind=state fast immer zu setzen.",
+          "description": "Ab wann die Aussage nicht mehr ungeprüft verwendet werden darf.",
           "type": "string",
           "format": "date-time"
         },
         "last_confirmed_at": {
-          "description": "Wann die Aussage zuletzt bestätigt wurde. Trennt 'seit Jahren unwidersprochen' von 'gerade eben verifiziert'.",
+          "description": "Wann die Aussage zuletzt bestätigt wurde.",
           "type": "string",
           "format": "date-time"
         },
         "status": {
-          "description": "Lebenszyklus der Aussage. Nichts wird gelöscht, sondern überführt — ausgenommen 'redacted', das den ausgeübten Widerruf markiert.",
+          "description": "Lebenszyklus der Aussage. disputed bedeutet: Die Aussage bleibt nachvollziehbar, darf aber bis zur Klärung nicht als gegenwärtige Wahrheit verwendet werden.",
           "type": "string",
-          "enum": ["active", "superseded", "expired", "retracted", "redacted"]
+          "enum": [
+            "active",
+            "superseded",
+            "expired",
+            "retracted",
+            "redacted",
+            "disputed"
+          ]
         },
         "supersedes": {
-          "description": "IDs der Aussagen, die durch diese ersetzt werden. Macht Wissensupdates nachvollziehbar, statt den alten Wert zu überschreiben.",
+          "description": "IDs der Aussagen, die durch diese ersetzt werden.",
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "uniqueItems": true
         },
         "superseded_by": {
-          "description": "ID der Aussage, die diese ersetzt hat. Gegenstück zu supersedes; Pflicht bei status=superseded.",
+          "description": "ID der Aussage, die diese ersetzt hat.",
           "type": "string"
         },
         "redaction": { "$ref": "#/$defs/redaction" },
         "derived_from": {
-          "description": "IDs der Aussagen, aus denen diese abgeleitet wurde. Entscheidend für den Widerruf: wird eine Quelle gelöscht, müssen alle davon abgeleiteten Aussagen mitgelöscht oder neu begründet werden.",
+          "description": "IDs der Aussagen, aus denen diese abgeleitet wurde.",
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "disputed_with": {
+          "description": "IDs der Aussagen, zu denen diese im ungeklärten Widerspruch steht. Die Verknüpfung wird im Bestand gegenseitig gepflegt.",
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
         },
         "sensitivity": {
           "description": "Schutzbedarf. Steuert, ob eine Aussage an externe Modelle übergeben werden darf.",
@@ -130,19 +147,36 @@
 
       "allOf": [
         {
-          "description": "Eine ersetzte Aussage muss benennen, wodurch sie ersetzt wurde — sonst ist die Kette nicht nachvollziehbar.",
-          "if": { "properties": { "status": { "const": "superseded" } }, "required": ["status"] },
+          "description": "Eine ersetzte Aussage muss benennen, wodurch sie ersetzt wurde.",
+          "if": {
+            "properties": { "status": { "const": "superseded" } },
+            "required": ["status"]
+          },
           "then": { "required": ["superseded_by"] }
         },
         {
           "description": "Eine abgelaufene Aussage braucht ein Ablaufdatum.",
-          "if": { "properties": { "status": { "const": "expired" } }, "required": ["status"] },
+          "if": {
+            "properties": { "status": { "const": "expired" } },
+            "required": ["status"]
+          },
           "then": { "required": ["expires_at"] }
         },
         {
-          "description": "Ein Widerruf muss dokumentiert sein, sonst ist er nicht prüfbar.",
-          "if": { "properties": { "status": { "const": "redacted" } }, "required": ["status"] },
+          "description": "Ein Widerruf muss dokumentiert sein.",
+          "if": {
+            "properties": { "status": { "const": "redacted" } },
+            "required": ["status"]
+          },
           "then": { "required": ["redaction"] }
+        },
+        {
+          "description": "Eine strittige Aussage muss mindestens ihr Gegenstück benennen.",
+          "if": {
+            "properties": { "status": { "const": "disputed" } },
+            "required": ["status"]
+          },
+          "then": { "required": ["disputed_with"] }
         }
       ]
     },
@@ -154,7 +188,7 @@
       "additionalProperties": false,
       "properties": {
         "source_type": {
-          "description": "Art der Quelle. 'inference' markiert Aussagen, die das System selbst gebildet hat — sie sind nie so belastbar wie berichtete.",
+          "description": "Art der Quelle. inference markiert Aussagen, die das System selbst gebildet hat.",
           "type": "string",
           "enum": [
             "user_stated",
@@ -169,7 +203,7 @@
           ]
         },
         "source_ref": {
-          "description": "Verweis auf das konkrete Original (Nachrichten-ID, Datei-Hash, URL). Erlaubt das Nachschlagen Jahre später.",
+          "description": "Verweis auf das konkrete Original.",
           "type": "string"
         },
         "captured_at": {
@@ -178,7 +212,7 @@
           "format": "date-time"
         },
         "extracted_by": {
-          "description": "Welches Modell bzw. welcher Prozess die Aussage extrahiert hat. Macht Fehler einer bestimmten Modellgeneration im Nachhinein auffindbar.",
+          "description": "Welches Modell beziehungsweise welcher Prozess die Aussage extrahiert hat.",
           "type": "string"
         },
         "verbatim": {
@@ -194,13 +228,16 @@
       "required": ["redacted_at", "reason"],
       "additionalProperties": false,
       "properties": {
-        "redacted_at": { "type": "string", "format": "date-time" },
+        "redacted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
         "reason": {
           "type": "string",
           "enum": ["user_request", "retention_policy", "correction", "legal"]
         },
         "cascade": {
-          "description": "IDs der Aussagen, die als Folge mitgelöscht wurden, weil sie hierauf beruhten.",
+          "description": "IDs der Aussagen, die als Folge mitgelöscht wurden.",
           "type": "array",
           "items": { "type": "string" }
         }

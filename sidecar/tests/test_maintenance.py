@@ -81,6 +81,22 @@ def _runtime_client(tmp_path: Path, monkeypatch) -> tuple[TestClient, object]:
     return TestClient(app), app
 
 
+def _assert_blocked_write(client: TestClient, operation: str) -> None:
+    blocked = client.post(
+        "/tasks",
+        json={"title": "Darf nicht in einen Wartungslauf rutschen."},
+    )
+    assert blocked.status_code == 503
+    assert blocked.headers["retry-after"] == "2"
+    assert blocked.json()["maintenance"] is True
+    assert blocked.json()["operation"] == operation
+
+    # Das Lebenszeichen bleibt erreichbar, obwohl Nutzdaten kurz gesperrt sind.
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.headers["x-icarus-maintenance"] == operation
+
+
 def test_backup_blockiert_parallele_schreibanfrage(
     tmp_path: Path,
     monkeypatch,
@@ -105,19 +121,7 @@ def test_backup_blockiert_parallele_schreibanfrage(
     thread.start()
     assert snapshot_started.wait(timeout=2)
 
-    blocked = client.post(
-        "/tasks",
-        json={"title": "Darf nicht in die laufende Sicherung rutschen."},
-    )
-    assert blocked.status_code == 503
-    assert blocked.headers["retry-after"] == "2"
-    assert blocked.json()["maintenance"] is True
-    assert blocked.json()["operation"] == "backup"
-
-    # Das Lebenszeichen bleibt erreichbar, obwohl Nutzdaten kurz gesperrt sind.
-    health = client.get("/health")
-    assert health.status_code == 200
-    assert health.headers["x-icarus-maintenance"] == "backup"
+    _assert_blocked_write(client, "backup")
 
     release_snapshot.set()
     thread.join(timeout=5)
@@ -135,4 +139,49 @@ def test_backup_blockiert_parallele_schreibanfrage(
     scheduled = app.state.scheduler._run_backup  # noqa: SLF001
     assert scheduled is not None
     assert getattr(scheduled, "__icarus_maintenance_wrapped__", False) is True
+    app.state.scheduler.stop()
+
+
+def test_restore_blockiert_parallele_schreibanfrage(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client, app = _runtime_client(tmp_path, monkeypatch)
+    name = client.post("/backups").json()["name"]
+
+    original_restore = server.restore
+    restore_started = threading.Event()
+    release_restore = threading.Event()
+
+    def slow_restore(*args, **kwargs):
+        restore_started.set()
+        assert release_restore.wait(timeout=5)
+        return original_restore(*args, **kwargs)
+
+    monkeypatch.setattr(server, "restore", slow_restore)
+    result: dict[str, object] = {}
+
+    def run_restore() -> None:
+        result["response"] = client.post(
+            "/backups/restore",
+            json={"name": name},
+        )
+
+    thread = threading.Thread(target=run_restore)
+    thread.start()
+    assert restore_started.wait(timeout=2)
+
+    _assert_blocked_write(client, "restore")
+
+    release_restore.set()
+    thread.join(timeout=5)
+    assert thread.is_alive() is False
+    restore_response = result["response"]
+    assert getattr(restore_response, "status_code") == 200
+
+    accepted = client.post(
+        "/tasks",
+        json={"title": "Nach dem Restore wieder erlaubt."},
+    )
+    assert accepted.status_code == 201
     app.state.scheduler.stop()

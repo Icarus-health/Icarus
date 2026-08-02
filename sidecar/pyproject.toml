@@ -21,7 +21,10 @@ cognee = ["cognee>=1.4.0"]
 dev = ["pytest>=8.0", "jsonschema>=4.20", "httpx>=0.27"]
 
 [project.scripts]
-icarus-sidecar = "icarus_memory.server:main"
+# Der Laufzeitrahmen ergänzt die exklusive Wartungsschranke für vollständige
+# Sicherungen und Restores. `server:create_app` bleibt für fokussierte Unit-Tests
+# direkt nutzbar; ausgelieferte Prozesse laufen immer über `runtime`.
+icarus-sidecar = "icarus_memory.runtime:main"
 # Die MCP-Tür. Kein eigener Stapel — ein Client des laufenden Sidecars, damit
 # Freigaben dort landen, wo ein Mensch sitzt. Siehe icarus_memory/mcp.py.
 icarus-mcp = "icarus_memory.mcp:main"

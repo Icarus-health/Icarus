@@ -353,20 +353,25 @@ def _restore_installation(snapshot_path: Path, data_dir: Path) -> None:
 
         data_dir.mkdir(parents=True, exist_ok=True)
         stamp = now().strftime("%Y%m%dT%H%M%SZ")
+        recovery_dir = data_dir / f".icarus-recovery-{stamp}"
 
-        # Erst den gesamten heutigen Stand beiseitelegen. Die Dateien bleiben
-        # einzeln lesbar und geraten nicht in spätere Backups, weil nur die
-        # kanonischen Namen aufgenommen werden.
+        # Das Selbstmodell behält aus Rückwärtskompatibilität seinen bisherigen,
+        # sichtbaren Namen. Die übrigen Dateien landen gesammelt in einem
+        # Recovery-Ordner statt die Datenablage mit sechs ähnlich benannten
+        # Dateien zu füllen. Beides bleibt manuell lesbar.
         for current in _installation_members(data_dir):
-            if current.name in DATABASE_FILES:
+            if current.name == "self-model.sqlite3":
                 aside = current.with_name(
-                    f"{current.stem}.vor-wiederherstellung-{stamp}.sqlite3"
+                    f"self-model.vor-wiederherstellung-{stamp}.sqlite3"
                 )
                 _copy_sqlite(current, aside)
+                continue
+
+            recovery_dir.mkdir(parents=True, exist_ok=True)
+            aside = recovery_dir / current.name
+            if current.name in DATABASE_FILES:
+                _copy_sqlite(current, aside)
             else:
-                aside = current.with_name(
-                    f"{current.name}.vor-wiederherstellung-{stamp}"
-                )
                 shutil.copy2(current, aside)
 
         # SQLite wird in die bestehenden Dateien zurückgespielt. Dadurch sehen

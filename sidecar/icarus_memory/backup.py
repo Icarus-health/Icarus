@@ -288,15 +288,20 @@ def restore(snapshot_path: Path, db_path: Path) -> None:
 
 
 def _restore_installation(snapshot_path: Path, data_dir: Path) -> None:
-    """Validiert alles, bevor die erste Nutzdatei verändert wird."""
+    """Validiert alles, bevor die erste Nutzdatei verändert wird.
+
+    Das Staging liegt im Icarus-Datenverzeichnis. Dieser Ort gehört im Desktop-
+    wie im Containerbetrieb dem Icarus-Prozess. Das Elternverzeichnis kann
+    absichtlich nicht beschreibbar sein, etwa `/` bei `/daten` im Container.
+    """
     try:
         archive = zipfile.ZipFile(snapshot_path)
     except zipfile.BadZipFile as exc:
         raise BackupError(f"Sicherung ist kein lesbares ZIP-Archiv: {exc}") from exc
 
-    data_dir.parent.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
     with archive, tempfile.TemporaryDirectory(
-        prefix=".icarus-restore-", dir=data_dir.parent
+        prefix=".icarus-restore-", dir=data_dir
     ) as temporary:
         staging = Path(temporary)
         try:
@@ -351,7 +356,6 @@ def _restore_installation(snapshot_path: Path, data_dir: Path) -> None:
                 + ", ".join(sorted(unexpected))
             )
 
-        data_dir.mkdir(parents=True, exist_ok=True)
         stamp = now().strftime("%Y%m%dT%H%M%SZ")
         recovery_dir = data_dir / f".icarus-recovery-{stamp}"
 

@@ -1,87 +1,116 @@
-# Säule 1: Das überprüfbare Selbstmodell
+# Das überprüfbare Selbstmodell
 
-> Schema: [`schema/self-model.schema.json`](../schema/self-model.schema.json) · Beispiel: [`schema/beispiel-profil.json`](../schema/beispiel-profil.json) · Entscheidung: [ADR 0004](adr/0004-selbstmodell-schema.md)
+> **Status:** aktueller Systemvertrag  
+> **Gültig seit:** 2026-08-02  
+> **Verbindlich für:** `schema/self-model.schema.json`, `model.py`, `store.py`  
+> **Schema-Version:** `0.2.0`  
+> **Zuletzt gegen den Code geprüft:** 2026-08-02
 
-## Warum das der schwierige Teil ist
+## Zweck
 
-Ein System, das sich Dinge merkt, ist einfach zu bauen. Ein System, dem man nach zehn Jahren noch **glauben** kann, ist es nicht.
+Ein Langzeitgedächtnis ist nur wertvoll, wenn es nach Jahren noch beantworten
+kann:
 
-Der Unterschied liegt nicht in der Abrufqualität, sondern in vier Fragen, die ein Retrieval-System strukturell nicht beantworten kann:
+- Woher weißt du das?
+- Gilt das noch?
+- Ist es berichtet oder abgeleitet?
+- Was hat diese Aussage ersetzt?
+- Welche Folgerungen hängen daran?
+- Widerspricht ihr eine andere Angabe?
+- Kann die Person sie korrigieren oder entfernen?
 
-- **Woher weißt du das?** Aus einer beiläufigen Bemerkung von 2027 oder aus einer bestätigten Angabe von letzter Woche?
-- **Gilt das noch?** „Wohnt in Hamburg" war einmal richtig. Ohne Ersetzungskette ist es heute schlicht falsch.
-- **Hast du dir das selbst ausgedacht?** Abgeleitete Aussagen sind nützlich, aber sie dürfen nicht denselben Rang haben wie berichtete.
-- **Kann ich das wieder loswerden?** Und zwar samt allem, was daraus gefolgert wurde.
+Das Selbstmodell speichert deshalb keine flache Liste vermeintlicher Fakten,
+sondern versionierte Aussagen mit Herkunft und Lebenszyklus.
 
-Genau hier brechen Assistenten in der Praxis ein. Die einschlägigen Benchmarks — LoCoMo für sehr lange Gespräche, LongMemEval für Wissensupdates, temporales Reasoning und Abstention — messen im Kern diese Fähigkeiten. Ohne explizite Architektur entsteht nur die *Illusion* von Persönlichkeit: ein System, das flüssig klingt und dabei veraltete Fakten mit voller Überzeugung vorträgt.
+## Verbindliche Regeln
 
-Keines der untersuchten Projekte löst das vollständig. Sie speichern Fakten und finden sie wieder; sie halten keine Ersetzungsketten, keine Ableitungsherkunft und keinen Widerrufspfad. Deshalb steht hier ein eigenes Format — und zwar bewusst **vor** dem Code, der es füllt.
+### Herkunft ist Pflicht
 
-## Grundregeln
+Jede Aussage trägt `provenance`. Abgeleitete Aussagen behalten zusätzlich den
+wörtlichen Beleg und den Prozess beziehungsweise das Modell, das sie
+vorgeschlagen hat.
 
-**Jede Aussage trägt ihre Herkunft.** Ohne `provenance` darf nichts ins Modell. Eine Aussage ohne Quelle ist nicht überprüfbar, und ein nicht überprüfbares Modell verfehlt den Zweck des Projekts.
+### Inhalt wird nicht überschrieben
 
-**Nichts wird überschrieben.** Ändert sich etwas, entsteht eine neue Aussage, die die alte über `supersedes` ersetzt; die alte bekommt `status: superseded` und zeigt über `superseded_by` zurück. Die Kette bleibt lesbar. Das ist der Unterschied zwischen „das System weiß, dass ich umgezogen bin" und „das System hat vergessen, dass ich mal woanders wohnte".
+Eine Änderung erzeugt eine neue Aussage. `supersedes` und `superseded_by`
+erhalten die Geschichte. Statusänderungen sind zulässig; der ursprüngliche
+Inhalt bleibt unverändert, außer bei einem ausdrücklich verlangten Widerruf.
 
-**Ableitungen sind gekennzeichnet.** `source_type: inference` plus `derived_from`. Damit ist jederzeit erkennbar, welcher Teil des Modells berichtet und welcher gefolgert ist.
+### Zeit gehört zur Aussage
 
-**Löschen heißt kaskadieren.** Wird eine Aussage widerrufen, müssen alle daraus abgeleiteten Aussagen mitgelöscht oder neu begründet werden. Das Feld `redaction.cascade` hält fest, was mitging. Ein Grabstein bleibt stehen, damit eine Lücke als Lücke erkennbar ist statt als Nie-dagewesen.
+`valid_from`, `expires_at` und `last_confirmed_at` unterscheiden Vergangenheit,
+Gegenwart und ungeprüfte Alterung. Eine alte Zustandsangabe darf nicht
+stillschweigend als heutige Wahrheit erscheinen.
 
-**Das Format ist speicherunabhängig.** Der verbindliche Bestand liegt heute in lokalem SQLite, der semantische Index in cognee. Das Modell muss beide überleben können — im Code ist das als Schnittstelle `Backend` festgehalten, nicht bloß als Vorsatz. Das ist Säule 2 in konkreter Form.
+### Ableitungen bleiben erkennbar
 
-## Die Typen von Aussagen
+`source_type: inference` und `derived_from` markieren, was Icarus gefolgert
+hat. Widerruft die Person eine Quelle, werden abhängige Aussagen kaskadierend
+entfernt oder müssen neu begründet werden.
 
-Die Unterscheidung nach `kind` ist keine Ordnungsliebe, sondern die Voraussetzung dafür, Widersprüche von Veränderungen zu trennen.
+### Konflikte werden sichtbar, nicht geraten
 
-| `kind` | Bedeutung | Zeitliches Verhalten |
-|---|---|---|
-| `identity` | Stabile Merkmale der Person | Ändert sich selten, dann als Ersetzung |
-| `preference` | Arbeits- und Kommunikationsvorlieben | Driftet langsam, gehört regelmäßig bestätigt |
-| `state` | Veränderlicher Zustand (Wohnort, Arbeitgeber) | Braucht fast immer `expires_at` oder Ersetzung |
-| `episode` | Einzelnes Ereignis | Gilt unbegrenzt, wird aber nie zur Gegenwart |
-| `goal` | Vorhaben mit Zeithorizont | Läuft ab oder wird erfüllt |
-| `relationship` | Beziehungen zu Personen und Organisationen | Häufig `sensitive` |
-| `skill` | Fähigkeiten und Kenntnisse | Wächst, veraltet |
-| `constraint` | Harte Randbedingungen und Verbote | Höchste Priorität bei Konflikten |
+`status: disputed` und `disputed_with` markieren ungeklärte Widersprüche
+gegenseitig. Strittige Aussagen sind nicht `usable()`. Sie erscheinen getrennt
+im Kontext, damit das Modell nachfragt statt eine Seite auszuwählen.
 
-Ein System, das `identity` und `state` gleich behandelt, produziert genau die Fehler, an denen LongMemEval-artige Aufgaben scheitern.
+### Löschen hinterlässt einen Grabstein
+
+`redacted` entfernt den persönlichen Inhalt, erhält aber den dokumentierten
+Vorgang. `retracted` bedeutet dagegen, dass eine Aussage inhaltlich falsch war.
+
+## Aussagearten
+
+| Art | Bedeutung |
+|---|---|
+| `identity` | relativ stabile Merkmale |
+| `preference` | Vorlieben und Arbeitsweisen |
+| `state` | veränderlicher gegenwärtiger Zustand |
+| `episode` | vergangenes Einzelereignis |
+| `goal` | Vorhaben mit Zeithorizont |
+| `relationship` | Beziehung zu Person oder Organisation |
+| `skill` | Fähigkeit oder Wissen |
+| `constraint` | bindende Grenze für Handlungen |
+
+Aufgaben und Projektdokumente liegen bewusst nicht im Selbstmodell. Sie
+beschreiben Arbeit, nicht die Identität der Person.
 
 ## Lebenszyklus
 
 ```mermaid
 stateDiagram-v2
-    [*] --> active: erfasst mit Herkunft
-    active --> superseded: neue Aussage ersetzt sie
-    active --> expired: expires_at überschritten
-    active --> retracted: Person widerspricht
-    active --> redacted: Löschung verlangt
-    superseded --> redacted: Löschung verlangt
+    [*] --> active
+    active --> superseded
+    active --> expired
+    active --> disputed
+    active --> retracted
+    active --> redacted
+    disputed --> superseded
+    disputed --> retracted
+    disputed --> redacted
     expired --> active: erneut bestätigt
-    redacted --> [*]: Inhalt entfernt, Grabstein bleibt
 ```
 
-`expired` ist kein Endzustand: Eine abgelaufene Aussage kann durch Nachfragen wieder bestätigt werden und ist dann wieder `active` — mit neuem `last_confirmed_at`. Das ist der Mechanismus, über den ein Zwilling aktuell bleibt, ohne zu raten.
+## Schema und Laufzeit
 
-Unterschied zwischen `retracted` und `redacted`: Bei `retracted` war die Aussage **falsch** (die Person widerspricht dem Inhalt). Bei `redacted` war sie womöglich richtig, soll aber **weg** (die Person übt ihr Recht auf Löschung aus). Beide brauchen unterschiedliche Behandlung — die erste ist eine Korrektur des Wissens, die zweite ein Eingriff in den Bestand.
+Das JSON-Schema ist die öffentliche portable Form. Python-Enums und Schema-Enums
+werden automatisch auf Parität getestet. Ein Export mit strittigen Aussagen
+muss das Schema validieren.
 
-## Was das Schema noch nicht leistet
+Version `0.2.0` ergänzt gegenüber `0.1.0` den formal beschriebenen
+Konfliktstatus. Bestehende `0.1.0`-Dokumente bleiben lesbar, da die Änderung
+Felder ergänzt und keine bestehenden Werte umdeutet.
 
-Ehrlich benannt, damit es niemand für fertig hält:
+## Offene Punkte
 
-- **Kein Konfliktlöser.** Das Schema kann Widersprüche *darstellen*, aber nicht entscheiden. Welche zweier widersprüchlicher Aussagen gewinnt, ist Logik der Orchestrierungsschicht.
-- **Keine Verdichtung.** Reflexionen und Zusammenfassungen über viele Episoden hinweg — die Ebene, die aus Erinnerungen ein Selbstbild macht — fehlen. Für den Anfang lassen sie sich als `inference` mit `derived_from` abbilden, das trägt aber nicht auf Dauer.
-- **Durchsetzung liegt in der Agentenschicht, nicht im Schema.** `sensitivity` ist im Schema eine Markierung; durchgesetzt wird sie von `Agent.effective_sensitivity_ceiling()` und `Agent.assert_egress_allowed()`. Ein externer Anbieter bekommt nur `normal`, ein Anbieter auf Loopback auch `sensitive`, `special_category` in keinem Fall. Siehe [06-gedaechtnis-kontrakt.md](06-gedaechtnis-kontrakt.md) und [03-delegation.md](03-delegation.md).
-- **Kein Konsolidierungslauf.** Aussagen sammeln sich an; ein Prozess, der sie periodisch verdichtet, prüft und veraltete zur Bestätigung vorlegt, fehlt.
+- automatische semantische Erkennung von Widersprüchen ist weiterhin nur ein
+  Vorschlagsverfahren;
+- der abgeleitete Zustand wird noch nicht vollständig aus einem Ereignisstrom
+  neu projiziert;
+- Entitäten und Beziehungen für den künftigen Wissensgraphen sind noch nicht
+  verbindlich typisiert;
+- eine konsequente Zitatpflicht für jede externe Antwort ist noch nicht
+  technisch erzwungen.
 
-## Prüfen
-
-```bash
-make test              # Tests der Regeln (derzeit 153)
-make validate-schema   # Beispielprofil gegen das Schema
-```
-
-Die Tests laufen **ohne Netz, ohne Modell und ohne cognee**. Das ist Absicht: Die Regeln, die das Modell überprüfbar machen, dürfen nicht von einer Fremdbibliothek abhängen. Abgedeckt sind unter anderem die Ersetzungskette über drei Stationen, die Wiederbelebung einer abgelaufenen Aussage durch Bestätigung, der kaskadierende Widerruf über zwei Ableitungsebenen und die Weigerung, eine widerrufene Aussage zu ersetzen.
-
-Ein Test prüft zusätzlich, dass der **Export gegen genau die Schemadatei validiert**, die dieses Dokument beschreibt — Doku und Code können nicht auseinanderlaufen, ohne dass die Tests rot werden.
-
-`schema/beispiel-profil.json` deckt dieselben schwierigen Fälle als Beispiel ab: Ersetzungskette (Hamburg → Leipzig), abgelaufene Gesundheitsangabe, markierte Ableitung, kaskadierender Widerruf.
+Neue Funktionen dürfen diese Lücken schließen, aber nicht die bestehenden
+Korrektur- und Herkunftswege umgehen.

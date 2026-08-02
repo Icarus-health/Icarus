@@ -312,7 +312,7 @@ token. `make stop` halts it; the memory and the keys stay. Details in German:
 
 ```bash
 make sidecar-dev     # memory core + dev dependencies (no cognee, fast)
-make test            # 417 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability, inbox, restore
+make test            # 418 tests: memory, policy, audit, agent, security, connectors, egress, workspace, MCP, episodes, ingest, setup, container, consolidation, schedule, summaries, usability, inbox, restore
 make sidecar-run     # http://127.0.0.1:8765
 ```
 
@@ -357,7 +357,7 @@ artifact before you have a developer account.
 make check           # tests + schema validation + cargo check
 ```
 
-417 tests, no network and no model required — including a test that plays out a
+418 tests, no network and no model required — including a test that plays out a
 full prompt-injection attack and asserts nothing escaped, a suite that proves
 sensitive facts cannot reach an external provider, and one that proves a foreign
 assistant on the MCP door cannot trigger an outward action, and one that imports
@@ -485,7 +485,7 @@ sidecar/             Python: memory, policy, agent
     providers_mail.py  Known mail providers, so nobody has to know an IMAP host
     server.py        Loopback-only HTTP API for the app
     mcp.py           The MCP door: same memory for other assistants, same policy
-  tests/             417 tests, no network and no model required
+  tests/             418 tests, no network and no model required
 app/                 Tauri desktop app (Rust shell, HTML/JS frontend)
                      The frontend also runs in a plain browser, for the container
 Dockerfile           Container image; compose.yaml pins the port to loopback

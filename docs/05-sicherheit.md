@@ -165,3 +165,47 @@ Für Anzeige und Zusammenfassung genügt das; als Parser ist es keiner.
 **Ungeprüft in dieser Umgebung:** Der Schlüsselbund-Zugriff wurde gegen einen
 Fake getestet, nicht gegen echte Keychain, DPAPI oder secret-tool. Das braucht
 einen Lauf auf der jeweiligen Plattform.
+
+## Prüfung vom 2026-08-02
+
+Alle tragenden Zusagen einzeln durch **Sabotageprobe** geprüft: die Zusage im
+Code absichtlich gebrochen, den Testlauf angesehen, den Zustand wiederhergestellt.
+Ein Test, der dabei nichts fängt, ist schlimmer als keiner.
+
+| Zusage | Probe | Ergebnis |
+| --- | --- | --- |
+| Verdichtung schlägt vor, schreibt nicht | Zeitplan nimmt eigene Vorschläge an | gefangen (`test_zeitplan`) |
+| Bestand ist append-only | SQLite-Trigger entfernt | gefangen (5 Tests, 37 Fehler) |
+| Außenwirksames braucht Freigabe | `OUTWARD` → `AUTO` | gefangen (8 Tests) |
+| Fremder Inhalt kontaminiert die Runde | `returns_untrusted=False` | gefangen (`test_mail_kontaminiert_die_runde`) |
+| Pfadgrenze | Wurzelprüfung übersprungen | gefangen (6 Tests, inkl. Injektionskette) |
+| Geheimnisse nie in der Einstellungsdatei | Schlüssel in `settings` geschrieben | gefangen (3 Tests) |
+| Loopback und Token | siehe unten — **hier lag ein Leck** |
+
+Dazu die mechanische Prüfung: von 60 Endpunkten trägt genau einer kein
+`dependencies=guard` — `/health`, und das mit Absicht.
+
+### Der Fund: `/health` verriet zu viel
+
+`/health` muss offen bleiben. `make start` und der Healthcheck des Containers
+warten darauf, dass der Sidecar antwortet, und beide haben an dieser Stelle kein
+Token zur Hand.
+
+Es stand dort aber der **ganze Zustand**: die absoluten Pfade der freigegebenen
+Ordner, der eingerichtete Anbieter samt Modell, der Schlüsselbund-Typ, ob Mail
+und Kalender stehen. Jeder Prozess auf demselben Rechner konnte das lesen — und
+genau der ist laut dem Bedrohungsmodell dieses Projekts der relevante Angreifer.
+
+Ordnernamen verraten dabei mehr, als sie sollten. Ein Pfad wie
+`/Users/…/Praxis/Patienten` ist für sich schon eine Auskunft, und für einen
+gezielten Angriff ist er die halbe Vorarbeit.
+
+**Jetzt:** ohne Token nur `{"status": "ok"}`, mit Token die volle Auskunft. Alle
+bisherigen Aufrufer funktionieren unverändert — die drei Wartenden brauchen nur
+ein Lebenszeichen, und die Oberfläche hat das Token ohnehin.
+
+### Was diese Prüfung nicht abdeckt
+
+Sie prüft, ob die Zusagen **im Code** halten und ob die Tests einen Bruch
+**fangen**. Sie ist keine Prüfung des Betriebs: kein echter Container, kein
+echter Mailserver, kein Angreifer mit Zeit.

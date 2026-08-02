@@ -1,4 +1,10 @@
-# Baut Icarus für macOS als signiertes und notarisiertes .dmg.
+# Baut Icarus für macOS Apple Silicon als signiertes und notarisiertes .dmg.
+#
+# Der Sidecar wird mit PyInstaller auf demselben ARM-Runner gebaut und ist damit
+# ebenfalls aarch64. Ein Universal-Bundle mit einem ARM-Sidecar wäre technisch
+# unehrlich: Die Oberfläche könnte auf Intel starten, der eigentliche Icarus-
+# Prozess jedoch nicht. Echte Intel-/Universal-Unterstützung braucht deshalb
+# einen separaten x86_64-Runner und ein zweites, geprüftes Sidecar-Artefakt.
 #
 # Ohne Notarisierung blockt Gatekeeper eine heruntergeladene App — sie ist dann
 # faktisch nicht verteilbar. Deshalb gehört das in die Pipeline, nicht in eine
@@ -65,7 +71,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -93,7 +99,8 @@ jobs:
             --distpath app/src-tauri/binaries \
             --workpath build/pyinstaller \
             --noconfirm
-          ls -lh app/src-tauri/binaries/
+          file app/src-tauri/binaries/icarus-sidecar
+          file app/src-tauri/binaries/icarus-sidecar | grep -q "arm64"
 
       - name: Gebündelten Sidecar mit Backup und Restore prüfen
         run: |
@@ -164,7 +171,7 @@ jobs:
           rm "$RUNNER_TEMP/cert.p12"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
-      - name: App bauen
+      - name: App für Apple Silicon bauen
         working-directory: app
         env:
           # Sind die Secrets leer, baut Tauri unsigniert weiter.
@@ -174,20 +181,23 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           npm install
-          npx tauri build --target universal-apple-darwin
+          npx tauri build --target aarch64-apple-darwin
 
-      - name: App-Inhalt prüfen
+      - name: App-Inhalt und Architektur prüfen
         run: |
-          APP=$(find app/src-tauri/target -type d -name "Icarus.app" | head -1)
+          APP=$(find app/src-tauri/target/aarch64-apple-darwin -type d -name "Icarus.app" | head -1)
           test -n "$APP"
           test -x "$APP/Contents/MacOS/Icarus"
-          find "$APP" -type f -name "icarus-sidecar*" | grep -q .
-          echo "App-Bundle enthält Hauptprogramm und Sidecar: $APP"
+          file "$APP/Contents/MacOS/Icarus" | grep -q "arm64"
+          SIDECAR=$(find "$APP" -type f -name "icarus-sidecar*" | head -1)
+          test -n "$SIDECAR"
+          file "$SIDECAR" | grep -q "arm64"
+          echo "Apple-Silicon-App enthält ARM-Hauptprogramm und ARM-Sidecar: $APP"
 
       - name: Signatur und Notarisierung prüfen
         if: steps.signing.outputs.signed == 'true'
         run: |
-          APP=$(find app/src-tauri/target -type d -name "Icarus.app" | head -1)
+          APP=$(find app/src-tauri/target/aarch64-apple-darwin -type d -name "Icarus.app" | head -1)
           codesign --verify --deep --strict --verbose=2 "$APP"
           # Der eigentliche Test: Würde Gatekeeper die App durchlassen?
           spctl --assess --type execute --verbose "$APP"
@@ -199,9 +209,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: icarus-macos${{ steps.signing.outputs.signed == 'true' && '' || '-unsigniert' }}
+          name: icarus-macos-apple-silicon${{ steps.signing.outputs.signed == 'true' && '' || '-unsigniert' }}
           path: |
-            app/src-tauri/target/**/release/bundle/dmg/*.dmg
-            app/src-tauri/target/**/release/bundle/macos/*.app
+            app/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            app/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
           if-no-files-found: error
           retention-days: 14

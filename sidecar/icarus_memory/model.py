@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any
 
 SCHEMA_VERSION = "0.2.0"
+LEGACY_SCHEMA_VERSION = "0.1.0"
 
 
 def now() -> datetime:
@@ -198,16 +199,30 @@ class Assertion:
 
 @dataclass
 class SelfModel:
-    """Das vollständige, exportierbare Modell einer Person."""
+    """Das vollständige, exportierbare Modell einer Person.
+
+    Ein Dokument, das ausschließlich den bisherigen 0.1-Vertrag nutzt, bleibt
+    als 0.1 exportierbar. Sobald eine Aussage den neuen Konfliktvertrag nutzt,
+    kennzeichnet der Export sich als 0.2. So bleiben alte Verbraucher
+    kompatibel, ohne neue Felder unter einer alten Versionsnummer zu verstecken.
+    """
 
     subject_id: str
     created_at: datetime
     assertions: list[Assertion] = field(default_factory=list)
-    schema_version: str = SCHEMA_VERSION
+    schema_version: str = LEGACY_SCHEMA_VERSION
+
+    def effective_schema_version(self) -> str:
+        if any(
+            assertion.status is Status.DISPUTED or assertion.disputed_with
+            for assertion in self.assertions
+        ):
+            return SCHEMA_VERSION
+        return self.schema_version
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "schema_version": self.schema_version,
+            "schema_version": self.effective_schema_version(),
             "subject_id": self.subject_id,
             "created_at": _iso(self.created_at),
             "exported_at": _iso(now()),
@@ -217,6 +232,7 @@ class SelfModel:
 
 __all__ = [
     "SCHEMA_VERSION",
+    "LEGACY_SCHEMA_VERSION",
     "Assertion",
     "ensure_aware",
     "Kind",

@@ -73,4 +73,7 @@ jobs:
         with:
           node-version: "22"
       - name: Frontend-Syntax
-        run: node --check app/src/main.js
+        run: |
+          node --check app/src/main.js
+          node --check app/src/product-shell.js
+          node --check app/e2e/container-backup.mjs

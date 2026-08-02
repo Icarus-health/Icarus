@@ -455,8 +455,38 @@ def create_app(
 
     guard = [Depends(auth)]
 
+    def angemeldet(token: str | None) -> bool:
+        """Ob ein Aufrufer sich ausgewiesen hat — ohne abzuweisen.
+
+        Gebraucht von `/health`: Der Endpunkt muss offen bleiben, weil
+        `make start` und der Healthcheck des Containers darauf warten, dass der
+        Sidecar antwortet. Er darf aber nicht jedem alles sagen.
+        """
+        if expected is None:
+            return True
+        return token is not None and secrets.compare_digest(token, expected)
+
     @app.get("/health")
-    def health() -> dict[str, Any]:
+    def health(
+        x_icarus_token: Annotated[str | None, Header()] = None,
+    ) -> dict[str, Any]:
+        """Lebenszeichen für alle, Auskunft nur für Angemeldete.
+
+        Ohne Token stand hier bis eben der ganze Zustand: die **absoluten Pfade
+        der freigegebenen Ordner**, der eingerichtete Anbieter, ob Mail und
+        Kalender stehen. Jeder Prozess auf demselben Rechner konnte das lesen —
+        und genau der ist laut Bedrohungsmodell dieses Projekts der relevante
+        Angreifer. Ordnernamen verraten dabei mehr als sie sollten; ein Pfad wie
+        `/Users/…/Praxis/Patienten` ist für sich schon eine Auskunft.
+
+        Offen bleiben muss der Endpunkt trotzdem: `make start` und der
+        Healthcheck des Containers warten darauf, dass er antwortet, und beide
+        haben an dieser Stelle kein Token zur Hand. Ein Lebenszeichen ist alles,
+        was sie brauchen.
+        """
+        if not angemeldet(x_icarus_token):
+            return {"status": "ok"}
+
         backend = getattr(app.state, "backend", None)
         provider = app.state.agent.provider
         return {

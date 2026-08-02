@@ -211,3 +211,50 @@ def test_kontamination_legt_auch_harmloses_vor(tmp_path: Path) -> None:
     d = agent._policy.decide("merken", ActionClass.WRITE_LOCAL, {}, tainted=True)
     assert d.needs_approval
     assert "fremde Inhalte" in " ".join(d.reasons)
+
+
+# -- Was ohne Token sichtbar ist --------------------------------------------
+
+
+def test_health_verraet_ohne_token_nichts_ueber_den_nutzer(tmp_path, monkeypatch) -> None:
+    """`/health` muss offen bleiben — `make start` und der Healthcheck des
+    Containers warten darauf, und beide haben kein Token zur Hand.
+
+    Es stand dort aber der ganze Zustand: die **absoluten Pfade der
+    freigegebenen Ordner**, der Anbieter, ob Mail und Kalender stehen. Jeder
+    Prozess auf demselben Rechner konnte das lesen — und genau der ist laut
+    Bedrohungsmodell dieses Projekts der relevante Angreifer. Ein Pfad wie
+    `/Users/…/Praxis/Patienten` ist für sich schon eine Auskunft.
+    """
+    from fastapi.testclient import TestClient
+
+    from icarus_memory import MemoryBackend, SelfModelStore
+    from icarus_memory.audit import AuditLog
+    from icarus_memory.episodes import EpisodeStore
+    from icarus_memory.server import TOKEN_ENV, create_app
+
+    geheim = tmp_path / "Praxis" / "Patienten"
+    geheim.mkdir(parents=True)
+    monkeypatch.setenv("ICARUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ICARUS_FILE_ROOTS", str(geheim))
+    monkeypatch.setenv(TOKEN_ENV, "geheim")
+
+    app = create_app(
+        SelfModelStore(MemoryBackend(), subject_id="t"),
+        audit=AuditLog(tmp_path / "audit.sqlite3"),
+        episodes=EpisodeStore(tmp_path / "episodes.sqlite3"),
+    )
+    try:
+        client = TestClient(app)
+
+        ohne = client.get("/health")
+        assert ohne.status_code == 200, "Der Endpunkt muss offen bleiben"
+        assert ohne.json() == {"status": "ok"}
+        assert "Patienten" not in ohne.text
+
+        # Mit Token die volle Auskunft — die Oberfläche braucht sie.
+        mit = client.get("/health", headers={"x-icarus-token": "geheim"}).json()
+        assert str(geheim) in mit["file_roots"]
+        assert "chat" in mit and "keychain" in mit
+    finally:
+        app.state.scheduler.stop()

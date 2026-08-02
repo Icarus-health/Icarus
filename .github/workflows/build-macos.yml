@@ -176,9 +176,6 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           set -o pipefail
-          # Tauri prüft die Existenz dieser Variablen, nicht nur ihren Inhalt.
-          # Ein leerer Wert löst deshalb einen Signierversuch mit Identität ""
-          # beziehungsweise einen ungültigen Notarisierungsweg aus.
           for variable in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_PASSWORD; do
             if [ -z "${!variable:-}" ]; then
               unset "$variable"
@@ -213,8 +210,9 @@ jobs:
         run: |
           APP=$(find app/src-tauri/target/aarch64-apple-darwin -type d -name "Icarus.app" | head -1)
           test -n "$APP"
-          test -x "$APP/Contents/MacOS/Icarus"
-          file "$APP/Contents/MacOS/Icarus" | grep -q "arm64"
+          MAIN="$APP/Contents/MacOS/icarus-desktop"
+          test -x "$MAIN"
+          file "$MAIN" | grep -q "arm64"
           SIDECAR=$(find "$APP" -type f -name "icarus-sidecar*" | head -1)
           test -n "$SIDECAR"
           file "$SIDECAR" | grep -q "arm64"

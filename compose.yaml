@@ -2,10 +2,23 @@
 # ausprobieren wollen, ohne eine signierte macOS-App zu brauchen. Siehe
 # docs/adr/0007-docker-als-zweiter-weg.md.
 #
+#   make start                                # ohne Dateizugriff
+#   make start NOTIZEN=~/Documents/Obsidian   # mit Notizordner, nur lesend
+#
+# `make start` erzeugt Token und Passphrase selbst, legt sie in .icarus.env ab,
+# reicht sie hier herein und gibt am Ende die fertige Adresse mit Token aus. Der
+# Notizordner kommt als Variable statt als Bearbeitung dieser Datei — die
+# Angaben unten bleiben trotzdem stehen, denn wer von Hand startet, braucht sie.
+#
+# Von Hand geht es weiter so:
+#
+#   ICARUS_SIDECAR_TOKEN=$(openssl rand -hex 32) \
+#   ICARUS_SECRETS_PASSPHRASE=$(openssl rand -hex 32) \
 #   docker compose up
 #
-# Startet den Gedächtniskern ohne Modell und ohne Dateizugriff. Für Chat einen
-# Anbieter setzen, für Notizen/Dateien den Bind-Mount unten einkommentieren.
+# Dabei aber daran denken, beide Werte aufzuheben: Mit einer neuen Passphrase
+# ist die verschlüsselte Schlüsseldatei im Volume beim nächsten Start unlesbar.
+# Genau dieser Fehler ist der Grund, warum es `make start` gibt.
 
 services:
   sidecar:
@@ -47,6 +60,10 @@ services:
       # und damit jeder Dateizugriff verweigert (Absicht, kein Versehen).
       # Pfad hier ist der Container-Pfad rechts vom Doppelpunkt, nicht der
       # Host-Pfad links davon.
+      #
+      # `make start NOTIZEN=…` legt beides — diese Variable und den Bind-Mount —
+      # zur Laufzeit oben drauf, ohne diese Datei zu ändern. Wer von Hand
+      # startet, kommentiert hier und unten je eine Zeile ein.
       # - ICARUS_FILE_ROOTS=/notizen
 
     volumes:

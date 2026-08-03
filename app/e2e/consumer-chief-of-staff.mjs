@@ -58,6 +58,26 @@ await call("POST", "/consolidate", { limit: 20, with_model: false });
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+let dashboardRequests = 0;
+page.on("request", (request) => {
+  if (new URL(request.url()).pathname === "/dashboard") dashboardRequests += 1;
+});
+
+async function waitForDashboardQuietWindow() {
+  const deadline = Date.now() + 5_000;
+  let observedRequests = dashboardRequests;
+  let lastRequestAt = Date.now();
+
+  while (Date.now() < deadline) {
+    await page.waitForTimeout(100);
+    if (dashboardRequests !== observedRequests) {
+      observedRequests = dashboardRequests;
+      lastRequestAt = Date.now();
+    }
+    if (Date.now() - lastRequestAt >= 2_000) return observedRequests;
+  }
+  assert.fail("/dashboard wurde nicht für mindestens zwei Sekunden ruhig.");
+}
 
 try {
   await page.goto(`${baseURL}/?token=${encodeURIComponent(token)}`, {
@@ -79,6 +99,21 @@ try {
   await focus.waitFor();
   await focus.getByText("Überfällige Consumer-E2E-Aufgabe", { exact: true }).waitFor();
   await focus.getByText(/überfällig/).waitFor();
+
+  // Der Tagesfokus verändert beim Rendern seinen eigenen DOM-Bereich. Diese
+  // Mutation darf keinen weiteren Dashboard-Abruf auslösen. Das Quiet-Window
+  // ist absichtlich länger als ein Animation-Frame und würde die frühere
+  // Beobachtung des gesamten document.body zuverlässig sichtbar machen.
+  await waitForDashboardQuietWindow();
+
+  const beforeOwnMutation = dashboardRequests;
+  await focus.evaluate((panel) => panel.append(document.createElement("span")));
+  await page.waitForTimeout(300);
+  assert.equal(
+    dashboardRequests,
+    beforeOwnMutation,
+    "Eine Mutation im Tagesfokus darf keinen neuen /dashboard-Request auslösen."
+  );
 
   await page.locator('button[data-view="projects"]').click();
   await page
@@ -103,6 +138,12 @@ try {
     .waitFor();
   await proposals.getByRole("button", { name: "Gilt noch" }).waitFor();
   await proposals.getByRole("button", { name: "Stimmt nicht mehr" }).waitFor();
+
+  // Mehrfaches Wechseln nach „Heute“ darf nach Abschluss der expliziten
+  // Aktualisierung keine weitere Abrufkaskade erzeugen.
+  await page.locator('button[data-view="dashboard"]').click({ clickCount: 3 });
+  await focus.waitFor();
+  await waitForDashboardQuietWindow();
 
   // Tastaturweg durch die vier Hauptbereiche.
   await page.locator('button[data-view="dashboard"]').focus();

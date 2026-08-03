@@ -121,10 +121,16 @@ class QualificationToolTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
             for case in suite["cases"]:
+                hidden_case = hidden["cases"][case["id"]]
                 files = {
                     **case["starter_files"],
-                    **hidden["cases"][case["id"]].get("hidden_files", {}),
-                    **hidden["cases"][case["id"]].get("safety_files", {}),
+                    **hidden_case.get("hidden_files", {}),
+                    **hidden_case.get("safety_files", {}),
+                    **{
+                        f".qualification_mutations/{index}/{mutation['path']}":
+                            mutation["content"]
+                        for index, mutation in enumerate(hidden_case["mutations"])
+                    },
                 }
                 for relative, content in files.items():
                     path = base / case["id"] / relative
@@ -140,6 +146,31 @@ class QualificationToolTest(unittest.TestCase):
                             stderr=subprocess.STDOUT,
                             text=True,
                         )
+
+    def test_aufgabenbudget_gilt_fuer_den_gesamten_fall(self):
+        case = case_definition()
+        case["max_seconds"] = 1
+        case["candidate_test_command"] = [
+            "{python}",
+            "-c",
+            "import time; time.sleep(0.7)",
+        ]
+        hidden = hidden_definition()
+        hidden["correctness_command"] = [
+            "{python}",
+            "-c",
+            "import time; time.sleep(0.7)",
+        ]
+        hidden["critical_test_quality"] = False
+        with tempfile.TemporaryDirectory() as tmp:
+            submissions = Path(tmp)
+            write_submission(submissions, negative_test=True, extra_path=False)
+            started = __import__("time").monotonic()
+            result = grade_case(case, hidden, submissions)
+            runtime = __import__("time").monotonic() - started
+        self.assertLess(runtime, 1.5)
+        self.assertLessEqual(result["runtime_seconds"], 1.1)
+        self.assertFalse(result["correctness"])
 
     def test_kandidat_erbt_keine_geheimnisse_aus_der_umgebung(self):
         with tempfile.TemporaryDirectory() as tmp:

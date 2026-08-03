@@ -12,6 +12,7 @@ Schranke um dieselben Endpunkte und denselben Scheduler.
 
 from __future__ import annotations
 
+import atexit
 from functools import wraps
 from typing import Any, Callable
 from weakref import WeakKeyDictionary
@@ -65,8 +66,27 @@ def _wire_scheduler(app: FastAPI) -> None:
 server._wire_scheduler = _wire_scheduler  # type: ignore[attr-defined]  # noqa: SLF001
 
 
+def _ensure_shutdown_registration(app: FastAPI) -> None:
+    """Überbrückt FastAPI-Versionen mit und ohne `add_event_handler`.
+
+    Neuere FastAPI-/Starlette-Versionen haben den alten Komfortweg entfernt.
+    Der Sidecar ist ein einzelner Prozess; als belastbarer Mindestvertrag wird
+    das Aufräumen deshalb am Prozessende registriert. Ältere Versionen nutzen
+    weiterhin zusätzlich ihren nativen Shutdown-Hook.
+    """
+    if hasattr(app, "add_event_handler"):
+        return
+
+    def add_event_handler(event_type: str, handler: Callable[[], Any]) -> None:
+        if event_type == "shutdown":
+            atexit.register(handler)
+
+    app.add_event_handler = add_event_handler  # type: ignore[attr-defined]
+
+
 def create_app(*args: Any, **kwargs: Any) -> FastAPI:
     app = _ORIGINAL_CREATE_APP(*args, **kwargs)
+    _ensure_shutdown_registration(app)
 
     # Graph, Modellrouting, Browser und dauerhafte Workflows werden hier am
     # echten Produktionsweg montiert. Das geschieht vor der Wartungsschicht,

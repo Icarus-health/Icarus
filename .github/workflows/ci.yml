@@ -78,4 +78,5 @@ jobs:
           node --check app/e2e/browser-worker.mjs
           node --check app/e2e/container-backup.mjs
           node --check app/e2e/consumer-chief-of-staff.mjs
+          node --check app/e2e/private-beta-runtime.mjs
           node --check app/e2e/bundled-sidecar-backup.mjs

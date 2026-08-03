@@ -66,11 +66,42 @@ await call("POST", "/workflows", {
 const workflow = await call("POST", `/workflows/${workflowId}/tick`);
 assert.equal(workflow.state, "waiting_time");
 
+const approvalWorkflowId = `wf-private-beta-approval-${marker}`;
+const recipient = `private-beta-${marker}@example.invalid`;
+await call("POST", "/workflows", {
+  id: approvalWorkflowId,
+  name: "Private-Beta-Freigabeweg",
+  steps: [
+    {
+      id: "send",
+      kind: "invoke",
+      tool: "mail_senden",
+      arguments: {
+        to: recipient,
+        subject: `Private-Beta-E2E ${marker}`,
+        body: "Lokaler Test ohne eingerichteten Versandkanal.",
+      },
+      action_class: "outward",
+    },
+  ],
+});
+const waitingApproval = await call(
+  "POST",
+  `/workflows/${approvalWorkflowId}/tick`,
+);
+assert.equal(waitingApproval.state, "waiting_approval");
+const approvalId = waitingApproval.steps[0].approval_ids[0];
+const approval = (await call("GET", "/approvals")).find(
+  (item) => item.id === approvalId,
+);
+assert.ok(approval, `Freigabe ${approvalId} fehlt`);
+assert.equal(approval.confirmation_phrase, recipient);
+
 const status = await call("GET", "/private-beta/status");
 assert.equal(status.stage, "private_beta");
 assert.equal(status.graph.ready, true);
 assert.ok(status.graph.entities >= graph.entities);
-assert.ok(status.workflows.total >= 1);
+assert.ok(status.workflows.total >= 2);
 assert.equal(typeof status.model_harness.active, "boolean");
 assert.equal(typeof status.browser.active, "boolean");
 
@@ -81,6 +112,30 @@ try {
     waitUntil: "domcontentloaded",
   });
   await page.locator("#status.ready").waitFor();
+
+  // Ausschließlich die normale Freigabekarte wird benutzt. Der Workflow-
+  // Endpunkt zur manuellen Auflösung kommt in diesem Lauf nicht vor.
+  await page.locator('button[data-view="chat"]').click();
+  const approvalCard = page
+    .locator("#approvals .approval")
+    .filter({ hasText: recipient });
+  await approvalCard.waitFor();
+  await approvalCard.locator("label.confirm input").fill(recipient);
+  await approvalCard.getByRole("button", { name: "Ausführen", exact: true }).click();
+  await approvalCard.waitFor({ state: "detached" });
+
+  const failedWorkflow = await call("GET", `/workflows/${approvalWorkflowId}`);
+  assert.equal(failedWorkflow.state, "needs_reconciliation");
+  assert.equal(failedWorkflow.steps[0].state, "needs_reconciliation");
+  const matchingAudit = (await call("GET", "/audit?limit=100")).filter(
+    (entry) =>
+      entry.tool === "mail_senden" &&
+      entry.approved_by === "user" &&
+      entry.arguments.to === recipient,
+  );
+  assert.equal(matchingAudit.length, 1, JSON.stringify(matchingAudit));
+  assert.equal(matchingAudit[0].outcome, "failed");
+
   await page.locator('button[data-view="projects"]').click();
   await page
     .locator("#project-list")
@@ -100,5 +155,5 @@ try {
 }
 
 console.log(
-  "Private-Beta-Runtime bestanden: Token, Consumer-UI, Graph, Workflow und Modell-Expertenansicht laufen gemeinsam."
+  "Private-Beta-Runtime bestanden: Token, Consumer-UI, Graph, atomarer Freigabeweg, Workflow und Expertenansicht laufen gemeinsam."
 );

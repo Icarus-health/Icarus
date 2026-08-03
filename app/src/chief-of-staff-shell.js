@@ -337,7 +337,6 @@ function schedule() {
 }
 
 new MutationObserver(schedule).observe(document.body, {
-  childList: true,
   subtree: true,
   attributes: true,
   attributeFilter: ["hidden", "class"],

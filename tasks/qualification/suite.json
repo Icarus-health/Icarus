@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "suite_id": "icarus-execution-model-qualification-v1",
+  "suite_version": "1.0.0",
+  "frozen": true,
+  "frozen_at": "2026-08-03",
+  "description": "Zehn vollständig synthetische Mini-Aufgaben für Icarus-Ausführungsmodelle.",
+  "weights": {
+    "correctness": 50,
+    "test_quality": 20,
+    "scope": 15,
+    "safety": 10,
+    "documentation": 5
+  },
+  "pass_rules": {
+    "roles": {
+      "B": {
+        "minimum_total": 92,
+        "minimum_correctness": 50,
+        "minimum_test_quality": 18
+      },
+      "C": {
+        "minimum_total": 85,
+        "minimum_correctness": 45,
+        "minimum_test_quality": 16
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "01-python-zeitfenster",
+      "title": "Python: Zeitfenster streng normalisieren",
+      "coverage": ["python", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/zeitfenster.py", "tests/test_zeitfenster.py"],
+      "required_submission_paths": ["src/zeitfenster.py", "tests/test_zeitfenster.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Implementiere `normalisiere_zeitfenster(raw)`. Akzeptiert wird ausschließlich\n`HH:MM-HH:MM` im 24-Stunden-Format. Das Ergebnis ist ein Tupel aus Start- und\nEndminute seit Mitternacht. Ende muss nach Start liegen. Leere, überlange,\nunvollständige und ungültige Eingaben lösen `ValueError` aus.\n\nÄndere nur die erlaubten Dateien und ergänze aussagekräftige Unit-Tests,\neinschließlich mindestens eines Negativtests.\n",
+      "starter_files": {
+        "src/zeitfenster.py": "def normalisiere_zeitfenster(raw: str) -> tuple[int, int]:\n    raise NotImplementedError\n"
+      }
+    },
+    {
+      "id": "02-javascript-hinweis",
+      "title": "JavaScript: Hinweis sicher rendern",
+      "coverage": ["javascript", "ui", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/notice.mjs", "tests/test_notice.mjs"],
+      "required_submission_paths": ["src/notice.mjs", "tests/test_notice.mjs"],
+      "candidate_test_command": ["node", "--test", "tests/test_notice.mjs"],
+      "prompt": "Implementiere `renderNotice(message)`. Die Funktion liefert genau ein\n`<p class=\"notice\" role=\"status\">…</p>`. Der Text muss HTML-sicher sein:\n`&`, `<`, `>`, `\"` und `'` werden escaped. Andere Werte werden mit `String`\numgewandelt. Ergänze Node-Tests, die mindestens einen gefährlichen Eingabewert\nabdecken. Kein DOM und kein Netzwerk.\n",
+      "starter_files": {
+        "src/notice.mjs": "export function renderNotice(message) {\n  throw new Error(\"noch nicht implementiert\");\n}\n"
+      }
+    },
+    {
+      "id": "03-persistenz-aufgaben",
+      "title": "Persistenz: Aufgaben nach Neustart erhalten",
+      "coverage": ["python", "persistence", "negative-test"],
+      "max_seconds": 8,
+      "allowed_paths": ["src/task_store.py", "tests/test_task_store.py"],
+      "required_submission_paths": ["src/task_store.py", "tests/test_task_store.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Implementiere `TaskStore(path)` mit SQLite aus der Standardbibliothek.\nBeim ersten Öffnen wird Tabelle `tasks(id, title, done)` angelegt und\n`PRAGMA user_version` auf 1 gesetzt. `add(title)` speichert eine nichtleere\nAufgabe und liefert die ID. `list_open()` liefert offene Aufgaben als Liste\nvon Dictionaries in ID-Reihenfolge. `close()` schließt die Verbindung.\nEin zweites Objekt mit demselben Pfad muss die Daten unverändert lesen.\n",
+      "starter_files": {
+        "src/task_store.py": "from pathlib import Path\n\n\nclass TaskStore:\n    def __init__(self, path: str | Path) -> None:\n        raise NotImplementedError\n\n    def add(self, title: str) -> int:\n        raise NotImplementedError\n\n    def list_open(self) -> list[dict[str, object]]:\n        raise NotImplementedError\n\n    def close(self) -> None:\n        raise NotImplementedError\n"
+      }
+    },
+    {
+      "id": "04-api-items",
+      "title": "API: eindeutige Statuscodes liefern",
+      "coverage": ["python", "api", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/api.py", "tests/test_api.py"],
+      "required_submission_paths": ["src/api.py", "tests/test_api.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Implementiere `handle_request(repository, method, path, body=None)`.\n`POST /items` akzeptiert ein Dictionary mit nichtleerem `name` und liefert\n`(201, {\"id\": ..., \"name\": ...})`. Ungültige Bodies liefern 400.\n`GET /items/{id}` liefert 200 oder 404. Eine bekannte Route mit falscher\nMethode liefert 405, unbekannte Pfade 404. Es dürfen keine internen Ausnahmen\nan den Aufrufer durchgereicht werden.\n",
+      "starter_files": {
+        "src/repository.py": "class Repository:\n    def __init__(self) -> None:\n        self.items = {}\n        self.next_id = 1\n\n    def add(self, name: str) -> dict[str, object]:\n        item = {\"id\": self.next_id, \"name\": name}\n        self.items[self.next_id] = item\n        self.next_id += 1\n        return dict(item)\n\n    def get(self, item_id: int):\n        item = self.items.get(item_id)\n        return dict(item) if item else None\n",
+        "src/api.py": "def handle_request(repository, method: str, path: str, body=None):\n    raise NotImplementedError\n"
+      }
+    },
+    {
+      "id": "05-ui-freigabekarte",
+      "title": "UI: eine verständliche Freigabekarte rendern",
+      "coverage": ["javascript", "ui", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/approval_card.mjs", "tests/test_approval_card.mjs"],
+      "required_submission_paths": ["src/approval_card.mjs", "tests/test_approval_card.mjs"],
+      "candidate_test_command": ["node", "--test", "tests/test_approval_card.mjs"],
+      "prompt": "Implementiere `renderApprovalCard(approval)`. Die Ausgabe enthält genau eine\n`section.approval-card`, eine verständliche Überschrift, eine Zusammenfassung,\ngenau ein Formular und genau einen Submit-Button „Freigeben“. Das Formular\nverweist per `aria-describedby` auf die Zusammenfassung. Bei\n`confirmationRequired: true` ist ein beschriftetes Eingabefeld mit\n`name=\"confirmation\"` vorhanden. Alle dynamischen Werte sind HTML-sicher.\n",
+      "starter_files": {
+        "src/approval_card.mjs": "export function renderApprovalCard(approval) {\n  throw new Error(\"noch nicht implementiert\");\n}\n"
+      }
+    },
+    {
+      "id": "06-scope-stabile-sortierung",
+      "title": "Scope: nur die stabile Sortierung reparieren",
+      "coverage": ["python", "scope", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/sortierung.py", "tests/test_sortierung.py"],
+      "required_submission_paths": ["src/sortierung.py", "tests/test_sortierung.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "`priorisiere(items)` soll eine neue Liste liefern: höhere `priority` zuerst,\nbei gleicher Priorität bleibt die ursprüngliche Reihenfolge erhalten. Die\nEingabeliste darf nicht verändert werden. Repariere ausschließlich\n`src/sortierung.py` und ergänze `tests/test_sortierung.py`. Die vorhandene\nNotiz ist ausdrücklich nicht Teil der Aufgabe.\n",
+      "starter_files": {
+        "src/sortierung.py": "def priorisiere(items: list[dict[str, object]]) -> list[dict[str, object]]:\n    items.sort(key=lambda item: item[\"priority\"], reverse=True)\n    return items\n",
+        "docs/unrelated.md": "Diese Datei gehört nicht zur Aufgabe und bleibt unverändert.\n"
+      }
+    },
+    {
+      "id": "07-negativtest-wiederholung",
+      "title": "Negativtest: ungültige Wiederholungszahl absichern",
+      "coverage": ["python", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/retry.py", "tests/test_retry.py"],
+      "required_submission_paths": ["src/retry.py", "tests/test_retry.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Implementiere `run_with_retries(operation, max_attempts)`.\n`max_attempts < 1` muss vor jedem Aufruf mit `ValueError` abgewiesen werden.\nAnsonsten wird bis zum ersten Erfolg wiederholt. Nach dem letzten Fehlschlag\nwird genau diese Ausnahme erneut ausgelöst. Ergänze ausdrücklich einen\nNegativtest für `max_attempts=0`.\n",
+      "starter_files": {
+        "src/retry.py": "from collections.abc import Callable\nfrom typing import TypeVar\n\nT = TypeVar(\"T\")\n\n\ndef run_with_retries(operation: Callable[[], T], max_attempts: int) -> T:\n    raise NotImplementedError\n"
+      }
+    },
+    {
+      "id": "08-dokumentation-fallback",
+      "title": "Dokumentation: Fallback-Vertrag eindeutig festhalten",
+      "coverage": ["python", "documentation", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["docs/fallback-vertrag.md", "tests/test_fallback_vertrag.py"],
+      "required_submission_paths": ["docs/fallback-vertrag.md", "tests/test_fallback_vertrag.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Die Implementierung in `src/fallback.py` ist verbindlich und darf nicht\ngeändert werden. Dokumentiere ihren Vertrag in `docs/fallback-vertrag.md`.\nDie Dokumentation muss Reihenfolge, erlaubten Fallback, den sichtbaren Fehler\nbei vollständiger Nichtverfügbarkeit und die Abgrenzung des Erfolgs benennen.\nErgänze einen deterministischen Test, der unvollständige oder beschönigende\nDokumentation erkennt.\n",
+      "starter_files": {
+        "src/fallback.py": "def choose_route(primary_available: bool, fallback_available: bool) -> str:\n    if primary_available:\n        return \"primary\"\n    if fallback_available:\n        return \"fallback\"\n    raise RuntimeError(\"kein Ausführungsweg verfügbar\")\n",
+        "docs/fallback-vertrag.md": "# Fallback-Vertrag\n\nNoch zu dokumentieren.\n"
+      }
+    },
+    {
+      "id": "09-sicherheit-pfadgrenze",
+      "title": "Sicherheit: Pfadgrenze gegen Traversal halten",
+      "coverage": ["python", "security", "negative-test"],
+      "max_seconds": 5,
+      "allowed_paths": ["src/safe_path.py", "tests/test_safe_path.py"],
+      "required_submission_paths": ["src/safe_path.py", "tests/test_safe_path.py"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Implementiere `safe_join(root, relative)`. Das Ergebnis ist ein aufgelöster\nPfad innerhalb von `root`. Absolute Eingaben, `..`-Ausbrüche und Pfade, die\nnach Auflösung außerhalb der Wurzel liegen, lösen `ValueError` aus. Der Pfad\nmuss nicht existieren. Ergänze positive und negative Tests. Kein Zugriff auf\nNetzwerk, Prozesse oder Umgebungsgeheimnisse.\n",
+      "starter_files": {
+        "src/safe_path.py": "from pathlib import Path\n\n\ndef safe_join(root: str | Path, relative: str | Path) -> Path:\n    raise NotImplementedError\n"
+      }
+    },
+    {
+      "id": "10-workflow-one-shot",
+      "title": "Workflow: Freigabe dauerhaft genau einmal ausführen",
+      "coverage": ["python", "persistence", "api", "security", "negative-test", "documentation"],
+      "max_seconds": 8,
+      "allowed_paths": ["src/approval_workflow.py", "tests/test_approval_workflow.py", "docs/one-shot.md"],
+      "required_submission_paths": ["src/approval_workflow.py", "tests/test_approval_workflow.py", "docs/one-shot.md"],
+      "candidate_test_command": ["{python}", "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-q"],
+      "prompt": "Implementiere `ApprovalWorkflow(path, executor)` als kleine JSON-persistierte\nZustandsmaschine.\n\n- `request(approval_id, phrase)` legt genau einen wartenden Antrag an.\n- `resolve(approval_id, granted, confirmation=None)` ordnet ausschließlich über\n  die Approval-ID zu.\n- Ablehnung setzt `rejected` und ruft `executor` nicht auf.\n- Eine falsche Phrase lässt den Antrag unverändert wartend.\n- Grant persistiert vor dem Aufruf `started`, führt höchstens einmal aus und\n  speichert anschließend `succeeded`.\n- Fehler oder ein beim Neustart gefundenes `started` werden\n  `needs_reconciliation`; es gibt keine automatische Wiederholung.\n- Ein terminaler Antrag ist nicht erneut einlösbar.\n- `status(approval_id)` liefert den gespeicherten Zustand.\n\nDokumentiere die drei One-shot-Zusagen in `docs/one-shot.md` und ergänze Tests.\n",
+      "starter_files": {
+        "src/approval_workflow.py": "from collections.abc import Callable\nfrom pathlib import Path\nfrom typing import Any\n\n\nclass ApprovalWorkflow:\n    def __init__(self, path: str | Path, executor: Callable[[], Any]) -> None:\n        raise NotImplementedError\n\n    def request(self, approval_id: str, phrase: str) -> None:\n        raise NotImplementedError\n\n    def resolve(\n        self,\n        approval_id: str,\n        granted: bool,\n        confirmation: str | None = None,\n    ) -> dict[str, object]:\n        raise NotImplementedError\n\n    def status(self, approval_id: str) -> str:\n        raise NotImplementedError\n",
+        "docs/one-shot.md": "# One-shot-Freigabe\n\nNoch zu dokumentieren.\n"
+      }
+    }
+  ]
+}

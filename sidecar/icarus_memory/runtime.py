@@ -21,7 +21,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from . import server
-from .approval_workflow_bridge import install_approval_workflow_bridge
 from .graph_privacy import install_graph_privacy
 from .maintenance import MaintenanceGate
 from .private_beta import install_private_beta
@@ -97,7 +96,6 @@ def create_app(*args: Any, **kwargs: Any) -> FastAPI:
     # Backup-/Restore-Garantie erhalten.
     data_dir = server._data_dir()  # noqa: SLF001
     runtime = install_private_beta(app, data_dir)
-    install_approval_workflow_bridge(app, runtime)
     install_graph_privacy(runtime)
     install_proactive(app, data_dir)
 

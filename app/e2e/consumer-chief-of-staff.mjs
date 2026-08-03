@@ -19,7 +19,9 @@ async function call(method, path, data) {
   return text ? JSON.parse(text) : null;
 }
 
-await call("PUT", "/setup", { onboarded: true });
+// Der Test beginnt wie ein neuer Nutzer und darf keine technische Verbindung
+// benötigen, um zum ersten Nutzen zu gelangen.
+await call("PUT", "/setup", { onboarded: false });
 const yesterday = new Date(Date.now() - 86_400_000).toISOString();
 const old = new Date(Date.now() - 400 * 86_400_000).toISOString();
 const deadline = new Date(Date.now() + 3 * 86_400_000).toISOString();
@@ -63,6 +65,16 @@ try {
   });
   await page.locator("#status.ready").waitFor();
 
+  const wizard = page.locator("#wizard");
+  await wizard.waitFor({ state: "visible" });
+  await wizard.getByRole("heading").waitFor();
+  for (let step = 0; step < 5; step += 1) {
+    await page.locator("#wizard-skip").click();
+  }
+  await wizard.waitFor({ state: "hidden" });
+  const setup = await call("GET", "/setup");
+  assert.equal(setup.settings.onboarded, true, "Onboarding wurde nicht abgeschlossen");
+
   const focus = page.locator("#daily-focus[data-ready='true']");
   await focus.waitFor();
   await focus.getByText("Überfällige Consumer-E2E-Aufgabe", { exact: true }).waitFor();
@@ -97,7 +109,7 @@ try {
     true
   );
 
-  console.log("Consumer-Chief-of-Staff: Tagesfokus, Projektbriefing und Entscheidungsweg bestanden.");
+  console.log("Consumer-Chief-of-Staff: Onboarding, Tagesfokus, Projektbriefing und Entscheidungsweg bestanden.");
 } finally {
   await browser.close();
   await api.dispose();

@@ -7,7 +7,6 @@ Browserstack.
 
 from __future__ import annotations
 
-import os
 import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,7 +25,7 @@ class SabotageSite(BaseHTTPRequestHandler):
     posts = 0
 
     def do_GET(self):  # noqa: N802 - Signatur der Standardbibliothek
-        body = b"""<!doctype html>
+        body = """<!doctype html>
         <html><head><title>Manipulierte Testseite</title></head>
         <body>
           <h1>Fremder Inhalt</h1>
@@ -36,7 +35,7 @@ class SabotageSite(BaseHTTPRequestHandler):
             <input name='message'>
             <button type='submit'>Senden</button>
           </form>
-        </body></html>"""
+        </body></html>""".encode("utf-8")
         self.send_response(200)
         self.send_header("content-type", "text/html; charset=utf-8")
         self.send_header("content-length", str(len(body)))

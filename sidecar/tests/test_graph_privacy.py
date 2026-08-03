@@ -28,7 +28,7 @@ def test_runtime_hides_sensitive_only_assertions_by_default(monkeypatch, tmp_pat
     with TestClient(create_app()) as client:
         for statement, sensitivity in (
             ("Öffentliches Ziel", "normal"),
-            ("Nur für mich sichtbares Ziel", "secret"),
+            ("Nur für mich sichtbares Ziel", "special_category"),
         ):
             response = client.post(
                 "/assertions",
@@ -72,7 +72,9 @@ def test_timeline_does_not_reveal_sensitive_edge_for_visible_entity(tmp_path):
     visible = EntityInput(EntityType.PERSON, "Sichtbare Person")
     secret = EntityInput(EntityType.GOAL, "Geheimes Ziel")
     normal_source = SourceRef("assertion", "normal", sensitivity="normal")
-    secret_source = SourceRef("assertion", "secret", sensitivity="secret")
+    secret_source = SourceRef(
+        "assertion", "secret", sensitivity="special_category"
+    )
     records = [
         ProjectionRecord(normal_source, (visible,)),
         ProjectionRecord(
@@ -83,7 +85,7 @@ def test_timeline_does_not_reveal_sensitive_edge_for_visible_entity(tmp_path):
                     predicate="pursues",
                     target=secret,
                     provenance=secret_source,
-                    sensitivity="secret",
+                    sensitivity="special_category",
                 ),
             ),
         ),
@@ -111,4 +113,7 @@ def test_timeline_does_not_reveal_sensitive_edge_for_visible_entity(tmp_path):
         ).json()
         assert len(private_timeline) == 1
         assert private_timeline[0]["target_name"] == "Geheimes Ziel"
-        assert private_timeline[0]["sources"][0]["sensitivity"] == "secret"
+        assert (
+            private_timeline[0]["sources"][0]["sensitivity"]
+            == "special_category"
+        )

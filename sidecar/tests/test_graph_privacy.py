@@ -40,7 +40,7 @@ def test_runtime_hides_sensitive_only_assertions_by_default(monkeypatch, tmp_pat
                     "provenance": {"source_type": "user_stated"},
                 },
             )
-            assert response.status_code == 200, response.text
+            response.raise_for_status()
 
         client.post("/graph/rebuild", headers=HEADERS).raise_for_status()
 

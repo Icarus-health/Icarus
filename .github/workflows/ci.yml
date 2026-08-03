@@ -55,14 +55,11 @@ jobs:
           workspaces: app/src-tauri
 
       - name: Systembibliotheken
-        # Auf Linux braucht Tauri GTK und WebKit. Auf macOS entfällt das.
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev
 
       - name: Sidecar-Platzhalter
-        # tauri.conf.json verweist über binaries/* hierher; ohne Datei bricht
-        # der Build-Schritt ab. Im Release liegt hier die echte Binary.
         run: touch app/src-tauri/binaries/.platzhalter
 
       - run: cargo fmt --manifest-path app/src-tauri/Cargo.toml --check
@@ -76,5 +73,6 @@ jobs:
         run: |
           node --check app/src/main.js
           node --check app/src/product-shell.js
+          node --check app/e2e/browser-worker.mjs
           node --check app/e2e/container-backup.mjs
           node --check app/e2e/bundled-sidecar-backup.mjs

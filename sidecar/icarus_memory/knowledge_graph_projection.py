@@ -169,9 +169,17 @@ def project_episodes(episodes: Iterable[Mapping[str, Any]]) -> list[ProjectionRe
 
 
 def project_assertions(assertions: Iterable[Mapping[str, Any]]) -> list[ProjectionRecord]:
-    """Projiziert nur Ziele und explizit getaggte Entitäten aus Aussagen."""
+    """Projiziert nur wirksame Ziele und explizit getaggte Entitäten.
+
+    Widerrufene, redigierte, abgelaufene oder ersetzte Aussagen dürfen nicht als
+    aktuelles Wissen im Graphen fortleben. Strittige Aussagen bleiben sichtbar,
+    weil gerade ihr Konfliktstatus nachvollziehbar sein muss.
+    """
     records: list[ProjectionRecord] = []
     for assertion in assertions:
+        status = str(assertion.get("status") or "active")
+        if status not in {"active", "disputed"}:
+            continue
         source = _source("assertion", assertion)
         entities: list[EntityInput] = []
         if assertion.get("kind") == "goal":

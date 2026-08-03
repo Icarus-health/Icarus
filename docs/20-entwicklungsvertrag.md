@@ -115,6 +115,30 @@ stichprobenartiger Review.
 - Modellrollen werden regelmäßig neu qualifiziert. Ein früher bestandener Test
   ist kein dauerhafter Freifahrtschein.
 
+## Qualifikation von Ausführungsmodellen
+
+Die Rollenfähigkeit für B- und C-Aufgaben wird mit der versionierten,
+eingefrorenen Suite unter `tasks/qualification/` gemessen. Sie verwendet zehn
+synthetische Mini-Aufgaben, getrennte deterministische Tests und feste
+Zeitlimits. Der Lauf erfolgt ohne Netzwerk, reale Konten, Schlüssel oder
+Nutzerdaten.
+
+Die Suite bewertet Korrektheit, Testqualität, Scope-Treue, Sicherheit und
+Dokumentation. Ein kritischer Scope- oder Sicherheitsverstoß führt unabhängig
+von der Punktzahl zum Nichtbestehen. Das zu prüfende Modell bewertet weder sich
+selbst noch seine Einreichung.
+
+Ein Bericht hält mindestens Suite-Version, Commit, UTC-Datum, Laufkennung,
+Rollenklasse, Laufzeit und Kosten fest. Er weist ausschließlich die aktuelle
+Rollenfähigkeit aus; eine dauerhafte Rangliste oder ein Modellname wird nicht
+Teil dieses Vertrags. Jede inhaltliche Änderung an Aufgaben, Tests, Gewichtung
+oder Bestehensgrenze erhöht die Suite-Version und verlangt eine neue
+Qualifikation.
+
+Die Suite kann höchstens B oder C ausweisen. Klasse A bleibt unabhängig vom
+Ergebnis Frontier-Planung, Frontier-Umsetzung und Frontier-Review vorbehalten.
+Der deterministische Selbsttest läuft mit `make qualify-execution-model`.
+
 ## Was die bestehenden agentisch erzeugten PRs zeigen
 
 Die aktuelle Produktlinie enthält umfangreiche, nachvollziehbare Module und

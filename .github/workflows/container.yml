@@ -110,11 +110,18 @@ jobs:
         with:
           node-version: "22"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Browser für End-to-End-Tests installieren
         working-directory: app
         run: |
           npm install --no-save --no-package-lock playwright@1.54.2
           npx playwright install --with-deps chromium
+
+      - name: Python-Connector für Browser-E2E installieren
+        run: pip install ./sidecar
 
       - name: Vollständiges Backup und Restore im Browser
         working-directory: app
@@ -139,6 +146,23 @@ jobs:
         with:
           name: consumer-chief-of-staff-log-${{ github.run_attempt }}
           path: ${{ runner.temp }}/consumer-chief-of-staff.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Echter Browserconnector mit manipulierter Webseite
+        env:
+          PYTHONPATH: sidecar
+        run: |
+          set -o pipefail
+          python sidecar/tests/e2e_playwright_browser.py 2>&1 \
+            | tee "$RUNNER_TEMP/playwright-connector.log"
+
+      - name: Playwright-Connectordiagnose hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-connector-log-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/playwright-connector.log
           if-no-files-found: warn
           retention-days: 7
 

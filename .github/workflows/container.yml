@@ -1,10 +1,5 @@
 # Baut das Sidecar-Container-Image und veröffentlicht es nach GHCR — der
-# zweite Auslieferungsweg neben der signierten macOS-App, siehe
-# docs/adr/0007-docker-als-zweiter-weg.md.
-#
-# Bei Pull Requests wird nur gebaut (Buildfehler sollen auffallen), nicht
-# veröffentlicht — ein PR aus einem Fork hat kein Recht, ein Image unter
-# ghcr.io/icarus-health zu landen.
+# zweite Auslieferungsweg neben der signierten macOS-App.
 
 name: Container
 
@@ -29,14 +24,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-qemu-action@v3
-        # Für den arm64-Anteil des Multi-Arch-Builds — der amd64-Runner kann
-        # arm64-Code nur emuliert ausführen, nicht nativ.
-
       - uses: docker/setup-buildx-action@v3
 
       - name: Bei GHCR anmelden
-        # Nur zum Veröffentlichen nötig, nicht zum reinen Bauen im PR-Fall —
-        # deshalb bedingt, nicht immer.
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
@@ -60,10 +50,6 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          # `load` (für den Rauchtest unten) funktioniert nur für ein
-          # einzelnes Zielarchitektur-Image — deshalb bei PRs nur amd64.
-          # Beim echten Publish werden beide Architekturen gebaut und direkt
-          # nach GHCR geschoben, ohne den Umweg über den lokalen Daemon.
           platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: ${{ github.event_name != 'pull_request' }}
           load: ${{ github.event_name == 'pull_request' }}
@@ -73,11 +59,6 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Rauchtest
-        # Bei PRs liegt das eben gebaute Image lokal (load: true) und wird
-        # unter seinem sha-Tag angesprochen. Nach einem echten Publish liegt
-        # nichts lokal — das amd64-Image wird von GHCR gezogen. Ein Test der
-        # arm64-Variante würde QEMU-Emulation brauchen und liefe vor allem
-        # die Emulation, nicht das Image, mit — deshalb bewusst nur amd64.
         run: |
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             docker pull --platform linux/amd64 ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
@@ -113,10 +94,6 @@ jobs:
           echo "$antwort"
           echo "$antwort" | grep -q '"status":"ok"' || scheitern "Unerwartete /health-Antwort."
 
-          # Die Prüfung, auf die es ankommt: Ohne Token muss jeder Datenzugriff
-          # abgewiesen werden. Ein Bild, das versehentlich offen ausliefert,
-          # legt das gesamte Gedächtnis frei — das darf nie unbemerkt durch die
-          # CI kommen.
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/assertions)
           [ "$code" = "401" ] || scheitern "Ohne Token kam $code statt 401 — die API liegt offen."
 
@@ -124,17 +101,16 @@ jobs:
             -H 'x-icarus-token: rauchtest' http://127.0.0.1:8765/assertions)
           [ "$code" = "200" ] || scheitern "Mit Token kam $code statt 200."
 
-          # Und die Oberfläche wird ausgeliefert, sonst nützt der Browserweg nichts.
           curl -fsS http://127.0.0.1:8765/ | grep -q "Icarus" \
             || scheitern "Die Oberfläche wird nicht ausgeliefert."
 
-          echo "Rauchtest bestanden. Container bleibt für den Browser-Test aktiv."
+          echo "Rauchtest bestanden. Container bleibt für die Browser-Tests aktiv."
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Browser für End-to-End-Test installieren
+      - name: Browser für End-to-End-Tests installieren
         working-directory: app
         run: |
           npm install --no-save --no-package-lock playwright@1.54.2
@@ -146,6 +122,25 @@ jobs:
           ICARUS_E2E_BASE: http://127.0.0.1:8765
           ICARUS_E2E_TOKEN: rauchtest
         run: node e2e/container-backup.mjs
+
+      - name: Consumer-Chief-of-Staff im Browser
+        working-directory: app
+        env:
+          ICARUS_E2E_BASE: http://127.0.0.1:8765
+          ICARUS_E2E_TOKEN: rauchtest
+        run: |
+          set -o pipefail
+          node e2e/consumer-chief-of-staff.mjs 2>&1 \
+            | tee "$RUNNER_TEMP/consumer-chief-of-staff.log"
+
+      - name: Consumer-Browserdiagnose hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumer-chief-of-staff-log-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/consumer-chief-of-staff.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Container aufräumen
         if: always()

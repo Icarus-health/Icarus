@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from . import server
 from .maintenance import MaintenanceGate
+from .private_beta import install_private_beta
 
 _ORIGINAL_CREATE_APP = server.create_app
 _ORIGINAL_WIRE_SCHEDULER = server._wire_scheduler  # noqa: SLF001
@@ -66,6 +67,13 @@ server._wire_scheduler = _wire_scheduler  # type: ignore[attr-defined]  # noqa: 
 
 def create_app(*args: Any, **kwargs: Any) -> FastAPI:
     app = _ORIGINAL_CREATE_APP(*args, **kwargs)
+
+    # Graph, Modellrouting, Browser und dauerhafte Workflows werden hier am
+    # echten Produktionsweg montiert. Das geschieht vor der Wartungsschicht,
+    # damit sämtliche neuen Routen anschließend dieselbe exklusive
+    # Backup-/Restore-Garantie erhalten.
+    install_private_beta(app, server._data_dir())  # noqa: SLF001
+
     gate = MaintenanceGate()
     _GATES[app] = gate
     app.state.maintenance = gate

@@ -1,23 +1,23 @@
-"""Säule 2 auf der Modellseite: austauschbare Anbieter.
+"""Säule 2 auf der Modellseite: austauschbare Anbieter und optionales Routing.
 
-Zwei Formen decken praktisch das Feld ab:
+Zwei Transportformen decken praktisch das Feld ab:
 
 * **OpenAI-kompatibel** — OpenAI selbst, Ollama, LM Studio, vLLM, llama.cpp,
-  Groq, Together und die meisten lokalen Server. Ein lokales Modell ist damit
-  eine Frage der Basis-URL, keine Sonderbehandlung.
+  Groq, Together und die meisten lokalen Server.
 * **Anthropic** — eigenes Format für Nachrichten und Werkzeuge.
 
-Nach außen sehen beide gleich aus. Der Rest des Systems kennt nur `Provider`,
-`Reply` und `ToolCall` und weiß nicht, wer antwortet — das ist der Punkt.
+Ohne `ICARUS_MODEL_ROUTES` bleibt das bisherige Verhalten vollständig erhalten.
+Mit einer JSON-Registry wird ein konservativer RoutingProvider gebaut, der
+Datenschutz, Fähigkeiten, Qualität, Kosten, Latenz und Fallbacks berücksichtigt.
 """
 
 from __future__ import annotations
 
-import json
 import ipaddress
+import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 from urllib.parse import urlparse
 
 import httpx
@@ -59,10 +59,8 @@ def _http(timeout: float = 120.0) -> httpx.Client:
 def is_local_endpoint(base_url: str) -> bool:
     """Läuft dieser Anbieter auf diesem Rechner?
 
-    Entscheidet über den Schutzbedarf, der ihm zugemutet werden darf. Nur
-    Loopback zählt als lokal: ein Ollama im Heimnetz ist bereits ein Netzwerk,
-    und ein Hostname, der heute auf 127.0.0.1 zeigt, kann morgen umziehen.
-    Deshalb wird die Adresse literal geprüft und nicht aufgelöst.
+    Nur Loopback zählt als lokal. Ein Hostname, der zufällig auf Loopback zeigt,
+    wird nicht aufgelöst, weil seine Bedeutung sich später ändern könnte.
     """
     try:
         host = urlparse(base_url).hostname
@@ -79,11 +77,7 @@ def is_local_endpoint(base_url: str) -> bool:
 
 
 class OpenAICompatible:
-    """Deckt OpenAI und jeden Server mit /chat/completions ab.
-
-    Für Ollama genügt base_url=http://localhost:11434/v1 und ein beliebiger
-    Schlüssel — damit läuft Icarus vollständig lokal.
-    """
+    """Deckt OpenAI und jeden Server mit `/chat/completions` ab."""
 
     name = "openai"
 
@@ -104,7 +98,7 @@ class OpenAICompatible:
         payload: dict[str, Any] = {"model": self.model, "messages": messages}
         if tools:
             payload["tools"] = [
-                {"type": "function", "function": t} for t in tools
+                {"type": "function", "function": tool} for tool in tools
             ]
         try:
             with _http() as client:
@@ -116,20 +110,32 @@ class OpenAICompatible:
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError as exc:
-            raise ProviderError(f"Anfrage an {self._base} fehlgeschlagen: {exc}") from exc
+            raise ProviderError(
+                f"Anfrage an {self._base} fehlgeschlagen: {exc}"
+            ) from exc
 
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message", {})
         calls = []
         for raw in message.get("tool_calls") or []:
-            fn = raw.get("function", {})
+            function = raw.get("function", {})
             try:
-                args = json.loads(fn.get("arguments") or "{}")
+                arguments = json.loads(function.get("arguments") or "{}")
             except json.JSONDecodeError:
-                args = {}
-            calls.append(ToolCall(id=raw.get("id", ""), name=fn.get("name", ""), arguments=args))
+                arguments = {}
+            calls.append(
+                ToolCall(
+                    id=raw.get("id", ""),
+                    name=function.get("name", ""),
+                    arguments=arguments,
+                )
+            )
 
-        return Reply(text=message.get("content") or "", tool_calls=calls, model=self.model)
+        return Reply(
+            text=message.get("content") or "",
+            tool_calls=calls,
+            model=self.model,
+        )
 
 
 class Anthropic:
@@ -153,9 +159,15 @@ class Anthropic:
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> Reply:
-        system = " ".join(m["content"] for m in messages if m.get("role") == "system")
+        system = " ".join(
+            message["content"]
+            for message in messages
+            if message.get("role") == "system"
+        )
         converted = [
-            self._convert(m) for m in messages if m.get("role") != "system"
+            self._convert(message)
+            for message in messages
+            if message.get("role") != "system"
         ]
 
         payload: dict[str, Any] = {
@@ -168,11 +180,11 @@ class Anthropic:
         if tools:
             payload["tools"] = [
                 {
-                    "name": t["name"],
-                    "description": t.get("description", ""),
-                    "input_schema": t.get("parameters", {"type": "object"}),
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "input_schema": tool.get("parameters", {"type": "object"}),
                 }
-                for t in tools
+                for tool in tools
             ]
 
         try:
@@ -189,7 +201,9 @@ class Anthropic:
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError as exc:
-            raise ProviderError(f"Anfrage an {self._base} fehlgeschlagen: {exc}") from exc
+            raise ProviderError(
+                f"Anfrage an {self._base} fehlgeschlagen: {exc}"
+            ) from exc
 
         text_parts, calls = [], []
         for block in data.get("content") or []:
@@ -203,11 +217,14 @@ class Anthropic:
                         arguments=block.get("input") or {},
                     )
                 )
-        return Reply(text="".join(text_parts), tool_calls=calls, model=self.model)
+        return Reply(
+            text="".join(text_parts),
+            tool_calls=calls,
+            model=self.model,
+        )
 
     @staticmethod
     def _convert(message: dict[str, Any]) -> dict[str, Any]:
-        """Übersetzt die neutrale Form in Anthropics Blockformat."""
         role = message.get("role")
 
         if role == "tool":
@@ -227,17 +244,17 @@ class Anthropic:
             if message.get("content"):
                 blocks.append({"type": "text", "text": message["content"]})
             for raw in message["tool_calls"]:
-                fn = raw.get("function", {})
+                function = raw.get("function", {})
                 try:
-                    args = json.loads(fn.get("arguments") or "{}")
+                    arguments = json.loads(function.get("arguments") or "{}")
                 except json.JSONDecodeError:
-                    args = {}
+                    arguments = {}
                 blocks.append(
                     {
                         "type": "tool_use",
                         "id": raw.get("id", ""),
-                        "name": fn.get("name", ""),
-                        "input": args,
+                        "name": function.get("name", ""),
+                        "input": arguments,
                     }
                 )
             return {"role": "assistant", "content": blocks}
@@ -245,18 +262,107 @@ class Anthropic:
         return {"role": role, "content": message.get("content") or ""}
 
 
-def from_env() -> Provider | None:
-    """Baut den Anbieter aus der Umgebung.
+def _single_provider(
+    provider_name: str,
+    model: str,
+    *,
+    environment: Mapping[str, str],
+    base_url: str | None = None,
+    api_key_env: str | None = None,
+    max_tokens: int = 4096,
+) -> Provider | None:
+    choice = provider_name.strip().lower()
+    if choice == "anthropic":
+        key_name = api_key_env or "ANTHROPIC_API_KEY"
+        key = environment.get(key_name)
+        if not key:
+            return None
+        return Anthropic(
+            model,
+            key,
+            base_url=base_url or "https://api.anthropic.com/v1",
+            max_tokens=max_tokens,
+        )
 
-    Reihenfolge: ausdrückliche Wahl über ICARUS_PROVIDER, sonst der erste
-    Anbieter, für den ein Schlüssel vorliegt, sonst Ollama, falls es lokal
-    erreichbar ist. Gibt None zurück, wenn nichts konfiguriert ist — der
-    Gedächtniskern funktioniert auch ohne Modell.
+    if choice == "ollama":
+        return OpenAICompatible(
+            model,
+            api_key="ollama",
+            base_url=base_url or "http://localhost:11434/v1",
+        )
+
+    if choice in {"openai", "openai_compatible"}:
+        key_name = api_key_env or "OPENAI_API_KEY"
+        key = environment.get(key_name) or environment.get("LLM_API_KEY")
+        if not key and not is_local_endpoint(base_url or ""):
+            return None
+        return OpenAICompatible(
+            model,
+            api_key=key or "not-needed",
+            base_url=base_url or "https://api.openai.com/v1",
+        )
+
+    raise ProviderError(f"Unbekannter Modellanbieter in der Registry: {choice}")
+
+
+def _routing_from_env(environment: Mapping[str, str]) -> Provider:
+    from .model_harness import (
+        ModelRegistry,
+        RoutingProvider,
+        UsageBudget,
+        specs_from_json,
+    )
+
+    raw = environment["ICARUS_MODEL_ROUTES"]
+    data = json.loads(raw)
+    specs = specs_from_json(raw)
+    registry = ModelRegistry(specs)
+    providers: dict[str, Provider] = {}
+    by_id = {str(item["id"]): item for item in data}
+
+    for spec in registry.enabled():
+        item = by_id[spec.id]
+        provider = _single_provider(
+            spec.provider,
+            spec.model,
+            environment=environment,
+            base_url=item.get("base_url"),
+            api_key_env=item.get("api_key_env"),
+            max_tokens=int(item.get("max_tokens", 4096)),
+        )
+        if provider is None:
+            raise ProviderError(
+                f"Für Modellprofil {spec.id!r} fehlt der benötigte Schlüssel."
+            )
+        providers[spec.id] = provider
+
+    maximum_cost = environment.get("ICARUS_MODEL_MAX_COST")
+    maximum_input = environment.get("ICARUS_MODEL_MAX_INPUT_TOKENS")
+    maximum_output = environment.get("ICARUS_MODEL_MAX_OUTPUT_TOKENS")
+    budget = UsageBudget(
+        maximum_cost=float(maximum_cost) if maximum_cost else None,
+        maximum_input_tokens=int(maximum_input) if maximum_input else None,
+        maximum_output_tokens=int(maximum_output) if maximum_output else None,
+    )
+    return RoutingProvider(registry, providers, budget=budget)
+
+
+def from_env() -> Provider | None:
+    """Baut einen einzelnen Anbieter oder den optionalen Modellrouter.
+
+    `ICARUS_MODEL_ROUTES` ist opt-in. Ohne diese Variable gilt weiterhin die
+    bisherige Reihenfolge: ausdrückliche Wahl, vorhandener Schlüssel, lokales
+    Ollama. Der Gedächtniskern funktioniert weiterhin ohne Modell.
     """
+    if os.environ.get("ICARUS_MODEL_ROUTES"):
+        return _routing_from_env(dict(os.environ))
+
     choice = os.environ.get("ICARUS_PROVIDER", "").strip().lower()
     model = os.environ.get("ICARUS_MODEL", "").strip()
 
-    if choice == "anthropic" or (not choice and os.environ.get("ANTHROPIC_API_KEY")):
+    if choice == "anthropic" or (
+        not choice and os.environ.get("ANTHROPIC_API_KEY")
+    ):
         key = os.environ.get("ANTHROPIC_API_KEY")
         if key:
             return Anthropic(model or "claude-sonnet-5", key)
@@ -265,7 +371,9 @@ def from_env() -> Provider | None:
         return OpenAICompatible(
             model or "llama3.1",
             api_key="ollama",
-            base_url=os.environ.get("ICARUS_BASE_URL", "http://localhost:11434/v1"),
+            base_url=os.environ.get(
+                "ICARUS_BASE_URL", "http://localhost:11434/v1"
+            ),
         )
 
     key = os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")
@@ -274,7 +382,9 @@ def from_env() -> Provider | None:
             return OpenAICompatible(
                 model or "gpt-4.1-mini",
                 api_key=key,
-                base_url=os.environ.get("ICARUS_BASE_URL", "https://api.openai.com/v1"),
+                base_url=os.environ.get(
+                    "ICARUS_BASE_URL", "https://api.openai.com/v1"
+                ),
             )
 
     return None
@@ -288,4 +398,5 @@ __all__ = [
     "Reply",
     "ToolCall",
     "from_env",
+    "is_local_endpoint",
 ]

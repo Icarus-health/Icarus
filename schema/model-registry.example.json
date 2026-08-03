@@ -1,0 +1,58 @@
+[
+  {
+    "id": "ollama-private",
+    "provider": "openai_compatible",
+    "model": "llama3.1",
+    "base_url": "http://127.0.0.1:11434/v1",
+    "capabilities": [
+      "conversation",
+      "planning",
+      "summarisation",
+      "classification"
+    ],
+    "context_window": 32768,
+    "is_local": true,
+    "supports_tools": true,
+    "quality": {
+      "conversation": 0.78,
+      "planning": 0.75,
+      "summarisation": 0.82,
+      "classification": 0.8
+    },
+    "input_cost_per_million": 0,
+    "output_cost_per_million": 0,
+    "expected_latency_ms": 1800,
+    "privacy": "local_only"
+  },
+  {
+    "id": "remote-quality",
+    "provider": "openai",
+    "model": "configured-remote-model",
+    "api_key_env": "OPENAI_API_KEY",
+    "capabilities": [
+      "conversation",
+      "planning",
+      "research",
+      "summarisation",
+      "code",
+      "documents",
+      "classification"
+    ],
+    "context_window": 128000,
+    "is_local": false,
+    "supports_tools": true,
+    "quality": {
+      "conversation": 0.94,
+      "planning": 0.93,
+      "research": 0.9,
+      "summarisation": 0.92,
+      "code": 0.91,
+      "documents": 0.9,
+      "classification": 0.94
+    },
+    "input_cost_per_million": 1.5,
+    "output_cost_per_million": 6,
+    "expected_latency_ms": 900,
+    "privacy": "trusted_remote"
+  }
+]

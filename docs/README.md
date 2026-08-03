@@ -34,6 +34,12 @@ dieser Reihenfolge:
 | `13-nutzerfreundlichkeit.md` | konkrete UX-Regeln |
 | `14-posteingang.md` | Mail im Gesprächsfenster |
 | `15-loslegen.md` | aktueller Container-Einstieg |
+| `20-entwicklungsvertrag.md` | modellneutrale Rollen, Risikoklassen und Arbeitsablauf |
+| `21-qualitaetsgates.md` | verbindliche Nachweise vor Review und Merge |
+
+Aufgaben werden als eigenständige, modellneutrale Pakete unter
+[`../tasks/`](../tasks/) übergeben. `AGENTS.md` ist der gemeinsame Einstieg für
+Coding-Agenten; werkzeugspezifische Dateien dürfen diese Regeln nur ergänzen.
 
 ## ADRs
 

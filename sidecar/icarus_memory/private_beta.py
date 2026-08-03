@@ -22,6 +22,7 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -35,7 +36,13 @@ from .knowledge_graph import KnowledgeGraph
 from .knowledge_graph_api import graph_router
 from .knowledge_graph_projection import project_all
 from .playwright_browser import PlaywrightBrowserSession
-from .policy import PolicyError
+from .policy import (
+    ActionClass,
+    ApprovalLevel,
+    Decision,
+    PendingApproval,
+    PolicyError,
+)
 from .security import file_roots_from_env
 from .workflow_api import workflow_router
 from .workflow_runtime import WorkflowRunner
@@ -197,11 +204,64 @@ class PrivateBetaRuntime:
     def refresh_agent(self) -> None:
         """Bindet langlebige Laufzeiten an den aktuell neu gebauten Agenten."""
         self.workflow_runner.invoke = self.app.state.agent.invoke
+        self._restore_workflow_approvals()
         self._bind_model_audit()
         if self.browser_connector is not None:
             tools = getattr(self.app.state.agent, "_tools", None)
             if isinstance(tools, dict):
                 tools.update(self.browser_connector.tools())
+
+    def _restore_workflow_approvals(self) -> None:
+        """Lädt wartende Freigaben aus dem dauerhaften Workflowzustand neu."""
+        pending = getattr(self.app.state.agent.policy, "_pending", None)
+        if not isinstance(pending, dict):
+            raise RuntimeError("Der normale Freigabespeicher ist nicht verfügbar")
+
+        for workflow in self.workflow_store.list():
+            if WorkflowState(workflow["state"]) is not WorkflowState.WAITING_APPROVAL:
+                continue
+            for step in workflow["steps"]:
+                if StepState(step["state"]) is not StepState.WAITING:
+                    continue
+                result = step.get("result") or {}
+                stored = {
+                    str(item.get("id")): item
+                    for item in result.get("approvals", [])
+                    if isinstance(item, dict) and item.get("id")
+                }
+                for approval_id in step["approval_ids"]:
+                    raw = stored.get(str(approval_id))
+                    try:
+                        if raw is None:
+                            raise ValueError("Gespeicherte Freigabedaten fehlen")
+                        pending[str(approval_id)] = PendingApproval(
+                            id=str(approval_id),
+                            tool=str(raw["tool"]),
+                            arguments=dict(raw["arguments"]),
+                            decision=Decision(
+                                ApprovalLevel(str(raw["level"])),
+                                ActionClass(str(raw["action_class"])),
+                                [str(item) for item in raw.get("reasons", [])],
+                            ),
+                            dry_run=str(raw["dry_run"]),
+                            requested_at=datetime.fromisoformat(
+                                str(raw["requested_at"])
+                            ),
+                            expires_at=datetime.fromisoformat(str(raw["expires_at"])),
+                            confirmation_phrase=(
+                                str(raw["confirmation_phrase"])
+                                if raw.get("confirmation_phrase") is not None
+                                else None
+                            ),
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        self.workflow_runner._needs_reconciliation(  # noqa: SLF001
+                            str(workflow["id"]),
+                            step,
+                            int(step["attempts"]),
+                            f"Freigabe konnte nach Neustart nicht geladen werden: {exc}",
+                        )
+                        break
 
     def _bind_model_audit(self) -> None:
         provider = getattr(self.app.state.agent, "provider", None)

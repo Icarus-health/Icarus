@@ -21,6 +21,7 @@ async function call(method, path, data) {
 
 await call("PUT", "/setup", { onboarded: true });
 const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+const old = new Date(Date.now() - 400 * 86_400_000).toISOString();
 const deadline = new Date(Date.now() + 3 * 86_400_000).toISOString();
 const project = await call("POST", "/projects", {
   name: "Consumer-E2E-Projekt",
@@ -39,12 +40,19 @@ await call("POST", "/notes", {
   project_id: project.id,
 });
 
-// Außenwirkung erzeugt eine Freigabe, aber versendet ohne Zustimmung nichts.
-await call("POST", "/tools/mail_senden", {
-  to: "review@example.invalid",
-  subject: "Consumer-E2E",
-  body: "Dieser Inhalt darf nur nach sichtbarer Freigabe hinausgehen.",
+// Ein alter, weiterhin aktiver Fakt erzeugt ohne Modell einen echten
+// Bestätigungsvorschlag. So prüft der Browser den normalen Entscheidungsweg,
+// statt einen nicht existierenden internen Werkzeug-Endpunkt zu verwenden.
+await call("POST", "/assertions", {
+  statement: "Consumer-E2E-Fakt gilt weiterhin.",
+  kind: "state",
+  provenance: {
+    source_type: "user_stated",
+    source_ref: "consumer-e2e",
+    captured_at: old,
+  },
 });
+await call("POST", "/consolidate", { limit: 20, with_model: false });
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -73,10 +81,13 @@ try {
   await brief.getByText("Budget freigegeben", { exact: true }).waitFor();
 
   await page.locator('button[data-view="proposals"]').click();
-  await page.getByText(/wartet auf Freigabe/).waitFor();
-  await page.getByRole("button", { name: "Im Gespräch prüfen" }).click();
-  await page.locator("#approvals .approval").waitFor();
-  await page.getByText(/verlässt deinen Rechner/).waitFor();
+  await page.getByText(/Hier wartet alles, was deine Entscheidung braucht/).waitFor();
+  await page.getByText("Gilt das noch?", { exact: true }).waitFor();
+  await page
+    .getByText("Consumer-E2E-Fakt gilt weiterhin.", { exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Gilt noch" }).waitFor();
+  await page.getByRole("button", { name: "Stimmt nicht mehr" }).waitFor();
 
   // Tastaturweg durch die vier Hauptbereiche.
   await page.locator('button[data-view="dashboard"]').focus();

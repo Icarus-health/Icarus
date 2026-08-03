@@ -257,7 +257,7 @@ class PrivateBetaRuntime:
             # mutiert. Ein Vertipper oder eine abgelaufene Freigabe lässt den
             # sichtbaren Wartezustand deshalb unverändert.
             approval = self.app.state.agent.policy.get(approval_id)
-            if approval.confirmation_phrase is not None:
+            if granted and approval.confirmation_phrase is not None:
                 expected = approval.confirmation_phrase.strip()
                 if (confirmation or "").strip() != expected:
                     raise PolicyError(
@@ -287,11 +287,7 @@ class PrivateBetaRuntime:
                 raise
 
             result = turn.to_dict()
-            audit_entry, audit_detail = self._approval_audit_entry(
-                before_seq,
-                approval.tool,
-                approval.arguments,
-            )
+            audit_entry, audit_detail = self._approval_audit_entry(before_seq)
             outcome = audit_entry["outcome"] if audit_entry is not None else None
             self.workflow_runner.finish_approval_resolution(
                 target,
@@ -309,16 +305,12 @@ class PrivateBetaRuntime:
     def _approval_audit_entry(
         self,
         after_seq: int,
-        tool: str,
-        arguments: dict[str, Any],
     ) -> tuple[dict[str, Any] | None, str]:
         matches = [
             entry
             for entry in self.app.state.audit.entries(1000)
             if int(entry["seq"]) > after_seq
             and entry["approved_by"] == "user"
-            and entry["tool"] == tool
-            and entry["arguments"] == arguments
         ]
         if len(matches) == 1:
             entry = matches[0]

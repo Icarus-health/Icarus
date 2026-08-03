@@ -136,9 +136,6 @@ def validate_suite(suite: dict[str, Any], hidden: dict[str, Any]) -> None:
             if not isinstance(mutations, list) or not mutations:
                 errors.append(f"{case_id}: mindestens eine Mutation ist erforderlich.")
             else:
-                allowed_paths = {
-                    str(item) for item in case.get("allowed_paths", [])
-                }
                 for mutation in mutations:
                     if not isinstance(mutation, dict):
                         errors.append(f"{case_id}: Mutation muss ein Objekt sein.")
@@ -147,7 +144,9 @@ def validate_suite(suite: dict[str, Any], hidden: dict[str, Any]) -> None:
                         mutation_path = safe_relative(
                             str(mutation.get("path") or "")
                         )
-                        if mutation_path.as_posix() not in allowed_paths:
+                        if mutation_path.as_posix() not in {
+                            str(item) for item in case.get("allowed_paths", [])
+                        }:
                             errors.append(
                                 f"{case_id}: Mutation liegt außerhalb der erlaubten Pfade."
                             )
@@ -314,10 +313,19 @@ def grade_case(
 ) -> dict[str, Any]:
     case_id = str(case["id"])
     timeout = float(case["max_seconds"])
-    deadline = time.monotonic() + timeout
+    case_started = time.monotonic()
+    deadline = case_started + timeout
 
-    def remaining() -> float:
-        return max(0.01, deadline - time.monotonic())
+    def run_budgeted(command: list[str], cwd: Path) -> dict[str, Any]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return {
+                "ok": False,
+                "returncode": None,
+                "runtime_seconds": 0.0,
+                "output": "Zeitbudget der Aufgabe ausgeschöpft.",
+            }
+        return run_command(command, cwd, remaining)
 
     allowed = {str(item) for item in case["allowed_paths"]}
     required = {str(item) for item in case["required_submission_paths"]}
@@ -354,8 +362,8 @@ def grade_case(
         if safety_violations:
             critical.extend("Sicherheitsverstoß: " + item for item in safety_violations)
 
-        candidate_tests = run_command(
-            list(case["candidate_test_command"]), workspace, remaining()
+        candidate_tests = run_budgeted(
+            list(case["candidate_test_command"]), workspace
         )
         mutation_results: list[dict[str, Any]] = []
         test_quality_ok = candidate_tests["ok"]
@@ -367,8 +375,8 @@ def grade_case(
                     mutant = Path(mutant_tmp)
                     shutil.copytree(workspace, mutant, dirs_exist_ok=True)
                     _apply_mutation(mutant, mutation)
-                    result = run_command(
-                        list(case["candidate_test_command"]), mutant, remaining()
+                    result = run_budgeted(
+                        list(case["candidate_test_command"]), mutant
                     )
                     killed = not result["ok"]
                     mutation_results.append(
@@ -387,14 +395,14 @@ def grade_case(
             )
 
         _write_files(workspace, hidden_case.get("hidden_files", {}))
-        correctness = run_command(
-            list(hidden_case["correctness_command"]), workspace, remaining()
+        correctness = run_budgeted(
+            list(hidden_case["correctness_command"]), workspace
         )
 
         _write_files(workspace, hidden_case.get("safety_files", {}))
         safety_command = hidden_case.get("safety_command")
         safety_result = (
-            run_command(list(safety_command), workspace, remaining())
+            run_budgeted(list(safety_command), workspace)
             if safety_command
             else {"ok": True, "runtime_seconds": 0.0, "output": ""}
         )
@@ -424,7 +432,7 @@ def grade_case(
             "correctness_test": correctness,
             "safety_test": safety_result,
             "documentation_failures": documentation_failures,
-            "runtime_seconds": round(timeout - remaining() + 0.01, 3),
+            "runtime_seconds": round(time.monotonic() - case_started, 3),
             "max_seconds": timeout,
         }
 

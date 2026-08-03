@@ -14,11 +14,11 @@ from pydantic import BaseModel, Field
 from .durable_workflows import (
     StepKind,
     WorkflowPlan,
-    WorkflowRunner,
     WorkflowState,
     WorkflowStep,
 )
 from .policy import ActionClass
+from .workflow_runtime import WorkflowRunner
 
 
 class StepIn(BaseModel):
@@ -89,7 +89,7 @@ def workflow_router(
         )
         try:
             runner.store.create(plan, body.context)
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             # SQLite-Integritätsfehler wird absichtlich nicht als interner
             # Stacktrace nach außen gegeben.
             raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -81,8 +81,9 @@ try {
   await page.locator("#graph-results").getByText(projectName, { exact: true }).waitFor();
   await page.locator("#graph-results").getByText(projectName, { exact: true }).click();
   const detail = page.locator("#graph-detail");
-  await detail.getByText(taskName, { exact: false }).waitFor();
-  await detail.getByText(decisionName, { exact: false }).waitFor();
+  const relations = detail.locator(".system-detail-list").first();
+  await relations.getByText(taskName, { exact: false }).waitFor();
+  await relations.getByText(decisionName, { exact: false }).waitFor();
 
   await search.fill(secretName);
   await page.locator("#graph-search-form").evaluate((form) => form.requestSubmit());

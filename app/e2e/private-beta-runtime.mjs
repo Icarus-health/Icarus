@@ -87,6 +87,9 @@ try {
     .getByText(`Private-Beta-E2E-${marker}`, { exact: true })
     .waitFor();
 
+  // Einrichtung liegt absichtlich unter „Mehr“. Der Test geht denselben Weg
+  // wie ein normaler Nutzer, statt ein verstecktes Element direkt anzuklicken.
+  await page.locator(".nav-more > summary").click();
   await page.locator('button[data-view="setup"]').click();
   const expert = page.locator("#model-harness-expert");
   await expert.waitFor();

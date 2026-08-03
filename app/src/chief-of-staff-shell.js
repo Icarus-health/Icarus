@@ -55,6 +55,11 @@ function hoursUntil(value, now) {
   return (new Date(value) - now) / 3_600_000;
 }
 
+function asItems(value) {
+  if (Array.isArray(value)) return value;
+  return Array.isArray(value?.items) ? value.items : [];
+}
+
 /**
  * Erzeugt eine deterministische, erklärbare Prioritätenliste.
  *
@@ -64,7 +69,7 @@ function hoursUntil(value, now) {
 export function rankToday(dashboard, now = new Date()) {
   const candidates = [];
 
-  for (const task of dashboard.tasks?.items ?? []) {
+  for (const task of asItems(dashboard.tasks)) {
     let score = 50;
     let reason = "Offene Aufgabe";
     if (task.overdue) {
@@ -95,7 +100,7 @@ export function rankToday(dashboard, now = new Date()) {
     });
   }
 
-  for (const event of dashboard.calendar?.items ?? []) {
+  for (const event of asItems(dashboard.calendar)) {
     if (!event.start) continue;
     const hours = hoursUntil(event.start, now);
     if (hours < -1 || hours > 48) continue;
@@ -126,7 +131,7 @@ export function rankToday(dashboard, now = new Date()) {
     });
   }
 
-  for (const project of dashboard.projects?.items ?? []) {
+  for (const project of asItems(dashboard.projects)) {
     if (!project.deadline || !project.open) continue;
     const remaining = daysBetween(now, project.deadline);
     if (remaining > 14) continue;

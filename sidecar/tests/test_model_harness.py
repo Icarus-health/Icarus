@@ -218,7 +218,7 @@ def test_budget_is_checked_before_provider_call():
         budget=UsageBudget(maximum_cost=0.0001),
     )
 
-    with pytest.raises(ProviderError, match="Kostenbudget"):
+    with pytest.raises(ProviderError, match="Modellkostenbudget"):
         provider.complete_for(
             TaskProfile.CONVERSATION,
             [{"role": "user", "content": "x" * 400}],

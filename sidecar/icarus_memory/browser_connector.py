@@ -24,7 +24,12 @@ from .connector_sdk import (
     Reversibility,
     Visibility,
 )
-from .security import check_url, resolve_readable_path, wrap_untrusted
+from .security import (
+    check_url,
+    resolve_readable_dir,
+    resolve_readable_path,
+    wrap_untrusted,
+)
 
 
 class BrowserSession(Protocol):
@@ -104,7 +109,10 @@ def browser_connector(
 
     def download(selector: str, target: str, **_: Any) -> str:
         requested = Path(target).expanduser()
-        parent = resolve_readable_path(str(requested.parent), download_roots)
+        # Das Ziel selbst darf vor dem Download noch nicht existieren. Deshalb
+        # wird der aufgelöste Elternordner gegen die freigegebenen Wurzeln
+        # geprüft – mit der Verzeichnis- und nicht der Dateifunktion.
+        parent = resolve_readable_dir(str(requested.parent), download_roots)
         destination = parent / requested.name
         result = session.download(selector, destination)
         return wrap_untrusted(result, state["url"] or "Browserdownload")

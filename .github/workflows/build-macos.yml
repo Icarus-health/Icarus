@@ -24,7 +24,6 @@ name: macOS-Build
 
 on:
   pull_request:
-    branches: ["main"]
     paths:
       - "app/**"
       - "sidecar/**"

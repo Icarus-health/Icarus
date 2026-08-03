@@ -13,7 +13,7 @@ separaten, domänenspezifischen Credential-Broker statt Klartext im Browserplan.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 
 from .connector_sdk import (
@@ -71,16 +71,24 @@ def browser_connector(
     *,
     download_roots: list[Path],
     upload_roots: list[Path],
+    url_guard: Callable[[str], str] = check_url,
 ) -> Connector:
+    """Baut den policy-gebundenen Browserconnector.
+
+    ``url_guard`` ist standardmäßig die produktive SSRF-Sperre. Die injizierbare
+    Form existiert ausschließlich, damit ein isolierter End-to-End-Test seinen
+    eigenen Loopback-Webserver verwenden kann, ohne die Produktionsregel zu
+    lockern.
+    """
     state = {"url": ""}
 
     def navigate(url: str, **_: Any) -> str:
-        check_url(url)
-        title = session.navigate(url)
-        state["url"] = url
+        checked = url_guard(url)
+        title = session.navigate(checked)
+        state["url"] = checked
         return wrap_untrusted(
-            f"Geöffnet: {title or url}",
-            f"Browserseite {_host(url)}",
+            f"Geöffnet: {title or checked}",
+            f"Browserseite {_host(checked)}",
         )
 
     def read(selector: str = "body", max_chars: int = 8000, **_: Any) -> str:
@@ -95,7 +103,6 @@ def browser_connector(
         return session.submit(selector, dict(fields))
 
     def download(selector: str, target: str, **_: Any) -> str:
-        # Die Zieldatei darf neu sein. Geprüft wird deshalb der Elternordner.
         requested = Path(target).expanduser()
         parent = resolve_readable_path(str(requested.parent), download_roots)
         destination = parent / requested.name

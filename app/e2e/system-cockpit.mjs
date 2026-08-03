@@ -94,6 +94,7 @@ try {
     "Sensibler Eintrag war ohne bewusste Umschaltung sichtbar"
   );
 
+  await page.locator(".system-privacy > summary").click();
   await page.locator("#graph-sensitive").check();
   await page.locator("#graph-results").getByText(secretName, { exact: true }).waitFor();
 

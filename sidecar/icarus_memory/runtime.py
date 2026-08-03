@@ -21,6 +21,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from . import server
+from .graph_privacy import install_graph_privacy
 from .maintenance import MaintenanceGate
 from .private_beta import install_private_beta
 
@@ -92,7 +93,8 @@ def create_app(*args: Any, **kwargs: Any) -> FastAPI:
     # echten Produktionsweg montiert. Das geschieht vor der Wartungsschicht,
     # damit sämtliche neuen Routen anschließend dieselbe exklusive
     # Backup-/Restore-Garantie erhalten.
-    install_private_beta(app, server._data_dir())  # noqa: SLF001
+    runtime = install_private_beta(app, server._data_dir())  # noqa: SLF001
+    install_graph_privacy(runtime)
 
     gate = MaintenanceGate()
     _GATES[app] = gate

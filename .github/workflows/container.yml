@@ -149,6 +149,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Gemeinsame Private-Beta-Runtime im Browser
+        working-directory: app
+        env:
+          ICARUS_E2E_BASE: http://127.0.0.1:8765
+          ICARUS_E2E_TOKEN: rauchtest
+        run: |
+          set -o pipefail
+          node e2e/private-beta-runtime.mjs 2>&1 \
+            | tee "$RUNNER_TEMP/private-beta-runtime.log"
+
+      - name: Private-Beta-Browserdiagnose hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-beta-runtime-log-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/private-beta-runtime.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Echter Browserconnector mit manipulierter Webseite
         env:
           PYTHONPATH: sidecar

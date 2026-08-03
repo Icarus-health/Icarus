@@ -75,8 +75,10 @@ jobs:
           node --check app/src/product-shell.js
           node --check app/src/chief-of-staff-shell.js
           node --check app/src/model-harness-panel.js
+          node --check app/src/system-cockpit.js
           node --check app/e2e/browser-worker.mjs
           node --check app/e2e/container-backup.mjs
           node --check app/e2e/consumer-chief-of-staff.mjs
           node --check app/e2e/private-beta-runtime.mjs
+          node --check app/e2e/system-cockpit.mjs
           node --check app/e2e/bundled-sidecar-backup.mjs

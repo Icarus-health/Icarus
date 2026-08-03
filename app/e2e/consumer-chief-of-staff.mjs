@@ -89,7 +89,9 @@ try {
   await brief.waitFor();
   await brief.getByText("Überfällige Consumer-E2E-Aufgabe", { exact: true }).waitFor();
   await brief.getByText(/Rückmeldung oder Abhängigkeit/).waitFor();
-  await brief.getByText(/Blockade/).waitFor();
+  await brief
+    .getByText("Eine mögliche Blockade ist im Projektkontext genannt.", { exact: true })
+    .waitFor();
   await brief.getByText("Budget freigegeben", { exact: true }).waitFor();
 
   await page.locator('button[data-view="proposals"]').click();

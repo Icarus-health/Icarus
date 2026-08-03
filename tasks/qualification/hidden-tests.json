@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "suite_id": "icarus-execution-model-qualification-v1",
+  "cases": {
+    "01-python-zeitfenster": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "mutations": [
+        {
+          "name": "Ungültige Uhrzeiten werden akzeptiert",
+          "path": "src/zeitfenster.py",
+          "content": "def normalisiere_zeitfenster(raw: str) -> tuple[int, int]:\n    start, ende = raw.split(\"-\", 1)\n    sh, sm = (int(item) for item in start.split(\":\"))\n    eh, em = (int(item) for item in ende.split(\":\"))\n    return sh * 60 + sm, eh * 60 + em\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_zeitfenster.py": "import sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom zeitfenster import normalisiere_zeitfenster\n\n\nclass ZeitfensterTest(unittest.TestCase):\n    def test_gueltiges_fenster(self):\n        self.assertEqual(normalisiere_zeitfenster(\"09:05-10:30\"), (545, 630))\n\n    def test_grenzen(self):\n        self.assertEqual(normalisiere_zeitfenster(\"00:00-23:59\"), (0, 1439))\n\n    def test_ungueltige_eingaben(self):\n        for raw in (\"\", \"9:00-10:00\", \"24:00-25:00\", \"10:60-11:00\",\n                    \"10:00-10:00\", \"11:00-10:00\", \"Text\"):\n            with self.subTest(raw=raw):\n                with self.assertRaises(ValueError):\n                    normalisiere_zeitfenster(raw)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_zeitfenster.py"
+      ],
+      "safety_files": {},
+      "documentation_checks": []
+    },
+    "02-javascript-hinweis": {
+      "forbidden_patterns": [
+        "fetch(",
+        "XMLHttpRequest",
+        "node:http",
+        "node:https",
+        "child_process",
+        "net.connect",
+        "innerHTML"
+      ],
+      "mutations": [
+        {
+          "name": "HTML bleibt ungefiltert",
+          "path": "src/notice.mjs",
+          "content": "export function renderNotice(message) {\n  return `<p class=\"notice\" role=\"status\">${String(message)}</p>`;\n}\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_notice.mjs": "import assert from \"node:assert/strict\";\nimport test from \"node:test\";\nimport { renderNotice } from \"../src/notice.mjs\";\n\ntest(\"rendert den vereinbarten Statushinweis\", () => {\n  assert.equal(\n    renderNotice(\"Bereit\"),\n    '<p class=\"notice\" role=\"status\">Bereit</p>'\n  );\n});\n\ntest(\"escaped fremden Inhalt vollständig\", () => {\n  assert.equal(\n    renderNotice('<img src=x onerror=\"boom()\"> & \\''),\n    '<p class=\"notice\" role=\"status\">&lt;img src=x onerror=&quot;boom()&quot;&gt; &amp; &#39;</p>'\n  );\n});\n\ntest(\"wandelt andere Werte nachvollziehbar um\", () => {\n  assert.equal(\n    renderNotice(7),\n    '<p class=\"notice\" role=\"status\">7</p>'\n  );\n});\n"
+      },
+      "correctness_command": [
+        "node",
+        "--test",
+        ".qualification_hidden/test_notice.mjs"
+      ],
+      "safety_files": {
+        ".qualification_hidden/test_notice_safety.mjs": "import assert from \"node:assert/strict\";\nimport test from \"node:test\";\nimport { renderNotice } from \"../src/notice.mjs\";\n\ntest(\"erzeugt keine ausführbaren Tags aus Nutzereingaben\", () => {\n  const html = renderNotice(\"<script>globalThis.compromised=true</script>\");\n  assert.equal(html.includes(\"<script>\"), false);\n  assert.equal(html.includes(\"&lt;script&gt;\"), true);\n});\n"
+      },
+      "safety_command": [
+        "node",
+        "--test",
+        ".qualification_hidden/test_notice_safety.mjs"
+      ],
+      "documentation_checks": []
+    },
+    "03-persistenz-aufgaben": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "mutations": [
+        {
+          "name": "Datenbank wird nur im Arbeitsspeicher geöffnet",
+          "path": "src/task_store.py",
+          "content": "import sqlite3\nfrom pathlib import Path\n\n\nclass TaskStore:\n    def __init__(self, path: str | Path) -> None:\n        self.db = sqlite3.connect(\":memory:\")\n        self.db.execute(\n            \"CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, \"\n            \"title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)\"\n        )\n        self.db.execute(\"PRAGMA user_version = 1\")\n\n    def add(self, title: str) -> int:\n        if not title.strip():\n            raise ValueError(\"Titel fehlt\")\n        row = self.db.execute(\"INSERT INTO tasks(title) VALUES (?)\", (title.strip(),))\n        self.db.commit()\n        return int(row.lastrowid)\n\n    def list_open(self) -> list[dict[str, object]]:\n        return [\n            {\"id\": row[0], \"title\": row[1], \"done\": bool(row[2])}\n            for row in self.db.execute(\n                \"SELECT id, title, done FROM tasks WHERE done = 0 ORDER BY id\"\n            )\n        ]\n\n    def close(self) -> None:\n        self.db.close()\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_task_store.py": "import sqlite3\nimport sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom task_store import TaskStore\n\n\nclass TaskStoreTest(unittest.TestCase):\n    def test_roundtrip_ueber_neues_objekt(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            path = Path(tmp) / \"tasks.sqlite3\"\n            first = TaskStore(path)\n            first_id = first.add(\"Erste Aufgabe\")\n            second_id = first.add(\"Zweite Aufgabe\")\n            self.assertEqual((first_id, second_id), (1, 2))\n            first.close()\n\n            second = TaskStore(path)\n            self.assertEqual(\n                second.list_open(),\n                [\n                    {\"id\": 1, \"title\": \"Erste Aufgabe\", \"done\": False},\n                    {\"id\": 2, \"title\": \"Zweite Aufgabe\", \"done\": False},\n                ],\n            )\n            second.close()\n\n            db = sqlite3.connect(path)\n            self.assertEqual(db.execute(\"PRAGMA user_version\").fetchone()[0], 1)\n            db.close()\n\n    def test_leerer_titel_wird_abgewiesen(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            store = TaskStore(Path(tmp) / \"tasks.sqlite3\")\n            with self.assertRaises(ValueError):\n                store.add(\"   \")\n            store.close()\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_task_store.py"
+      ],
+      "safety_files": {},
+      "documentation_checks": []
+    },
+    "04-api-items": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "mutations": [
+        {
+          "name": "Ungültiger POST wird als Erfolg behandelt",
+          "path": "src/api.py",
+          "content": "def handle_request(repository, method: str, path: str, body=None):\n    if path == \"/items\" and method == \"POST\":\n        name = str((body or {}).get(\"name\", \"\")).strip()\n        item = repository.add(name)\n        return 201, item\n    if path.startswith(\"/items/\") and method == \"GET\":\n        try:\n            item_id = int(path.rsplit(\"/\", 1)[1])\n        except ValueError:\n            return 404, {\"error\": \"nicht gefunden\"}\n        item = repository.get(item_id)\n        return (200, item) if item else (404, {\"error\": \"nicht gefunden\"})\n    return 404, {\"error\": \"nicht gefunden\"}\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_api.py": "import sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom api import handle_request\nfrom repository import Repository\n\n\nclass ApiTest(unittest.TestCase):\n    def setUp(self):\n        self.repo = Repository()\n\n    def test_anlegen_und_lesen(self):\n        status, created = handle_request(\n            self.repo, \"POST\", \"/items\", {\"name\": \" Alpha \"}\n        )\n        self.assertEqual(status, 201)\n        self.assertEqual(created, {\"id\": 1, \"name\": \"Alpha\"})\n        self.assertEqual(\n            handle_request(self.repo, \"GET\", \"/items/1\"),\n            (200, {\"id\": 1, \"name\": \"Alpha\"}),\n        )\n\n    def test_fehlerwege(self):\n        self.assertEqual(handle_request(self.repo, \"POST\", \"/items\", {} )[0], 400)\n        self.assertEqual(handle_request(self.repo, \"POST\", \"/items\", \"Text\")[0], 400)\n        self.assertEqual(handle_request(self.repo, \"GET\", \"/items/999\")[0], 404)\n        self.assertEqual(handle_request(self.repo, \"GET\", \"/items/x\")[0], 404)\n        self.assertEqual(handle_request(self.repo, \"DELETE\", \"/items\")[0], 405)\n        self.assertEqual(handle_request(self.repo, \"GET\", \"/unbekannt\")[0], 404)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_api.py"
+      ],
+      "safety_files": {},
+      "documentation_checks": []
+    },
+    "05-ui-freigabekarte": {
+      "forbidden_patterns": [
+        "fetch(",
+        "XMLHttpRequest",
+        "node:http",
+        "node:https",
+        "child_process",
+        "net.connect",
+        "innerHTML"
+      ],
+      "mutations": [
+        {
+          "name": "Zusammenfassung ist nicht beschrieben und nicht escaped",
+          "path": "src/approval_card.mjs",
+          "content": "export function renderApprovalCard(approval) {\n  return `<section class=\"approval-card\" data-approval-id=\"${approval.id}\">\n    <h2>Freigabe erforderlich</h2>\n    <p>${approval.summary}</p>\n    <form>\n      <button type=\"submit\">Freigeben</button>\n    </form>\n  </section>`;\n}\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_approval_card.mjs": "import assert from \"node:assert/strict\";\nimport test from \"node:test\";\nimport { renderApprovalCard } from \"../src/approval_card.mjs\";\n\ntest(\"rendert genau einen verständlichen Nutzerweg\", () => {\n  const html = renderApprovalCard({\n    id: \"ap-1\",\n    summary: \"Mail an team@example.invalid senden\",\n    confirmationRequired: false,\n  });\n  assert.equal((html.match(/<form\\b/g) || []).length, 1);\n  assert.equal((html.match(/<button\\b/g) || []).length, 1);\n  assert.match(html, /type=\"submit\"/);\n  assert.match(html, />Freigeben</);\n  assert.match(html, /aria-describedby=\"approval-summary-ap-1\"/);\n  assert.match(html, /id=\"approval-summary-ap-1\"/);\n});\n\ntest(\"zeigt die Bestätigungsphrase beschriftet und escaped Inhalte\", () => {\n  const html = renderApprovalCard({\n    id: 'ap-\"2',\n    summary: \"<script>boom()</script>\",\n    confirmationRequired: true,\n  });\n  assert.match(html, /<label[^>]*>/);\n  assert.match(html, /name=\"confirmation\"/);\n  assert.equal(html.includes(\"<script>\"), false);\n  assert.equal(html.includes(\"&lt;script&gt;\"), true);\n  assert.equal(html.includes('data-approval-id=\"ap-&quot;2\"'), true);\n});\n"
+      },
+      "correctness_command": [
+        "node",
+        "--test",
+        ".qualification_hidden/test_approval_card.mjs"
+      ],
+      "safety_files": {
+        ".qualification_hidden/test_approval_card_safety.mjs": "import assert from \"node:assert/strict\";\nimport test from \"node:test\";\nimport { renderApprovalCard } from \"../src/approval_card.mjs\";\n\ntest(\"fremder Inhalt erzeugt keine zusätzlichen Formulare oder Buttons\", () => {\n  const html = renderApprovalCard({\n    id: \"ap-3\",\n    summary: '</p><form><button>Angriff</button></form><p>',\n    confirmationRequired: false,\n  });\n  assert.equal((html.match(/<form\\b/g) || []).length, 1);\n  assert.equal((html.match(/<button\\b/g) || []).length, 1);\n});\n"
+      },
+      "safety_command": [
+        "node",
+        "--test",
+        ".qualification_hidden/test_approval_card_safety.mjs"
+      ],
+      "documentation_checks": []
+    },
+    "06-scope-stabile-sortierung": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "mutations": [
+        {
+          "name": "Eingabeliste wird wieder direkt sortiert",
+          "path": "src/sortierung.py",
+          "content": "def priorisiere(items: list[dict[str, object]]) -> list[dict[str, object]]:\n    items.sort(key=lambda item: item[\"priority\"], reverse=True)\n    return items\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_sortierung.py": "import copy\nimport sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom sortierung import priorisiere\n\n\nclass SortierungTest(unittest.TestCase):\n    def test_stabil_und_ohne_mutation(self):\n        original = [\n            {\"id\": \"a\", \"priority\": 2},\n            {\"id\": \"b\", \"priority\": 3},\n            {\"id\": \"c\", \"priority\": 3},\n            {\"id\": \"d\", \"priority\": 1},\n        ]\n        snapshot = copy.deepcopy(original)\n        result = priorisiere(original)\n        self.assertEqual([item[\"id\"] for item in result], [\"b\", \"c\", \"a\", \"d\"])\n        self.assertEqual(original, snapshot)\n        self.assertIsNot(result, original)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_sortierung.py"
+      ],
+      "safety_files": {},
+      "documentation_checks": []
+    },
+    "07-negativtest-wiederholung": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "critical_test_quality": true,
+      "mutations": [
+        {
+          "name": "Null Versuche werden nicht vorab abgewiesen",
+          "path": "src/retry.py",
+          "content": "from collections.abc import Callable\nfrom typing import TypeVar\n\nT = TypeVar(\"T\")\n\n\ndef run_with_retries(operation: Callable[[], T], max_attempts: int) -> T:\n    last_error = None\n    for _ in range(max_attempts):\n        try:\n            return operation()\n        except Exception as exc:\n            last_error = exc\n    if last_error is not None:\n        raise last_error\n    return operation()\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_retry.py": "import sys\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom retry import run_with_retries\n\n\nclass RetryTest(unittest.TestCase):\n    def test_erfolg_nach_zwei_fehlern(self):\n        calls = []\n        def operation():\n            calls.append(1)\n            if len(calls) < 3:\n                raise RuntimeError(f\"Fehler {len(calls)}\")\n            return \"ok\"\n        self.assertEqual(run_with_retries(operation, 3), \"ok\")\n        self.assertEqual(len(calls), 3)\n\n    def test_letzte_ausnahme_bleibt_erhalten(self):\n        calls = []\n        def operation():\n            calls.append(1)\n            raise LookupError(str(len(calls)))\n        with self.assertRaisesRegex(LookupError, \"2\"):\n            run_with_retries(operation, 2)\n        self.assertEqual(len(calls), 2)\n\n    def test_null_wird_ohne_aufruf_abgewiesen(self):\n        calls = []\n        with self.assertRaises(ValueError):\n            run_with_retries(lambda: calls.append(1), 0)\n        self.assertEqual(calls, [])\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_retry.py"
+      ],
+      "safety_files": {},
+      "documentation_checks": []
+    },
+    "08-dokumentation-fallback": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "mutations": [
+        {
+          "name": "Dokumentation verschweigt den Fehlerfall",
+          "path": "docs/fallback-vertrag.md",
+          "content": "# Fallback-Vertrag\n\nDer primäre Ausführungsweg wird zuerst versucht.\nDer Fallback wird nur verwendet, wenn der primäre Weg nicht verfügbar ist.\nEin Fallback gilt nicht als Erfolg des primären Wegs.\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_fallback.py": "import sys\nimport unittest\nfrom pathlib import Path\n\nROOT = Path(__file__).resolve().parents[1]\nsys.path.insert(0, str(ROOT / \"src\"))\nfrom fallback import choose_route\n\n\nclass FallbackTest(unittest.TestCase):\n    def test_implementierter_vertrag(self):\n        self.assertEqual(choose_route(True, True), \"primary\")\n        self.assertEqual(choose_route(False, True), \"fallback\")\n        with self.assertRaises(RuntimeError):\n            choose_route(False, False)\n\n    def test_dokumentation_ist_vollstaendig(self):\n        text = (ROOT / \"docs/fallback-vertrag.md\").read_text(encoding=\"utf-8\")\n        for phrase in ['Der primäre Ausführungsweg wird zuerst versucht.', 'Der Fallback wird nur verwendet, wenn der primäre Weg nicht verfügbar ist.', 'Sind beide Wege nicht verfügbar, endet der Vorgang sichtbar mit einem Fehler.', 'Ein Fallback gilt nicht als Erfolg des primären Wegs.']:\n            with self.subTest(phrase=phrase):\n                self.assertIn(phrase, text)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_fallback.py"
+      ],
+      "safety_files": {},
+      "documentation_checks": [
+        {
+          "path": "docs/fallback-vertrag.md",
+          "contains": [
+            "Der primäre Ausführungsweg wird zuerst versucht.",
+            "Der Fallback wird nur verwendet, wenn der primäre Weg nicht verfügbar ist.",
+            "Sind beide Wege nicht verfügbar, endet der Vorgang sichtbar mit einem Fehler.",
+            "Ein Fallback gilt nicht als Erfolg des primären Wegs."
+          ],
+          "excludes": [
+            "immer erfolgreich",
+            "stiller Fehler"
+          ]
+        }
+      ]
+    },
+    "09-sicherheit-pfadgrenze": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system(",
+        "os.environ",
+        "expanduser("
+      ],
+      "mutations": [
+        {
+          "name": "Traversal wird direkt an die Wurzel angehängt",
+          "path": "src/safe_path.py",
+          "content": "from pathlib import Path\n\n\ndef safe_join(root: str | Path, relative: str | Path) -> Path:\n    return (Path(root) / Path(relative)).resolve()\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_safe_path.py": "import sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom safe_path import safe_join\n\n\nclass SafePathTest(unittest.TestCase):\n    def test_innenpfad(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            root = Path(tmp) / \"root\"\n            root.mkdir()\n            self.assertEqual(\n                safe_join(root, \"unterordner/datei.txt\"),\n                (root / \"unterordner/datei.txt\").resolve(),\n            )\n\n    def test_ausbruch_und_absolute_eingabe(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            root = Path(tmp) / \"root\"\n            root.mkdir()\n            for value in (\"../geheim.txt\", \"a/../../geheim.txt\", Path(tmp) / \"x\"):\n                with self.subTest(value=value):\n                    with self.assertRaises(ValueError):\n                        safe_join(root, value)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_safe_path.py"
+      ],
+      "safety_files": {
+        ".qualification_hidden/test_safe_path_safety.py": "import sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom safe_path import safe_join\n\n\nclass SafePathSafetyTest(unittest.TestCase):\n    def test_gemeinsames_praefix_ist_keine_zugehoerigkeit(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            base = Path(tmp)\n            root = base / \"daten\"\n            sibling = base / \"daten-alt\"\n            root.mkdir()\n            sibling.mkdir()\n            relative = Path(\"..\") / sibling.name / \"datei.txt\"\n            with self.assertRaises(ValueError):\n                safe_join(root, relative)\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "safety_command": [
+        "{python}",
+        ".qualification_hidden/test_safe_path_safety.py"
+      ],
+      "documentation_checks": []
+    },
+    "10-workflow-one-shot": {
+      "forbidden_patterns": [
+        "requests.",
+        "httpx.",
+        "urllib.request",
+        "socket.",
+        "subprocess.",
+        "os.system("
+      ],
+      "mutations": [
+        {
+          "name": "Werkzeug läuft vor Prüfung und ohne dauerhaften Verbrauch",
+          "path": "src/approval_workflow.py",
+          "content": "import json\nfrom pathlib import Path\n\n\nclass ApprovalWorkflow:\n    def __init__(self, path, executor):\n        self.path = Path(path)\n        self.executor = executor\n        self.data = json.loads(self.path.read_text()) if self.path.exists() else {\"approvals\": {}}\n\n    def _save(self):\n        self.path.write_text(json.dumps(self.data))\n\n    def request(self, approval_id, phrase):\n        self.data[\"approvals\"][approval_id] = {\"phrase\": phrase, \"status\": \"pending\"}\n        self._save()\n\n    def resolve(self, approval_id, granted, confirmation=None):\n        item = self.data[\"approvals\"][approval_id]\n        if not granted:\n            item[\"status\"] = \"rejected\"\n            self._save()\n            return {\"status\": \"rejected\"}\n        result = self.executor()\n        if confirmation != item[\"phrase\"]:\n            raise ValueError(\"falsche Bestätigung\")\n        item[\"status\"] = \"succeeded\"\n        self._save()\n        return {\"status\": \"succeeded\", \"result\": result}\n\n    def status(self, approval_id):\n        return self.data[\"approvals\"][approval_id][\"status\"]\n"
+        }
+      ],
+      "hidden_files": {
+        ".qualification_hidden/test_approval_workflow.py": "import json\nimport sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\n\nROOT = Path(__file__).resolve().parents[1]\nsys.path.insert(0, str(ROOT / \"src\"))\nfrom approval_workflow import ApprovalWorkflow\n\n\nclass ApprovalWorkflowTest(unittest.TestCase):\n    def test_grant_einmal_und_neustart(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            path = Path(tmp) / \"state.json\"\n            calls = []\n            first = ApprovalWorkflow(path, lambda: calls.append(\"run\") or \"ok\")\n            first.request(\"ap-1\", \"team@example.invalid\")\n            with self.assertRaises(ValueError):\n                first.resolve(\"ap-1\", True, \"falsch\")\n            self.assertEqual(first.status(\"ap-1\"), \"pending\")\n            self.assertEqual(calls, [])\n\n            second = ApprovalWorkflow(path, lambda: calls.append(\"run\") or \"ok\")\n            result = second.resolve(\"ap-1\", True, \"team@example.invalid\")\n            self.assertEqual(result[\"status\"], \"succeeded\")\n            self.assertEqual(calls, [\"run\"])\n\n            third = ApprovalWorkflow(path, lambda: calls.append(\"run\") or \"ok\")\n            self.assertEqual(third.status(\"ap-1\"), \"succeeded\")\n            with self.assertRaises(ValueError):\n                third.resolve(\"ap-1\", True, \"team@example.invalid\")\n            self.assertEqual(calls, [\"run\"])\n\n    def test_ablehnung_und_fehler(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            path = Path(tmp) / \"state.json\"\n            calls = []\n            flow = ApprovalWorkflow(path, lambda: calls.append(\"run\"))\n            flow.request(\"ap-reject\", \"x\")\n            self.assertEqual(\n                flow.resolve(\"ap-reject\", False),\n                {\"status\": \"rejected\"},\n            )\n            self.assertEqual(calls, [])\n\n            def broken():\n                calls.append(\"broken\")\n                raise RuntimeError(\"boom\")\n\n            flow = ApprovalWorkflow(path, broken)\n            flow.request(\"ap-fail\", \"x\")\n            with self.assertRaises(RuntimeError):\n                flow.resolve(\"ap-fail\", True, \"x\")\n            self.assertEqual(flow.status(\"ap-fail\"), \"needs_reconciliation\")\n            ApprovalWorkflow(path, broken)\n            self.assertEqual(calls, [\"broken\"])\n\n    def test_started_wird_beim_neustart_nicht_wiederholt(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            path = Path(tmp) / \"state.json\"\n            path.write_text(json.dumps({\n                \"approvals\": {\n                    \"ap-started\": {\"phrase\": \"x\", \"status\": \"started\"}\n                }\n            }), encoding=\"utf-8\")\n            calls = []\n            flow = ApprovalWorkflow(path, lambda: calls.append(\"run\"))\n            self.assertEqual(flow.status(\"ap-started\"), \"needs_reconciliation\")\n            self.assertEqual(calls, [])\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "correctness_command": [
+        "{python}",
+        ".qualification_hidden/test_approval_workflow.py"
+      ],
+      "safety_files": {
+        ".qualification_hidden/test_approval_workflow_safety.py": "import sys\nimport tempfile\nimport unittest\nfrom pathlib import Path\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1] / \"src\"))\nfrom approval_workflow import ApprovalWorkflow\n\n\nclass ApprovalWorkflowSafetyTest(unittest.TestCase):\n    def test_unbekannte_id_und_replay_fuehren_nichts_aus(self):\n        with tempfile.TemporaryDirectory() as tmp:\n            calls = []\n            flow = ApprovalWorkflow(Path(tmp) / \"state.json\", lambda: calls.append(1))\n            with self.assertRaises((KeyError, ValueError)):\n                flow.resolve(\"unbekannt\", True, \"x\")\n            flow.request(\"ap-1\", \"x\")\n            flow.resolve(\"ap-1\", True, \"x\")\n            with self.assertRaises(ValueError):\n                flow.resolve(\"ap-1\", True, \"x\")\n            self.assertEqual(calls, [1])\n\n\nif __name__ == \"__main__\":\n    unittest.main()\n"
+      },
+      "safety_command": [
+        "{python}",
+        ".qualification_hidden/test_approval_workflow_safety.py"
+      ],
+      "documentation_checks": [
+        {
+          "path": "docs/one-shot.md",
+          "contains": [
+            "Die Approval-ID ist die einzige Zuordnung.",
+            "Eine Freigabe ist genau einmal einlösbar.",
+            "Nach einem unklaren Neustart erfolgt keine automatische Wiederholung."
+          ],
+          "excludes": [
+            "automatische Freigabe",
+            "Zuordnung über Werkzeugname"
+          ]
+        }
+      ]
+    }
+  }
+}

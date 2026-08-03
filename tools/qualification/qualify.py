@@ -136,12 +136,21 @@ def validate_suite(suite: dict[str, Any], hidden: dict[str, Any]) -> None:
             if not isinstance(mutations, list) or not mutations:
                 errors.append(f"{case_id}: mindestens eine Mutation ist erforderlich.")
             else:
+                allowed_paths = {
+                    str(item) for item in case.get("allowed_paths", [])
+                }
                 for mutation in mutations:
                     if not isinstance(mutation, dict):
                         errors.append(f"{case_id}: Mutation muss ein Objekt sein.")
                         continue
                     try:
-                        safe_relative(str(mutation.get("path") or ""))
+                        mutation_path = safe_relative(
+                            str(mutation.get("path") or "")
+                        )
+                        if mutation_path.as_posix() not in allowed_paths:
+                            errors.append(
+                                f"{case_id}: Mutation liegt außerhalb der erlaubten Pfade."
+                            )
                     except QualificationError as exc:
                         errors.append(f"{case_id}: {exc}")
                     if not isinstance(mutation.get("content"), str):
@@ -176,7 +185,7 @@ def _command(command: Iterable[str]) -> list[str]:
     return [sys.executable if item == "{python}" else item for item in command]
 
 
-def run_command(command: list[str], cwd: Path, timeout: int) -> dict[str, Any]:
+def run_command(command: list[str], cwd: Path, timeout: float) -> dict[str, Any]:
     home = cwd / ".qualification_home"
     temp = cwd / ".qualification_tmp"
     home.mkdir(exist_ok=True)
@@ -304,7 +313,12 @@ def grade_case(
     submission_root: Path,
 ) -> dict[str, Any]:
     case_id = str(case["id"])
-    timeout = int(case["max_seconds"])
+    timeout = float(case["max_seconds"])
+    deadline = time.monotonic() + timeout
+
+    def remaining() -> float:
+        return max(0.01, deadline - time.monotonic())
+
     allowed = {str(item) for item in case["allowed_paths"]}
     required = {str(item) for item in case["required_submission_paths"]}
     case_submission = submission_root / case_id
@@ -341,7 +355,7 @@ def grade_case(
             critical.extend("Sicherheitsverstoß: " + item for item in safety_violations)
 
         candidate_tests = run_command(
-            list(case["candidate_test_command"]), workspace, timeout
+            list(case["candidate_test_command"]), workspace, remaining()
         )
         mutation_results: list[dict[str, Any]] = []
         test_quality_ok = candidate_tests["ok"]
@@ -354,7 +368,7 @@ def grade_case(
                     shutil.copytree(workspace, mutant, dirs_exist_ok=True)
                     _apply_mutation(mutant, mutation)
                     result = run_command(
-                        list(case["candidate_test_command"]), mutant, timeout
+                        list(case["candidate_test_command"]), mutant, remaining()
                     )
                     killed = not result["ok"]
                     mutation_results.append(
@@ -374,13 +388,13 @@ def grade_case(
 
         _write_files(workspace, hidden_case.get("hidden_files", {}))
         correctness = run_command(
-            list(hidden_case["correctness_command"]), workspace, timeout
+            list(hidden_case["correctness_command"]), workspace, remaining()
         )
 
         _write_files(workspace, hidden_case.get("safety_files", {}))
         safety_command = hidden_case.get("safety_command")
         safety_result = (
-            run_command(list(safety_command), workspace, timeout)
+            run_command(list(safety_command), workspace, remaining())
             if safety_command
             else {"ok": True, "runtime_seconds": 0.0, "output": ""}
         )
@@ -410,6 +424,8 @@ def grade_case(
             "correctness_test": correctness,
             "safety_test": safety_result,
             "documentation_failures": documentation_failures,
+            "runtime_seconds": round(timeout - remaining() + 0.01, 3),
+            "max_seconds": timeout,
         }
 
 

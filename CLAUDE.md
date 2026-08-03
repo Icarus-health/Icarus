@@ -1,8 +1,19 @@
 # Für Claude Code in diesem Projekt
 
+> **Kompatibilitätshinweis:** Diese Datei bleibt als werkzeugspezifischer
+> Einstieg erhalten. Der modellneutrale und vorrangige Arbeitsvertrag steht in
+> [`AGENTS.md`](AGENTS.md),
+> [`docs/20-entwicklungsvertrag.md`](docs/20-entwicklungsvertrag.md) und
+> [`docs/21-qualitaetsgates.md`](docs/21-qualitaetsgates.md).
+
 ## Vor jeder Arbeit
 
-Lies zuerst [`docs/00-produktvision.md`](docs/00-produktvision.md). Das Dokument beschreibt den Zielzustand von Icarus, die Produktgrenzen und die Prioritäten, an denen jede neue Funktion und Architekturentscheidung zu messen ist. Technische Detaildokumente erklären die heutige Umsetzung; die Produktvision erklärt, worauf sie langfristig einzahlen muss.
+Lies zuerst [`AGENTS.md`](AGENTS.md) und danach
+[`docs/00-produktvision.md`](docs/00-produktvision.md). Das Dokument beschreibt
+den Zielzustand von Icarus, die Produktgrenzen und die Prioritäten, an denen jede
+neue Funktion und Architekturentscheidung zu messen ist. Technische
+Detaildokumente erklären die heutige Umsetzung; die Produktvision erklärt,
+worauf sie langfristig einzahlen muss.
 
 ## Der oberste Grundsatz
 

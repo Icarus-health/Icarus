@@ -18,7 +18,7 @@ ADRESSE  := http://127.0.0.1:8765
 .DEFAULT_GOAL := help
 .PHONY: help start stop logs url \
         venv sidecar-dev sidecar-run mcp-config container \
-        test validate-schema check \
+        test validate-schema frontend-check check verify \
         app-dev app-build sidecar-binary icon clean
 
 help: ## Diese Übersicht anzeigen
@@ -181,6 +181,15 @@ print('$(EXAMPLE) ist gegen $(SCHEMA) valide.')"
 
 check: test validate-schema ## Alle Prüfungen des Sidecars
 	@cd app/src-tauri && cargo check
+
+frontend-check: ## Syntax aller produktiven JavaScript- und Browser-Testdateien
+	@set -e; \
+	for datei in $$(find app/src app/e2e -type f \
+		\( -name '*.js' -o -name '*.mjs' \) | sort); do \
+		node --check "$$datei"; \
+	done
+
+verify: check frontend-check ## Lokaler Standardnachweis vor jedem PR
 
 # -- Desktop-App ------------------------------------------------------------
 

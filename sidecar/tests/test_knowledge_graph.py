@@ -201,8 +201,8 @@ def test_workspace_and_episode_projection_only_uses_explicit_fields():
     assert {"has_deadline", "has_next_step", "has_decision"}.issubset(predicates)
 
 
-def test_api_requires_supplied_guard_and_exposes_sources():
-    graph = KnowledgeGraph()
+def test_api_requires_supplied_guard_and_exposes_sources(tmp_path):
+    graph = KnowledgeGraph(tmp_path / "api-graph.sqlite3")
     graph.rebuild([relation_record()])
 
     def guard(x_test_token: str | None = Header(default=None)) -> None:
@@ -230,3 +230,13 @@ def test_api_requires_supplied_guard_and_exposes_sources():
         headers={"x-test-token": "ok"},
     )
     assert sources.json()[0]["source_id"] == "note-1"
+
+
+def test_api_rejects_shared_in_memory_connection():
+    graph = KnowledgeGraph()
+    try:
+        graph_router(graph)
+    except ValueError as error:
+        assert "dateibasierte Projektion" in str(error)
+    else:
+        raise AssertionError("Threadgebundene In-Memory-Verbindung wurde für die API akzeptiert")

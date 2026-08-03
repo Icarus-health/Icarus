@@ -96,12 +96,13 @@ try {
 
   await page.locator('button[data-view="proposals"]').click();
   await page.getByText(/Hier wartet alles, was deine Entscheidung braucht/).waitFor();
-  await page.getByText("Gilt das noch?", { exact: true }).waitFor();
-  await page
+  const proposals = page.locator("#proposal-list");
+  await proposals.getByText("Gilt das noch?", { exact: true }).waitFor();
+  await proposals
     .getByText("Consumer-E2E-Fakt gilt weiterhin.", { exact: true })
     .waitFor();
-  await page.getByRole("button", { name: "Gilt noch" }).waitFor();
-  await page.getByRole("button", { name: "Stimmt nicht mehr" }).waitFor();
+  await proposals.getByRole("button", { name: "Gilt noch" }).waitFor();
+  await proposals.getByRole("button", { name: "Stimmt nicht mehr" }).waitFor();
 
   // Tastaturweg durch die vier Hauptbereiche.
   await page.locator('button[data-view="dashboard"]').focus();

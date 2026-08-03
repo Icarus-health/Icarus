@@ -389,3 +389,4 @@ showRestoreToast();
 scheduleEnhancement();
 void refreshDecisionArea();
 window.setInterval(refreshDecisionArea, 15000);
+void import("./model-harness-panel.js");

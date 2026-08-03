@@ -25,6 +25,7 @@ from .graph_privacy import install_graph_privacy
 from .maintenance import MaintenanceGate
 from .private_beta import install_private_beta
 from .proactive import install_proactive
+from .world_intelligence import install_world_intelligence
 
 _ORIGINAL_CREATE_APP = server.create_app
 _ORIGINAL_WIRE_SCHEDULER = server._wire_scheduler  # noqa: SLF001
@@ -98,6 +99,12 @@ def create_app(*args: Any, **kwargs: Any) -> FastAPI:
     runtime = install_private_beta(app, data_dir)
     install_graph_privacy(runtime)
     install_proactive(app, data_dir)
+
+    # `find_project` löst Kennung und Namen sicher auf. Die Weltquellen-API
+    # erwartet einen optionalen Lookup mit None statt einer Ausnahme.
+    if not hasattr(app.state.workspace, "get_project"):
+        app.state.workspace.get_project = app.state.workspace.find_project
+    install_world_intelligence(app, data_dir)
 
     gate = MaintenanceGate()
     _GATES[app] = gate

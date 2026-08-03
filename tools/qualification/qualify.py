@@ -177,17 +177,32 @@ def _command(command: Iterable[str]) -> list[str]:
 
 
 def run_command(command: list[str], cwd: Path, timeout: int) -> dict[str, Any]:
-    env = os.environ.copy()
-    env.update(
-        {
-            "PYTHONHASHSEED": "0",
-            "ICARUS_QUALIFICATION_OFFLINE": "1",
-            "HTTP_PROXY": "http://127.0.0.1:9",
-            "HTTPS_PROXY": "http://127.0.0.1:9",
-            "ALL_PROXY": "http://127.0.0.1:9",
-            "NO_PROXY": "",
-        }
-    )
+    home = cwd / ".qualification_home"
+    temp = cwd / ".qualification_tmp"
+    home.mkdir(exist_ok=True)
+    temp.mkdir(exist_ok=True)
+    # Kandidatencode erbt absichtlich nicht die Umgebung des Entwicklers. Nur
+    # Laufzeitpfade und neutrale Prozesswerte werden weitergegeben; Schlüssel,
+    # Konten und lokale Icarus-Konfiguration bleiben außerhalb des Laufs.
+    env = {
+        "PATH": os.environ.get("PATH", ""),
+        "PYTHONHASHSEED": "0",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "ICARUS_QUALIFICATION_OFFLINE": "1",
+        "HOME": str(home),
+        "USERPROFILE": str(home),
+        "TMPDIR": str(temp),
+        "TEMP": str(temp),
+        "TMP": str(temp),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "HTTP_PROXY": "http://127.0.0.1:9",
+        "HTTPS_PROXY": "http://127.0.0.1:9",
+        "ALL_PROXY": "http://127.0.0.1:9",
+        "NO_PROXY": "",
+    }
+    if os.name == "nt" and os.environ.get("SYSTEMROOT"):
+        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     started = time.monotonic()
     try:
         completed = subprocess.run(

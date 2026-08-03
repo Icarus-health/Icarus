@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -7,7 +8,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from qualify import grade_case, load_json, validate_suite
+from qualify import grade_case, load_json, run_command, validate_suite
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -139,6 +140,28 @@ class QualificationToolTest(unittest.TestCase):
                             stderr=subprocess.STDOUT,
                             text=True,
                         )
+
+    def test_kandidat_erbt_keine_geheimnisse_aus_der_umgebung(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            os.environ["ICARUS_QUALIFICATION_TEST_SECRET"] = "darf-nicht-sichtbar-sein"
+            try:
+                result = run_command(
+                    [
+                        "{python}",
+                        "-c",
+                        (
+                            "import os; "
+                            "raise SystemExit(1 if "
+                            "'ICARUS_QUALIFICATION_TEST_SECRET' in os.environ else 0)"
+                        ),
+                    ],
+                    root,
+                    5,
+                )
+            finally:
+                os.environ.pop("ICARUS_QUALIFICATION_TEST_SECRET", None)
+        self.assertTrue(result["ok"], result["output"])
 
     def test_scope_sabotage_faellt_trotz_gruener_tests_durch(self):
         with tempfile.TemporaryDirectory() as tmp:

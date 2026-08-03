@@ -18,6 +18,7 @@ from icarus_memory.audit import AuditLog
 from icarus_memory.crypto import DecryptionError, seal_json, unseal_json
 from icarus_memory.episodes import EpisodeStore
 from icarus_memory.secrets import (
+    BACKEND_ENV,
     PASSPHRASE_ENV,
     SECRETS_FILE,
     Keychain,
@@ -30,12 +31,15 @@ from icarus_memory.workspace import WorkspaceStore
 
 
 @pytest.fixture(autouse=True)
-def saubere_umgebung():
+def saubere_umgebung(monkeypatch):
     namen = (PASSPHRASE_ENV, TOKEN_ENV, "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
              "ICARUS_MAIL_PASSWORD", "ICARUS_UI_DIR")
     vorher = {n: os.environ.get(n) for n in namen}
     for n in namen:
         os.environ.pop(n, None)
+    # Die Dateispeicher-Fälle simulieren den Container bewusst. Das ist keine
+    # Ausnahme von der globalen Testisolation, sondern ihr lokaler Testfall.
+    monkeypatch.setenv(BACKEND_ENV, "file")
     yield
     for n, wert in vorher.items():
         if wert is None:

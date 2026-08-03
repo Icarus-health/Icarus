@@ -107,14 +107,19 @@ def test_changed_fingerprint_reappears_after_dismissal(monkeypatch, tmp_path):
             ).json()
         }
 
-        # Eine Wiedereröffnung verändert den verbindlichen Aufgabenbestand und
-        # damit den Fingerabdruck. Derselbe Sachverhalt darf erneut erscheinen.
-        client.post(f"/tasks/{task['id']}/done", headers=HEADERS).raise_for_status()
-        client.post(f"/tasks/{task['id']}/reopen", headers=HEADERS).raise_for_status()
+        # Ein neuer belegter Sachstand verändert den Fingerabdruck desselben
+        # Signals. Die frühere Ablehnung gilt nur für die alte Fassung.
+        stored = client.app.state.tasks.get(task["id"])
+        assert stored is not None
+        stored.notes = "Neue Rückmeldung eingetroffen"
+        client.app.state.tasks._put(stored)  # noqa: SLF001 - Vertragsprüfung
+
         changed = client.get(
             "/chief-of-staff/attention?limit=10", headers=HEADERS
         ).json()
         assert first["id"] in {item["id"] for item in changed}
+        replacement = next(item for item in changed if item["id"] == first["id"])
+        assert replacement["fingerprint"] != first["fingerprint"]
 
 
 def test_meeting_prep_connects_calendar_project_tasks_decisions_and_episodes(

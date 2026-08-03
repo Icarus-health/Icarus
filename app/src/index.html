@@ -6,6 +6,7 @@
     <title>Icarus</title>
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="product-shell.css" />
+    <link rel="stylesheet" href="chief-of-staff-shell.css" />
   </head>
   <body>
     <nav>
@@ -21,9 +22,6 @@
       <span id="status" class="status">Verbinde…</span>
     </nav>
 
-    <!-- Erststart. Liegt über allem, bis jemand ihn beendet — aber jeder
-         Schritt ist überspringbar, und Icarus läuft auch, wenn man alles
-         überspringt. -->
     <div id="wizard" hidden>
       <div class="wizard-card">
         <h2 id="wizard-title"></h2>
@@ -39,7 +37,6 @@
     </div>
 
     <main>
-      <!-- Heute: Aufgaben, Termine, Nachrichten auf einen Blick -->
       <section id="view-dashboard" class="view">
         <h2 id="greeting"></h2>
 
@@ -69,9 +66,6 @@
 
           <article class="card">
             <h3>Nachrichten <span id="mail-badge" class="badge" hidden></span></h3>
-            <!-- Mail ist der gefährlichste Injection-Weg: jeder kann dir
-                 schreiben. Deshalb hier nur Vorschau, niemals automatisch
-                 verarbeitet. -->
             <ul id="mail-list"></ul>
             <p id="mail-note" class="muted"></p>
           </article>
@@ -84,7 +78,6 @@
         </div>
       </section>
 
-      <!-- Projekte: die Ebene, an der Aufgaben und Notizen hängen -->
       <section id="view-projects" class="view" hidden>
         <form id="project-form">
           <input id="project-name" type="text" placeholder="Neues Projekt" autocomplete="off" required />
@@ -96,9 +89,6 @@
 
         <div class="split">
           <ul id="project-list"></ul>
-
-          <!-- Rechts der Stand des gewählten Projekts: Beschreibung, offene
-               Aufgaben, Notizen. Ein Aufruf, nicht drei. -->
           <div id="project-detail">
             <p class="muted">Wähle links ein Projekt.</p>
           </div>
@@ -107,11 +97,8 @@
         <p id="project-empty" class="muted">Noch keine Projekte.</p>
       </section>
 
-      <!-- Gespräch -->
       <section id="view-chat" class="view" hidden>
         <div id="messages" class="messages"></div>
-
-        <!-- Freigaben. Solange hier etwas steht, wartet eine Aktion. -->
         <div id="approvals"></div>
 
         <form id="chat-form">
@@ -119,9 +106,6 @@
           <button type="submit">Senden</button>
         </form>
 
-        <!-- Posteingang. Aufklappbar, damit er das Gespräch nicht verdrängt —
-             wer ihn braucht, hat ihn hier; wer nicht, sieht eine Zeile.
-             Der Inhalt ist ausnahmslos fremd: Jeder kann dir schreiben. -->
         <details id="mailbox">
           <summary>Posteingang <span id="mailbox-badge" class="badge" hidden></span></summary>
           <p id="mailbox-note" class="muted"></p>
@@ -129,9 +113,6 @@
         </details>
       </section>
 
-      <!-- Rohmaterial: die Mittelfristschicht.
-           Was hier liegt, behauptet nichts über den Nutzer. Der Weg in den
-           Bestand führt nur über die Verdichtung, und die legt vor. -->
       <section id="view-ingest" class="view" hidden>
         <p class="muted">
           Aufgenommenes wartet hier, bis es verdichtet wurde. Nichts davon gilt
@@ -139,8 +120,6 @@
         </p>
 
         <form id="ingest-form">
-          <!-- Auswählen statt tippen: Die Ordner sind oben schon freigegeben,
-               ein zweites Mal danach zu fragen wäre einmal zu viel. -->
           <select id="ingest-path" aria-label="Ordner"></select>
           <select id="ingest-adapter" aria-label="Quelle">
             <option value="obsidian">Obsidian-Vault</option>
@@ -151,19 +130,12 @@
           <button type="submit">Aufnehmen</button>
         </form>
         <p id="ingest-note" class="muted"></p>
-
-        <!-- Rückblicke: das Einzige, was Icarus hier selbst schreibt. Deshalb
-             oben und deutlich getrennt vom Rohmaterial darunter. -->
         <p id="summary-note" class="muted"></p>
         <ul id="summary-block"></ul>
-
         <ul id="episode-list"></ul>
         <p id="episode-empty" class="muted">Noch nichts aufgenommen.</p>
       </section>
 
-      <!-- Vorschläge: das Scharnier zwischen Rohmaterial und Bestand.
-           Verdichtung schlägt vor, sie schreibt nicht — nichts hier gilt als
-           gewusst, bis zugestimmt wird. -->
       <section id="view-proposals" class="view" hidden>
         <p class="muted">
           Verdichtung schlägt vor, sie schreibt nicht. Nichts davon steht im
@@ -175,12 +147,10 @@
         </div>
         <p id="consolidate-note" class="muted"></p>
         <p id="proposal-feedback" class="muted"></p>
-
         <ul id="proposal-list"></ul>
         <p id="proposal-empty" class="muted">Nichts offen. Kein Vorschlag wartet auf Zustimmung.</p>
       </section>
 
-      <!-- Gedächtnis -->
       <section id="view-memory" class="view" hidden>
         <form id="record-form">
           <input id="statement" type="text" placeholder="Was soll ich mir merken?" autocomplete="off" required />
@@ -203,7 +173,6 @@
         <p id="empty" class="muted">Noch nichts gespeichert.</p>
       </section>
 
-      <!-- Einrichtung: alles, was sonst in einer .env stünde. -->
       <section id="view-setup" class="view" hidden>
         <p class="muted">
           Nichts davon ist Pflicht. Ohne Modell funktioniert das Gedächtnis
@@ -212,7 +181,6 @@
         <div id="setup-panel"></div>
       </section>
 
-      <!-- Protokoll -->
       <section id="view-audit" class="view" hidden>
         <p class="muted">
           Jede Aktion, die durch die Freigabeprüfung ging. Einträge lassen sich
@@ -224,5 +192,6 @@
 
     <script type="module" src="main.js"></script>
     <script type="module" src="product-shell.js"></script>
+    <script type="module" src="chief-of-staff-shell.js"></script>
   </body>
 </html>

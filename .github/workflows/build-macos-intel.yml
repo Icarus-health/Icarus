@@ -1,0 +1,229 @@
+# Baut und prüft den eigenständigen Icarus-Download für Intel-Macs.
+#
+# GitHub stellt mit `macos-15-intel` einen nativen x86_64-Runner bereit. Sidecar,
+# Rust-Hauptprogramm und Bundle entstehen deshalb auf derselben Architektur.
+# Ein Universal-Bundle wird bewusst nicht vorgetäuscht; Apple Silicon und Intel
+# bleiben getrennte, einzeln prüfbare Downloads.
+
+name: macOS-Intel-Build
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "sidecar/**"
+      - "packaging/**"
+      - ".github/workflows/build-macos-intel.yml"
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      bundle_cognee:
+        description: "Semantische Suche mitliefern (macht das Bündel deutlich größer)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-intel:
+    runs-on: macos-15-intel
+    timeout-minutes: 75
+
+    env:
+      ICARUS_KEYCHAIN_BACKEND: none
+      HAS_APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+          prefix-key: intel-rust
+
+      - name: Runnerarchitektur belegen
+        run: |
+          test "$(uname -m)" = "x86_64"
+          uname -a
+          sysctl -n machdep.cpu.brand_string
+
+      - name: Sidecar-Abhängigkeiten
+        run: |
+          python -m pip install --upgrade pip
+          pip install ./sidecar pyinstaller pytest jsonschema
+          if [ "${{ inputs.bundle_cognee }}" = "true" ]; then
+            pip install "cognee>=1.4.0"
+          fi
+
+      - name: Native Tests
+        run: python -m pytest sidecar/tests -q
+
+      - name: Intel-Sidecar bündeln
+        env:
+          ICARUS_BUNDLE_COGNEE: ${{ inputs.bundle_cognee && '1' || '0' }}
+        run: |
+          mkdir -p app/src-tauri/binaries
+          pyinstaller packaging/icarus-sidecar.spec \
+            --distpath app/src-tauri/binaries \
+            --workpath build/pyinstaller-intel \
+            --noconfirm
+          file app/src-tauri/binaries/icarus-sidecar
+          file app/src-tauri/binaries/icarus-sidecar | grep -q "x86_64"
+
+      - name: Intel-Sidecar mit vollständigem Backup und Restore prüfen
+        run: |
+          set -euo pipefail
+          DATA="$RUNNER_TEMP/icarus-intel-bundle-test"
+          LOG="$RUNNER_TEMP/icarus-intel-sidecar.log"
+          mkdir -p "$DATA"
+
+          ICARUS_SIDECAR_PORT=8902 \
+          ICARUS_SIDECAR_TOKEN=intel-test \
+          ICARUS_SECRETS_PASSPHRASE=intel-test \
+          ICARUS_DATA_DIR="$DATA" \
+            ./app/src-tauri/binaries/icarus-sidecar >"$LOG" 2>&1 &
+          SIDECAR_PID=$!
+
+          cleanup() {
+            if ! kill -0 "$SIDECAR_PID" 2>/dev/null; then
+              wait "$SIDECAR_PID" 2>/dev/null || true
+              return
+            fi
+            kill "$SIDECAR_PID" 2>/dev/null || true
+            for i in $(seq 1 20); do
+              kill -0 "$SIDECAR_PID" 2>/dev/null || break
+              sleep 0.25
+            done
+            if kill -0 "$SIDECAR_PID" 2>/dev/null; then
+              kill -9 "$SIDECAR_PID" 2>/dev/null || true
+            fi
+            wait "$SIDECAR_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for i in $(seq 1 60); do
+            if curl -fsS localhost:8902/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          if ! curl -fsS localhost:8902/health | grep -q '"status":"ok"'; then
+            cat "$LOG"
+            exit 1
+          fi
+
+          ICARUS_E2E_BASE=http://127.0.0.1:8902 \
+          ICARUS_E2E_TOKEN=intel-test \
+          ICARUS_E2E_DATA_DIR="$DATA" \
+            node app/e2e/bundled-sidecar-backup.mjs
+
+          cleanup
+          trap - EXIT
+
+      - name: Signaturzertifikat einrichten
+        id: signing
+        if: env.HAS_APPLE_CERTIFICATE == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/intel-build.keychain"
+          PASSWORD=$(openssl rand -base64 24)
+          security create-keychain -p "$PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSWORD" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain
+          rm "$RUNNER_TEMP/cert.p12"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Intel-App bauen
+        working-directory: app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -o pipefail
+          for variable in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_TEAM_ID APPLE_PASSWORD; do
+            if [ -z "${!variable:-}" ]; then
+              unset "$variable"
+            fi
+          done
+          npm install 2>&1 | tee "$RUNNER_TEMP/npm-install-intel.log"
+          npx tauri build --target x86_64-apple-darwin 2>&1 \
+            | tee "$RUNNER_TEMP/tauri-build-intel.log"
+
+      - name: Builddiagnose bei Fehler
+        if: failure()
+        run: |
+          echo "--- Letzte Zeilen des Intel-Tauri-Builds ---"
+          if [ -f "$RUNNER_TEMP/tauri-build-intel.log" ]; then
+            tail -n 180 "$RUNNER_TEMP/tauri-build-intel.log"
+          else
+            echo "Kein Tauri-Buildlog vorhanden."
+          fi
+
+      - name: Buildlog bei Fehler hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-intel-build-log-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/npm-install-intel.log
+            ${{ runner.temp }}/tauri-build-intel.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: App-Inhalt und Intel-Architektur prüfen
+        run: |
+          APP=$(find app/src-tauri/target/x86_64-apple-darwin -type d -name "Icarus.app" | head -1)
+          test -n "$APP"
+          MAIN="$APP/Contents/MacOS/icarus-desktop"
+          test -x "$MAIN"
+          file "$MAIN" | tee /dev/stderr | grep -q "x86_64"
+          SIDECAR=$(find "$APP" -type f -name "icarus-sidecar*" | head -1)
+          test -n "$SIDECAR"
+          file "$SIDECAR" | tee /dev/stderr | grep -q "x86_64"
+          echo "Intel-App enthält x86_64-Hauptprogramm und x86_64-Sidecar: $APP"
+
+      - name: Signatur und Gatekeeper prüfen
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          APP=$(find app/src-tauri/target/x86_64-apple-darwin -type d -name "Icarus.app" | head -1)
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --type execute --verbose "$APP"
+
+      - name: Unsignierten Intel-Build kennzeichnen
+        if: env.HAS_APPLE_CERTIFICATE != 'true'
+        run: |
+          echo "::warning title=Unsigniert::Intel-App wurde technisch geprüft, aber ohne Apple-Secrets nicht für öffentliche Verteilung signiert oder notarisiert."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: icarus-macos-intel${{ steps.signing.outputs.signed == 'true' && '' || '-unsigniert' }}
+          path: |
+            app/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+            app/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: error
+          retention-days: 14

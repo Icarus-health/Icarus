@@ -22,13 +22,13 @@ from icarus_memory.durable_workflows import (
     StepKind,
     StepState,
     WorkflowPlan,
-    WorkflowRunner,
     WorkflowState,
     WorkflowStep,
     WorkflowStore,
 )
 from icarus_memory.policy import ActionClass, ApprovalLevel, Policy
 from icarus_memory.providers import Reply, ToolCall
+from icarus_memory.workflow_runtime import WorkflowRunner
 
 
 class FakeBrowser:
@@ -434,3 +434,31 @@ def test_failed_step_retries_only_after_delay_and_stops_at_limit(tmp_path):
 
     runner.tick(plan.id)
     assert calls == ["read", "read"], "Endgültig fehlgeschlagener Schritt darf nicht erneut laufen"
+
+
+def test_unclear_outward_failure_requires_reconciliation_without_retry(tmp_path):
+    store = WorkflowStore(tmp_path / "workflows.sqlite3")
+    plan = simple_plan(
+        WorkflowStep(
+            "publish",
+            StepKind.INVOKE,
+            tool="publish",
+            action_class=ActionClass.OUTWARD,
+            max_attempts=5,
+        )
+    )
+    store.create(plan)
+    calls = []
+
+    def invoke(name, arguments):
+        calls.append((name, arguments))
+        raise TimeoutError("Antwort nach dem Senden verloren")
+
+    runner = WorkflowRunner(store, invoke)
+    result = runner.tick(plan.id)
+
+    assert result["state"] == WorkflowState.NEEDS_RECONCILIATION.value
+    assert result["steps"][0]["state"] == StepState.NEEDS_RECONCILIATION.value
+    assert calls == [("publish", {})]
+    runner.tick(plan.id)
+    assert calls == [("publish", {})]

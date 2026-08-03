@@ -132,7 +132,19 @@ jobs:
       - name: Echter Browserconnector mit manipulierter Webseite
         env:
           PYTHONPATH: sidecar
-        run: python sidecar/tests/e2e_playwright_browser.py
+        run: |
+          set -o pipefail
+          python sidecar/tests/e2e_playwright_browser.py 2>&1 \
+            | tee "$RUNNER_TEMP/playwright-connector.log"
+
+      - name: Playwright-Connectordiagnose hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-connector-log-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/playwright-connector.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Container aufräumen
         if: always()

@@ -90,6 +90,11 @@ class LockedStoreProxy:
         self.raw = store
         self.lock = lock
 
+    @property
+    def db(self) -> sqlite3.Connection:
+        """Gibt die Verbindung für atomare Runner-Abfragen unverpackt weiter."""
+        return self.raw.db
+
     def __getattr__(self, name: str) -> Any:
         attribute = getattr(self.raw, name)
         if not callable(attribute):

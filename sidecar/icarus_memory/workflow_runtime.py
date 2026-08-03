@@ -36,6 +36,170 @@ class WorkflowRunner(BaseWorkflowRunner):
                 return workflow
         return super().tick(workflow_id)
 
+    def approval_target(self, approval_id: str) -> dict[str, Any] | None:
+        """Findet den genau zugeordneten Schritt ausschließlich per Approval-ID.
+
+        Auch bereits terminale Schritte werden durchsucht. So kann eine alte,
+        nach einem Neustart erneut auftauchende Freigabe nicht als ungebundener
+        Antrag durchrutschen und das Werkzeug ein zweites Mal ausführen.
+        """
+        matches: list[dict[str, Any]] = []
+        for workflow in self.store.list():
+            for step in workflow["steps"]:
+                if approval_id in step["approval_ids"]:
+                    matches.append(
+                        {
+                            "approval_id": approval_id,
+                            "workflow_id": workflow["id"],
+                            "workflow_state": workflow["state"],
+                            "step_id": step["step_id"],
+                            "step_state": step["state"],
+                        }
+                    )
+        if len(matches) > 1:
+            raise ValueError(
+                "Die Freigabe ist mehreren Workflows zugeordnet; nichts wurde ausgeführt."
+            )
+        return matches[0] if matches else None
+
+    def begin_approval_resolution(self, target: Mapping[str, Any]) -> dict[str, Any]:
+        """Schreibt vor der Nutzerentscheidung eine dauerhafte Ausführungsmarke."""
+        workflow, step = self._approval_step(target)
+        if WorkflowState(workflow["state"]) is not WorkflowState.WAITING_APPROVAL:
+            raise ValueError("Der Workflow wartet nicht mehr auf diese Freigabe")
+        if StepState(step["state"]) is not StepState.WAITING:
+            raise ValueError("Der Schritt wartet nicht mehr auf diese Freigabe")
+
+        self.store.update_step(
+            str(workflow["id"]),
+            int(step["position"]),
+            StepState.STARTED,
+            started_at=self.store.now(),
+            error=None,
+        )
+        self.store.update_workflow(
+            str(workflow["id"]), WorkflowState.RUNNING, error=None
+        )
+        self.store.event(
+            str(workflow["id"]),
+            str(step["step_id"]),
+            "approval_resolution_started",
+            {"approval_id": target["approval_id"]},
+        )
+        return self.store.workflow(str(workflow["id"]))
+
+    def restore_waiting_approval(
+        self,
+        target: Mapping[str, Any],
+        *,
+        detail: str,
+    ) -> dict[str, Any]:
+        """Stellt bei einer nicht eingelösten Freigabe den Wartezustand wieder her."""
+        workflow, step = self._approval_step(target)
+        if StepState(step["state"]) is not StepState.STARTED:
+            raise ValueError("Die Freigabeauflösung wurde nicht begonnen")
+        self.store.update_step(
+            str(workflow["id"]),
+            int(step["position"]),
+            StepState.WAITING,
+            started_at=None,
+            error=None,
+        )
+        self.store.update_workflow(
+            str(workflow["id"]), WorkflowState.WAITING_APPROVAL, error=None
+        )
+        self.store.event(
+            str(workflow["id"]),
+            str(step["step_id"]),
+            "approval_resolution_not_consumed",
+            {"approval_id": target["approval_id"], "detail": detail},
+        )
+        return self.store.workflow(str(workflow["id"]))
+
+    def finish_approval_resolution(
+        self,
+        target: Mapping[str, Any],
+        result: Mapping[str, Any],
+        *,
+        granted: bool,
+        outcome: str | None,
+        detail: str,
+    ) -> dict[str, Any]:
+        """Übernimmt das Agent-Ergebnis, ohne das Werkzeug erneut aufzurufen."""
+        workflow, step = self._approval_step(target)
+        workflow_id = str(workflow["id"])
+        step_id = str(step["step_id"])
+        if StepState(step["state"]) is not StepState.STARTED:
+            raise ValueError("Die Freigabeauflösung wurde nicht begonnen")
+
+        if not granted and outcome == "refused":
+            self.store.update_step(
+                workflow_id,
+                int(step["position"]),
+                StepState.FAILED,
+                result=dict(result),
+                error="Freigabe abgelehnt",
+                completed_at=self.store.now(),
+            )
+            self.store.update_workflow(
+                workflow_id,
+                WorkflowState.FAILED,
+                error=f"Freigabe für Schritt {step_id} abgelehnt",
+            )
+            self.store.event(
+                workflow_id,
+                step_id,
+                "approval_rejected",
+                {"approval_id": target["approval_id"]},
+            )
+            return self.store.workflow(workflow_id)
+
+        if granted and outcome == "executed":
+            self._succeed(workflow_id, step, dict(result))
+            self.store.event(
+                workflow_id,
+                step_id,
+                "approval_granted",
+                {"approval_id": target["approval_id"]},
+            )
+            return self.tick(workflow_id)
+
+        reason = detail or "Das Ausführungsergebnis der Freigabe ist unklar."
+        resolved = self._needs_reconciliation(
+            workflow_id,
+            step,
+            int(step["attempts"]),
+            reason,
+        )
+        self.store.event(
+            workflow_id,
+            step_id,
+            "approval_resolution_unclear",
+            {
+                "approval_id": target["approval_id"],
+                "granted": granted,
+                "outcome": outcome,
+                "detail": reason,
+            },
+        )
+        return resolved
+
+    def _approval_step(
+        self, target: Mapping[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        workflow = self.store.workflow(str(target["workflow_id"]))
+        step = next(
+            (
+                item
+                for item in workflow["steps"]
+                if item["step_id"] == target["step_id"]
+            ),
+            None,
+        )
+        if step is None or target["approval_id"] not in step["approval_ids"]:
+            raise KeyError(str(target["approval_id"]))
+        return workflow, step
+
     def _invoke(
         self,
         workflow: Mapping[str, Any],

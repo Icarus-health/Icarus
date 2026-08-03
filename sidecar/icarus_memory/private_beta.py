@@ -22,18 +22,27 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi.routing import APIRoute
 from starlette.routing import Mount
 
 from .browser_connector import browser_connector
-from .durable_workflows import WorkflowState, WorkflowStore
+from .durable_workflows import StepState, WorkflowState, WorkflowStore
 from .knowledge_graph import KnowledgeGraph
 from .knowledge_graph_api import graph_router
 from .knowledge_graph_projection import project_all
 from .playwright_browser import PlaywrightBrowserSession
+from .policy import (
+    ActionClass,
+    ApprovalLevel,
+    Decision,
+    PendingApproval,
+    PolicyError,
+)
 from .security import file_roots_from_env
 from .workflow_api import workflow_router
 from .workflow_runtime import WorkflowRunner
@@ -87,6 +96,11 @@ class LockedStoreProxy:
     def __init__(self, store: ThreadSafeWorkflowStore, lock: threading.RLock) -> None:
         self.raw = store
         self.lock = lock
+
+    @property
+    def db(self) -> sqlite3.Connection:
+        """Gibt die Verbindung für atomare Runner-Abfragen unverpackt weiter."""
+        return self.raw.db
 
     def __getattr__(self, name: str) -> Any:
         attribute = getattr(self.raw, name)
@@ -190,11 +204,64 @@ class PrivateBetaRuntime:
     def refresh_agent(self) -> None:
         """Bindet langlebige Laufzeiten an den aktuell neu gebauten Agenten."""
         self.workflow_runner.invoke = self.app.state.agent.invoke
+        self._restore_workflow_approvals()
         self._bind_model_audit()
         if self.browser_connector is not None:
             tools = getattr(self.app.state.agent, "_tools", None)
             if isinstance(tools, dict):
                 tools.update(self.browser_connector.tools())
+
+    def _restore_workflow_approvals(self) -> None:
+        """Lädt wartende Freigaben aus dem dauerhaften Workflowzustand neu."""
+        pending = getattr(self.app.state.agent.policy, "_pending", None)
+        if not isinstance(pending, dict):
+            raise RuntimeError("Der normale Freigabespeicher ist nicht verfügbar")
+
+        for workflow in self.workflow_store.list():
+            if WorkflowState(workflow["state"]) is not WorkflowState.WAITING_APPROVAL:
+                continue
+            for step in workflow["steps"]:
+                if StepState(step["state"]) is not StepState.WAITING:
+                    continue
+                result = step.get("result") or {}
+                stored = {
+                    str(item.get("id")): item
+                    for item in result.get("approvals", [])
+                    if isinstance(item, dict) and item.get("id")
+                }
+                for approval_id in step["approval_ids"]:
+                    raw = stored.get(str(approval_id))
+                    try:
+                        if raw is None:
+                            raise ValueError("Gespeicherte Freigabedaten fehlen")
+                        pending[str(approval_id)] = PendingApproval(
+                            id=str(approval_id),
+                            tool=str(raw["tool"]),
+                            arguments=dict(raw["arguments"]),
+                            decision=Decision(
+                                ApprovalLevel(str(raw["level"])),
+                                ActionClass(str(raw["action_class"])),
+                                [str(item) for item in raw.get("reasons", [])],
+                            ),
+                            dry_run=str(raw["dry_run"]),
+                            requested_at=datetime.fromisoformat(
+                                str(raw["requested_at"])
+                            ),
+                            expires_at=datetime.fromisoformat(str(raw["expires_at"])),
+                            confirmation_phrase=(
+                                str(raw["confirmation_phrase"])
+                                if raw.get("confirmation_phrase") is not None
+                                else None
+                            ),
+                        )
+                    except (KeyError, TypeError, ValueError) as exc:
+                        self.workflow_runner._needs_reconciliation(  # noqa: SLF001
+                            str(workflow["id"]),
+                            step,
+                            int(step["attempts"]),
+                            f"Freigabe konnte nach Neustart nicht geladen werden: {exc}",
+                        )
+                        break
 
     def _bind_model_audit(self) -> None:
         provider = getattr(self.app.state.agent, "provider", None)
@@ -224,6 +291,107 @@ class PrivateBetaRuntime:
             )
 
         provider.audit = sink
+
+    # -- Freigaben und Workflows -----------------------------------------
+
+    def resolve_approval(
+        self,
+        approval_id: str,
+        granted: bool,
+        confirmation: str | None,
+    ) -> dict[str, Any]:
+        """Löst den normalen Nutzerweg und den zugeordneten Workflow gemeinsam auf."""
+        with self.workflow_lock:
+            try:
+                target = self.workflow_runner.approval_target(approval_id)
+            except ValueError as exc:
+                raise PolicyError(str(exc)) from exc
+
+            if target is None:
+                return self.app.state.agent.resolve(
+                    approval_id, granted, confirmation
+                ).to_dict()
+
+            if StepState(target["step_state"]) is not StepState.WAITING:
+                raise PolicyError(
+                    "Diese workflowgebundene Freigabe wurde bereits aufgelöst "
+                    "oder muss manuell geklärt werden."
+                )
+
+            # Ablauf und Bestätigungsphrase werden geprüft, bevor der Workflow
+            # mutiert. Ein Vertipper oder eine abgelaufene Freigabe lässt den
+            # sichtbaren Wartezustand deshalb unverändert.
+            approval = self.app.state.agent.policy.get(approval_id)
+            if granted and approval.confirmation_phrase is not None:
+                expected = approval.confirmation_phrase.strip()
+                if (confirmation or "").strip() != expected:
+                    raise PolicyError(
+                        "Bestätigung stimmt nicht überein. Erwartet: "
+                        f"{approval.confirmation_phrase!r}"
+                    )
+
+            before_seq = self._latest_audit_seq()
+            self.workflow_runner.begin_approval_resolution(target)
+            try:
+                turn = self.app.state.agent.resolve(
+                    approval_id, granted, confirmation
+                )
+            except PolicyError as exc:
+                self.workflow_runner.restore_waiting_approval(
+                    target, detail=str(exc)
+                )
+                raise
+            except Exception as exc:
+                self.workflow_runner.finish_approval_resolution(
+                    target,
+                    {"reply": "", "approvals": [], "notices": [], "used_tools": []},
+                    granted=granted,
+                    outcome=None,
+                    detail=f"Fehler während der Freigabeauflösung: {exc}",
+                )
+                raise
+
+            result = turn.to_dict()
+            audit_entry, audit_detail = self._approval_audit_entry(before_seq)
+            outcome = audit_entry["outcome"] if audit_entry is not None else None
+            self.workflow_runner.finish_approval_resolution(
+                target,
+                result,
+                granted=granted,
+                outcome=outcome,
+                detail=audit_detail,
+            )
+            return result
+
+    def _latest_audit_seq(self) -> int:
+        entries = self.app.state.audit.entries(1)
+        return int(entries[0]["seq"]) if entries else 0
+
+    def _approval_audit_entry(
+        self,
+        after_seq: int,
+    ) -> tuple[dict[str, Any] | None, str]:
+        matches = [
+            entry
+            for entry in self.app.state.audit.entries(1000)
+            if int(entry["seq"]) > after_seq
+            and entry["approved_by"] == "user"
+        ]
+        if len(matches) == 1:
+            entry = matches[0]
+            return entry, str(
+                entry.get("detail")
+                or entry.get("result")
+                or f"Audit-Ergebnis: {entry['outcome']}"
+            )
+        if not matches:
+            return None, (
+                "Nach der Freigabe fehlt ein eindeutiger Ausführungseintrag im Audit-Log."
+            )
+        return None, (
+            "Nach der Freigabe entstanden mehrere passende Ausführungseinträge; "
+            "das Ergebnis muss manuell geklärt werden."
+        )
 
     # -- Browser ----------------------------------------------------------
 
@@ -395,10 +563,38 @@ def _move_ui_mount_to_end(app: FastAPI) -> list[Mount]:
     return mounts
 
 
+def _bind_approval_route(app: FastAPI, runtime: PrivateBetaRuntime) -> None:
+    """Ersetzt nur die Ausführung des bestehenden, authentifizierten Endpunkts."""
+    for route in app.router.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if route.path != "/approvals/{approval_id}" or "POST" not in route.methods:
+            continue
+
+        def resolve(approval_id: str, body: Any) -> dict[str, Any]:
+            try:
+                return runtime.resolve_approval(
+                    approval_id,
+                    bool(body.granted),
+                    body.confirmation,
+                )
+            except (PolicyError, ValueError, KeyError) as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        # FastAPI hat die Authentifizierung und das Body-Schema bereits aus dem
+        # ursprünglichen Endpunkt gebaut. Nur die Funktion dahinter wechselt;
+        # dadurch entsteht weder eine zweite Route noch ein zweiter Guard.
+        route.endpoint = resolve
+        route.dependant.call = resolve
+        return
+    raise RuntimeError("Produktiver Freigabeendpunkt wurde nicht gefunden")
+
+
 def install_private_beta(app: FastAPI, data_dir: Path) -> PrivateBetaRuntime:
     """Montiert die gemeinsamen Private-Beta-Fähigkeiten am echten Sidecar."""
     runtime = PrivateBetaRuntime(app, data_dir)
     app.state.private_beta = runtime
+    _bind_approval_route(app, runtime)
     auth = _auth_dependency()
     guard = [Depends(auth)]
 

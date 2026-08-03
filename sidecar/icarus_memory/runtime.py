@@ -24,6 +24,7 @@ from . import server
 from .graph_privacy import install_graph_privacy
 from .maintenance import MaintenanceGate
 from .private_beta import install_private_beta
+from .proactive import install_proactive
 
 _ORIGINAL_CREATE_APP = server.create_app
 _ORIGINAL_WIRE_SCHEDULER = server._wire_scheduler  # noqa: SLF001
@@ -93,8 +94,10 @@ def create_app(*args: Any, **kwargs: Any) -> FastAPI:
     # echten Produktionsweg montiert. Das geschieht vor der Wartungsschicht,
     # damit sämtliche neuen Routen anschließend dieselbe exklusive
     # Backup-/Restore-Garantie erhalten.
-    runtime = install_private_beta(app, server._data_dir())  # noqa: SLF001
+    data_dir = server._data_dir()  # noqa: SLF001
+    runtime = install_private_beta(app, data_dir)
     install_graph_privacy(runtime)
+    install_proactive(app, data_dir)
 
     gate = MaintenanceGate()
     _GATES[app] = gate

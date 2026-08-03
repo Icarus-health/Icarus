@@ -168,6 +168,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Systemzentrale im Browser
+        working-directory: app
+        env:
+          ICARUS_E2E_BASE: http://127.0.0.1:8765
+          ICARUS_E2E_TOKEN: rauchtest
+        run: |
+          set -o pipefail
+          node e2e/system-cockpit.mjs 2>&1 \
+            | tee "$RUNNER_TEMP/system-cockpit.log"
+
+      - name: Systemzentralen-Diagnose hochladen
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-cockpit-log-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/system-cockpit.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Echter Browserconnector mit manipulierter Webseite
         env:
           PYTHONPATH: sidecar

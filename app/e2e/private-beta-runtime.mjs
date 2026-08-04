@@ -171,7 +171,7 @@ try {
   );
 
   const proposalCard = page
-    .locator("#decision-memory-section #proposal-list .proposal")
+    .locator("#decision-memory-section #proposal-list .proposal.confirmation")
     .filter({ hasText: assertionText });
   await proposalCard.waitFor();
   await proposalCard

@@ -232,3 +232,22 @@ print('Snapshot:', snapshot(d / 'self-model.sqlite3', d / 'sicherungen'))"
 clean: ## Build-Artefakte entfernen
 	rm -rf build $(VENV) app/src-tauri/target app/src-tauri/binaries/icarus-sidecar
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
+
+# -- Modellqualifikation ----------------------------------------------------
+
+QUALIFICATION_SUBMISSIONS ?=
+QUALIFICATION_COST_EUR ?= 0
+QUALIFICATION_REPORT ?= /tmp/icarus-qualifikation.json
+
+.PHONY: qualify-execution-model
+qualify-execution-model: ## Suite prüfen und optional Einreichungen bewerten
+	$(PY) -m unittest discover -s tools/qualification -p 'test_*.py' -q
+	$(PY) tools/qualification/qualify.py validate
+	@if [ -n "$(QUALIFICATION_SUBMISSIONS)" ]; then \
+	  $(PY) tools/qualification/qualify.py grade \
+	    --submissions "$(QUALIFICATION_SUBMISSIONS)" \
+	    --cost-eur "$(QUALIFICATION_COST_EUR)" \
+	    --report "$(QUALIFICATION_REPORT)"; \
+	else \
+	  echo "Suite geprüft. Für einen Lauf QUALIFICATION_SUBMISSIONS setzen."; \
+	fi

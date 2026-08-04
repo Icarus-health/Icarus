@@ -7,6 +7,22 @@
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="product-shell.css" />
     <link rel="stylesheet" href="chief-of-staff-shell.css" />
+    <style>
+      /* Die ältere Consumer-Zusammenfassung verlinkt Freigaben noch ins Gespräch.
+         Sie bleibt als rückrollbare Schale geladen, ist aber nicht mehr der
+         sichtbare Entscheidungsweg. */
+      #decision-approvals {
+        display: none !important;
+      }
+
+      .decision-section {
+        margin-top: 1.5rem;
+      }
+
+      .decision-section > h3 {
+        margin-bottom: 0.25rem;
+      }
+    </style>
   </head>
   <body>
     <nav>
@@ -15,7 +31,7 @@
       <button data-view="projects" class="tab">Projekte</button>
       <button data-view="chat" class="tab">Gespräch</button>
       <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
-      <button data-view="proposals" class="tab">Vorschläge <span id="proposals-badge" class="badge" hidden></span></button>
+      <button data-view="proposals" class="tab">Entscheiden <span id="proposals-badge" class="badge" hidden></span></button>
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
       <button data-view="setup" class="tab">Einrichtung</button>
@@ -99,7 +115,7 @@
 
       <section id="view-chat" class="view" hidden>
         <div id="messages" class="messages"></div>
-        <div id="approvals"></div>
+        <div id="chat-decision-hint" class="notice" role="status" hidden></div>
 
         <form id="chat-form">
           <input id="chat-input" type="text" placeholder="Schreib etwas…" autocomplete="off" />
@@ -137,18 +153,40 @@
       </section>
 
       <section id="view-proposals" class="view" hidden>
+        <h2>Entscheiden</h2>
         <p class="muted">
-          Verdichtung schlägt vor, sie schreibt nicht. Nichts davon steht im
-          Gedächtnis, bis du zustimmst.
+          Hier wartet alles, was deine Entscheidung braucht. Nichts wird
+          stillschweigend übernommen oder ausgeführt.
         </p>
 
-        <div class="row">
-          <button id="consolidate-btn" type="button">Verdichten</button>
-        </div>
-        <p id="consolidate-note" class="muted"></p>
-        <p id="proposal-feedback" class="muted"></p>
-        <ul id="proposal-list"></ul>
-        <p id="proposal-empty" class="muted">Nichts offen. Kein Vorschlag wartet auf Zustimmung.</p>
+        <section id="decision-action-section" class="decision-section" aria-labelledby="decision-actions-title">
+          <h3 id="decision-actions-title">Aktionen freigeben</h3>
+          <p class="muted">
+            Prüfe den vollständigen Trockenlauf. Außenwirksame Aktionen bleiben
+            bis zu deiner ausdrücklichen Entscheidung angehalten.
+          </p>
+          <p id="approval-load-note" class="muted" role="status"></p>
+          <div id="approvals"></div>
+          <p id="approval-empty" class="muted">Keine Aktion wartet auf Freigabe.</p>
+          <button id="approval-retry" type="button" class="ghost small" hidden>Erneut laden</button>
+        </section>
+
+        <section id="decision-memory-section" class="decision-section" aria-labelledby="decision-memory-title">
+          <h3 id="decision-memory-title">Gedächtnis prüfen</h3>
+          <p class="muted">
+            Verdichtung schlägt vor, sie schreibt nicht. Beleg und Herkunft
+            bleiben sichtbar, bis du übernimmst oder verwirfst.
+          </p>
+          <div class="row">
+            <button id="consolidate-btn" type="button">Verdichten</button>
+          </div>
+          <p id="consolidate-note" class="muted"></p>
+          <p id="proposal-load-note" class="muted" role="status"></p>
+          <p id="proposal-feedback" class="muted"></p>
+          <ul id="proposal-list"></ul>
+          <p id="proposal-empty" class="muted">Nichts offen. Kein Vorschlag wartet auf Zustimmung.</p>
+          <button id="proposal-retry" type="button" class="ghost small" hidden>Erneut laden</button>
+        </section>
       </section>
 
       <section id="view-memory" class="view" hidden>
@@ -195,5 +233,289 @@
     <script type="module" src="chief-of-staff-shell.js"></script>
     <script type="module" src="system-cockpit.js"></script>
     <script type="module" src="proactive-chief-of-staff.js"></script>
+    <script type="module">
+      // Gemeinsame Entscheidungsinbox. Die Serververträge bleiben unverändert:
+      // Freigaben laufen weiterhin ausschließlich über /approvals/{id},
+      // Gedächtnisvorschläge über ihre bestehenden Endpunkte.
+      const decisionTauri = window.__TAURI__?.core ?? null;
+      let decisionConnection = null;
+      let renderedApprovalSignature = "";
+      let expectedDecisionCount = null;
+      let approvalRefresh = null;
+
+      const decisionsTab = document.querySelector('.tab[data-view="proposals"]');
+      const approvalContainer = document.querySelector("#approvals");
+      const approvalNote = document.querySelector("#approval-load-note");
+      const approvalEmpty = document.querySelector("#approval-empty");
+      const approvalRetry = document.querySelector("#approval-retry");
+      const proposalNote = document.querySelector("#proposal-load-note");
+      const proposalRetry = document.querySelector("#proposal-retry");
+      const proposalList = document.querySelector("#proposal-list");
+      const decisionBadge = document.querySelector("#proposals-badge");
+      const chatHint = document.querySelector("#chat-decision-hint");
+
+      async function decisionConnectionInfo() {
+        if (!decisionConnection) {
+          decisionConnection = (async () => {
+            if (decisionTauri) {
+              const info = await decisionTauri.invoke("sidecar_info");
+              return { base: `http://127.0.0.1:${info.port}`, token: info.token };
+            }
+            return {
+              base: window.location.origin,
+              token:
+                sessionStorage.getItem("icarus-token") ??
+                new URLSearchParams(window.location.search).get("token") ??
+                "",
+            };
+          })();
+        }
+        return decisionConnection;
+      }
+
+      async function decisionApi(path, options = {}) {
+        const info = await decisionConnectionInfo();
+        const response = await fetch(`${info.base}${path}`, {
+          ...options,
+          headers: {
+            "content-type": "application/json",
+            "x-icarus-token": info.token,
+            ...(options.headers ?? {}),
+          },
+        });
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          throw new Error(detail.detail ?? `HTTP ${response.status}`);
+        }
+        return response.status === 204 ? null : response.json();
+      }
+
+      function appendChatMessage(role, text) {
+        if (!text) return;
+        const message = document.createElement("div");
+        message.className = `msg ${role}`;
+        message.textContent = text;
+        document.querySelector("#messages")?.append(message);
+      }
+
+      function updateChatDecisionHint(count) {
+        if (!chatHint) return;
+        chatHint.replaceChildren();
+        chatHint.hidden = count === 0;
+        if (!count) return;
+
+        const text = document.createElement("span");
+        text.textContent = `${count} Aktion${count === 1 ? "" : "en"} wartet unter „Entscheiden“. `;
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "ghost small";
+        open.textContent = "Unter Entscheiden prüfen";
+        open.addEventListener("click", () => decisionsTab?.click());
+        chatHint.append(text, open);
+      }
+
+      function renderDecisionApproval(approval) {
+        const card = document.createElement("form");
+        card.className = "approval";
+        card.dataset.approvalId = approval.id;
+
+        const head = document.createElement("h4");
+        head.textContent =
+          approval.action_class === "outward"
+            ? "Das verlässt deinen Rechner"
+            : "Freigabe nötig";
+        card.append(head);
+
+        if (approval.reasons?.length) {
+          const why = document.createElement("p");
+          why.className = "muted";
+          why.textContent = approval.reasons.join(" ");
+          card.append(why);
+        }
+
+        const dryRun = document.createElement("pre");
+        dryRun.className = "dry-run";
+        dryRun.textContent = approval.dry_run;
+        card.append(dryRun);
+
+        let confirmation = null;
+        if (approval.confirmation_phrase) {
+          const label = document.createElement("label");
+          label.className = "confirm";
+          label.textContent = `Zum Bestätigen wiederholen: ${approval.confirmation_phrase}`;
+          confirmation = document.createElement("input");
+          confirmation.type = "text";
+          confirmation.autocomplete = "off";
+          confirmation.required = true;
+          label.append(confirmation);
+          card.append(label);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "row";
+        const approve = document.createElement("button");
+        approve.type = "submit";
+        approve.textContent = "Ausführen";
+        const reject = document.createElement("button");
+        reject.type = "button";
+        reject.className = "ghost";
+        reject.textContent = "Ablehnen";
+        actions.append(approve, reject);
+        card.append(actions);
+
+        const feedback = document.createElement("p");
+        feedback.className = "meta";
+        feedback.setAttribute("role", "status");
+        card.append(feedback);
+
+        async function resolve(granted) {
+          approve.disabled = reject.disabled = true;
+          feedback.classList.remove("error");
+          feedback.textContent = granted ? "Wird ausgeführt…" : "Wird abgelehnt…";
+          try {
+            const turn = await decisionApi(`/approvals/${approval.id}`, {
+              method: "POST",
+              body: JSON.stringify({
+                granted,
+                confirmation: confirmation ? confirmation.value : null,
+              }),
+            });
+            if (turn?.reply) appendChatMessage("assistant", turn.reply);
+            for (const notice of turn?.notices ?? []) {
+              appendChatMessage("notice", `Ausgeführt: ${notice}`);
+            }
+            await refreshApprovalSection();
+            await refreshDecisionBadge();
+          } catch (error) {
+            approve.disabled = reject.disabled = false;
+            feedback.textContent = error.message;
+            feedback.classList.add("error");
+          }
+        }
+
+        card.addEventListener("submit", (event) => {
+          event.preventDefault();
+          void resolve(true);
+        });
+        reject.addEventListener("click", () => void resolve(false));
+        return card;
+      }
+
+      async function refreshDecisionBadge(knownApprovalCount = null) {
+        try {
+          const [approvals, counts] = await Promise.all([
+            knownApprovalCount === null
+              ? decisionApi("/approvals")
+              : Promise.resolve(Array.from({ length: knownApprovalCount })),
+            decisionApi("/proposals/counts"),
+          ]);
+          const approvalCount = knownApprovalCount === null ? approvals.length : knownApprovalCount;
+          const proposalCount = Number(counts.pending ?? 0);
+          const total = approvalCount + proposalCount;
+          expectedDecisionCount = total;
+          decisionBadge.hidden = total === 0;
+          decisionBadge.textContent = String(total);
+          decisionBadge.title = `${proposalCount} Gedächtnisvorschläge, ${approvalCount} Freigaben`;
+        } catch {
+          // Ein fehlerhafter Abschnitt darf den anderen nicht verdecken. Seine
+          // eigene Statuszeile zeigt den Fehler; der letzte Gesamtstand bleibt.
+        }
+      }
+
+      async function refreshApprovalSection() {
+        if (approvalRefresh) return approvalRefresh;
+        approvalRefresh = (async () => {
+          approvalNote.classList.remove("error");
+          if (!approvalContainer.children.length) approvalNote.textContent = "Wird geladen…";
+          try {
+            const approvals = await decisionApi("/approvals");
+            renderedApprovalSignature = approvals.map((item) => item.id).join("|");
+            approvalContainer.replaceChildren(...approvals.map(renderDecisionApproval));
+            approvalEmpty.hidden = approvals.length > 0;
+            approvalRetry.hidden = true;
+            approvalNote.textContent = "";
+            updateChatDecisionHint(approvals.length);
+            await refreshDecisionBadge(approvals.length);
+            return approvals;
+          } catch (error) {
+            approvalNote.textContent = `Freigaben konnten nicht geladen werden: ${error.message}`;
+            approvalNote.classList.add("error");
+            approvalRetry.hidden = false;
+            throw error;
+          } finally {
+            approvalRefresh = null;
+          }
+        })();
+        return approvalRefresh;
+      }
+
+      async function probeProposalSection() {
+        proposalNote.classList.remove("error");
+        try {
+          await Promise.all([
+            decisionApi("/proposals?limit=200"),
+            decisionApi("/proposals/counts"),
+          ]);
+          proposalNote.textContent = "";
+          proposalRetry.hidden = true;
+        } catch (error) {
+          proposalNote.textContent = `Gedächtnisvorschläge konnten nicht geladen werden: ${error.message}`;
+          proposalNote.classList.add("error");
+          proposalRetry.hidden = false;
+        }
+      }
+
+      function refreshDecisionView() {
+        void refreshApprovalSection().catch(() => {});
+        void probeProposalSection();
+        void refreshDecisionBadge();
+      }
+
+      decisionsTab?.addEventListener("click", () => window.setTimeout(refreshDecisionView, 0));
+      approvalRetry?.addEventListener("click", () => void refreshApprovalSection().catch(() => {}));
+      proposalRetry?.addEventListener("click", () => decisionsTab?.click());
+
+      // main.js kann nach einem Chatturn noch seine bestehende Karte in denselben
+      // einzigen Container zeichnen. Sobald das geschieht, laden wir den
+      // kanonischen Serverstand und ersetzen sie — nie entsteht ein zweiter Ort.
+      new MutationObserver(() => {
+        const forms = [...approvalContainer.querySelectorAll("form.approval")];
+        const signature = forms.map((form) => form.dataset.approvalId || "alt").join("|");
+        if (signature !== renderedApprovalSignature) {
+          void refreshApprovalSection().catch(() => {});
+        }
+      }).observe(approvalContainer, { childList: true });
+
+      // Nach einer Gedächtnisentscheidung lädt der vorhandene Handler nicht nur
+      // den lokalen Zähler: Wir öffnen denselben Bereich erneut und beziehen
+      // Liste und Gesamtbadge wieder vom Sidecar.
+      let proposalDecisionPending = false;
+      document.addEventListener(
+        "click",
+        (event) => {
+          const button = event.target.closest("#proposal-list button");
+          if (button) proposalDecisionPending = true;
+        },
+        true
+      );
+      new MutationObserver(() => {
+        if (!proposalDecisionPending) return;
+        proposalDecisionPending = false;
+        window.setTimeout(() => decisionsTab?.click(), 0);
+      }).observe(proposalList, { childList: true });
+
+      // Dashboard und ältere Schalen kennen nur den Vorschlagszähler. Falls sie
+      // den Badge überschreiben, wird der vollständige Serverstand repariert.
+      new MutationObserver(() => {
+        if (
+          expectedDecisionCount !== null &&
+          Number(decisionBadge.textContent || 0) !== expectedDecisionCount
+        ) {
+          void refreshDecisionBadge();
+        }
+      }).observe(decisionBadge, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+
+      refreshDecisionView();
+    </script>
   </body>
 </html>

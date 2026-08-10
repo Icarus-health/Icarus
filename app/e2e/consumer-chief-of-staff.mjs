@@ -95,6 +95,10 @@ try {
   const setup = await call("GET", "/setup");
   assert.equal(setup.settings.onboarded, true, "Onboarding wurde nicht abgeschlossen");
 
+  // Das Gespräch ist die Haustür. Für die Tagesübersicht nimmt der Nutzer
+  // anschließend den sichtbaren Bereich „Heute".
+  await page.locator('button[data-view="dashboard"]').click();
+
   const focus = page.locator("#daily-focus[data-ready='true']");
   await focus.waitFor();
   await focus.getByText("Überfällige Consumer-E2E-Aufgabe", { exact: true }).waitFor();

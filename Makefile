@@ -14,9 +14,12 @@ EXAMPLE := schema/beispiel-profil.json
 ENVDATEI := .icarus.env
 COMPOSE  := docker compose --env-file $(ENVDATEI)
 ADRESSE  := http://127.0.0.1:8765
+BETA_ENVDATEI := .icarus-beta.env
+BETA_COMPOSE := docker compose -p icarus-beta --env-file $(BETA_ENVDATEI) -f compose.beta.yaml
+BETA_ADRESSE := http://127.0.0.1:8877
 
 .DEFAULT_GOAL := help
-.PHONY: help start stop logs url \
+.PHONY: help start stop logs url beta-start beta-stop beta-logs beta-url \
         venv sidecar-dev sidecar-run mcp-config container \
         test validate-schema frontend-check check verify \
         app-dev app-build sidecar-binary icon clean
@@ -56,6 +59,19 @@ $(ENVDATEI):
 	} > $@
 	@chmod 600 $@
 	@echo "Token und Passphrase erzeugt und in $@ abgelegt (nur für dich lesbar)."
+
+# Die Beta erhält eigene Geheimnisse und ein eigenes Volume. Damit kann der
+# Testkanal nie durch einen Container-Neustart an den Bestand von `make start`
+# geraten. Das Bild selbst kommt ausschließlich aus dem CI-veröffentlichten
+# GHCR-Tag `beta`.
+$(BETA_ENVDATEI):
+	@umask 077; { \
+	  echo "# Von 'make beta-start' erzeugt — nicht ins Git, nicht weitergeben."; \
+	  echo "ICARUS_SIDECAR_TOKEN=$$(openssl rand -hex 32)"; \
+	  echo "ICARUS_SECRETS_PASSPHRASE=$$(openssl rand -hex 32)"; \
+	} > $@
+	@chmod 600 $@
+	@echo "Eigene Zugangsdaten für den Betakanal in $@ erzeugt."
 
 # NOTIZEN geht über die Umgebung in die Rezeptur, nicht über `$(NOTIZEN)` im
 # Text. Eingesetzt würde der Pfad zu Shell-Quelltext, und ein Ordner wie
@@ -126,6 +142,34 @@ stop: $(ENVDATEI) ## Icarus anhalten
 	@echo
 	@echo "Angehalten. Das Gedächtnis liegt weiter im Docker-Volume, die"
 	@echo "Schlüssel in $(ENVDATEI). 'make start' knüpft dort wieder an."
+
+beta-start: $(BETA_ENVDATEI) ## Privaten Betakanal getrennt auf Port 8877 starten/aktualisieren
+	@$(BETA_COMPOSE) pull
+	@$(BETA_COMPOSE) up -d
+	@printf 'Warte darauf, dass der Betakanal antwortet '
+	@bereit=nein; \
+	 for _ in $$(seq 1 90); do \
+	   if curl -fsS $(BETA_ADRESSE)/health >/dev/null 2>&1; then bereit=ja; break; fi; \
+	   printf '.'; sleep 1; \
+	 done; \
+	 echo; \
+	 if [ "$$bereit" = nein ]; then \
+	   echo "Der Betakanal hat nach 90 Sekunden nicht geantwortet. Was er selbst sagt: make beta-logs"; \
+	   exit 1; \
+	 fi
+	@echo "Betakanal läuft. Diese Adresse im Browser öffnen:"
+	@$(MAKE) --no-print-directory beta-url
+
+beta-url: $(BETA_ENVDATEI) ## Adresse samt Token des getrennten Betakanals ausgeben
+	@token=$$(sed -n 's/^ICARUS_SIDECAR_TOKEN=//p' $(BETA_ENVDATEI)); \
+	 echo "  $(BETA_ADRESSE)/?token=$$token"
+
+beta-logs: $(BETA_ENVDATEI) ## Meldungen des Betakanals mitlesen
+	@$(BETA_COMPOSE) logs -f
+
+beta-stop: $(BETA_ENVDATEI) ## Betakanal anhalten, Daten bleiben erhalten
+	@$(BETA_COMPOSE) down
+	@echo "Betakanal angehalten. Sein eigener Datenbestand bleibt erhalten."
 
 # -- Sidecar ----------------------------------------------------------------
 

@@ -86,7 +86,12 @@ class OpenAICompatible:
         model: str,
         api_key: str | None = None,
         base_url: str = "https://api.openai.com/v1",
+        name: str = "openai",
     ) -> None:
+        # Der Transport ist bei OpenAI und Ollama gleich, der sichtbare
+        # Anbieter aber nicht. Die Oberfläche muss „Ollama" sagen, wenn das
+        # Gespräch lokal läuft — „openai" wäre hier eine falsche Zusage.
+        self.name = name
         self.model = model
         self._key = api_key or "not-needed"
         self._base = base_url.rstrip("/")
@@ -289,6 +294,7 @@ def _single_provider(
             model,
             api_key="ollama",
             base_url=base_url or "http://localhost:11434/v1",
+            name="ollama",
         )
 
     if choice in {"openai", "openai_compatible"}:
@@ -374,6 +380,7 @@ def from_env() -> Provider | None:
             base_url=os.environ.get(
                 "ICARUS_BASE_URL", "http://localhost:11434/v1"
             ),
+            name="ollama",
         )
 
     key = os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")

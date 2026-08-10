@@ -1,0 +1,18 @@
+# Der private Betakanal läuft bewusst neben der normalen Container-Instanz:
+# eigener Docker-Projektname (siehe Makefile), eigener Port, eigenes Volume.
+# Er teilt keine Erinnerungen, Schlüssel oder Einstellungen mit `make start`.
+
+services:
+  sidecar:
+    image: ghcr.io/icarus-health/icarus:beta
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8877:8765"
+    environment:
+      - ICARUS_SIDECAR_TOKEN=${ICARUS_SIDECAR_TOKEN:?bitte setzen}
+      - ICARUS_SECRETS_PASSPHRASE=${ICARUS_SECRETS_PASSPHRASE:?bitte setzen}
+    volumes:
+      - icarus-beta-daten:/daten
+
+volumes:
+  icarus-beta-daten:

@@ -115,6 +115,31 @@ make start   # weitermachen, mit demselben Gedächtnis
 die Schlüssel liegen in `.icarus.env` und bleiben auch. Nach einem Neustart des
 Macs kommt Icarus von selbst wieder hoch, sobald Docker Desktop läuft.
 
+## Privater Betakanal
+
+Wenn du neue Icarus-Funktionen vor dem normalen Containerkanal ausprobieren
+willst, gibt es einen zweiten, absichtlich getrennten Weg:
+
+```bash
+make beta-start
+```
+
+Er lädt ausschließlich das von GitHub CI veröffentlichte Image `:beta` und
+öffnet Icarus auf Port **8877**. Der Betakanal hat ein eigenes Docker-Volume,
+eigenes Token und eine eigene Schlüsseldatei (`.icarus-beta.env`). Er kann daher
+weder dein Gedächtnis noch deine Zugangsdaten aus dem normalen Kanal auf Port
+8765 lesen oder verändern.
+
+```bash
+make beta-url    # Adresse noch einmal ausgeben
+make beta-logs   # Meldungen mitlesen
+make beta-stop   # nur Beta anhalten, Daten bleiben erhalten
+```
+
+Ein neues Beta-Image wird erst nach erfolgreich durchgelaufener CI gebaut. Das
+Update selbst startest du bewusst mit `make beta-start`; Icarus aktualisiert
+einen persönlichen Arbeitsbestand nicht still im Hintergrund.
+
 **`.icarus.env` nicht löschen und nicht weitergeben.** Darin stehen zwei Dinge:
 das Token aus der Adresse und die Passphrase, mit der deine API- und
 Mailpasswörter verschlüsselt im Datenvolume liegen. Ist die Passphrase weg, sind

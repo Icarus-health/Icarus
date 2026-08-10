@@ -19,6 +19,7 @@ from icarus_memory import config
 from icarus_memory.audit import AuditLog
 from icarus_memory.episodes import EpisodeStore
 from icarus_memory.secrets import Keychain
+from icarus_memory import server
 from icarus_memory.server import create_app
 from icarus_memory.tasks import TaskStore
 from icarus_memory.workspace import WorkspaceStore
@@ -93,6 +94,25 @@ def test_kein_ordner_ist_voreingestellt(client: TestClient) -> None:
     """Ein Vorgabewert wie das Home-Verzeichnis wäre die Bequemlichkeit, die
     den Schutz aufhebt. Auch der Assistent schlägt keinen vor."""
     assert client.get("/setup").json()["settings"]["file_roots"] == []
+
+
+def test_ollama_suche_liefert_nur_den_festen_lokalen_fund(client, monkeypatch) -> None:
+    """Die Suche nimmt keine URL aus der Oberfläche entgegen oder speichert sie."""
+    monkeypatch.setattr(
+        server,
+        "_discover_local_ollama",
+        lambda: {
+            "found": True,
+            "endpoint": "http://host.docker.internal:11434/v1",
+            "models": ["qwen2.5:14b"],
+        },
+    )
+
+    response = client.post("/setup/discover/ollama")
+
+    assert response.status_code == 200
+    assert response.json()["models"] == ["qwen2.5:14b"]
+    assert client.get("/setup").json()["settings"]["provider"] == ""
 
 
 def test_einstellungen_ueberleben_den_neustart(tmp_path, monkeypatch) -> None:

@@ -15,6 +15,8 @@ import json
 import os
 import secrets
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -80,6 +82,39 @@ UI_ENV = "ICARUS_UI_DIR"
 #: gesamte persönliche Gedächtnis im lokalen Netz.
 HOST_ENV = "ICARUS_SIDECAR_HOST"
 DEFAULT_HOST = "127.0.0.1"
+
+# Die beiden Adressen sind keine Eingabe des Nutzers. Sie decken die beiden
+# lokalen Laufwege ab: Sidecar direkt auf dem Mac und Sidecar in Docker Desktop.
+# Gerade weil hier kein beliebiger Host angenommen wird, wird aus der hilfreichen
+# Suche kein SSRF-Endpunkt.
+_LOCAL_OLLAMA = (
+    ("http://localhost:11434/v1", "http://localhost:11434/api/tags"),
+    ("http://host.docker.internal:11434/v1", "http://host.docker.internal:11434/api/tags"),
+)
+
+
+def _discover_local_ollama() -> dict[str, Any]:
+    """Findet einen ausdrücklich lokalen Ollama-Dienst samt Modellen.
+
+    Die Suche läuft nur auf ausdrücklichen Klick in der Einrichtung. Sie liest
+    ausschließlich Metadaten der festen lokalen Endpunkte und speichert nichts.
+    """
+    for endpoint, tags_url in _LOCAL_OLLAMA:
+        try:
+            with urllib.request.urlopen(tags_url, timeout=2) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, ValueError, urllib.error.URLError):
+            continue
+
+        models = [
+            item.get("name", "")
+            for item in payload.get("models", [])
+            if isinstance(item, dict)
+            and isinstance(item.get("name"), str)
+            and "completion" in (item.get("capabilities") or ["completion"])
+        ]
+        return {"found": True, "endpoint": endpoint, "models": models}
+    return {"found": False, "endpoint": None, "models": []}
 
 
 def _ui_dir() -> Path | None:
@@ -546,6 +581,11 @@ def create_app(
     @app.get("/setup", dependencies=guard)
     def get_setup() -> dict[str, Any]:
         return _setup_state()
+
+    @app.post("/setup/discover/ollama", dependencies=guard)
+    def discover_ollama() -> dict[str, Any]:
+        """Sucht nach dem lokalen Ollama, ohne einen Anbieter zu konfigurieren."""
+        return _discover_local_ollama()
 
     @app.get("/setup/folder", dependencies=guard)
     def check_folder(path: str) -> dict[str, Any]:

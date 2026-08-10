@@ -1290,6 +1290,12 @@ function providerSelect(id, current) {
   return wrap;
 }
 
+function preferredOllamaModel(models) {
+  // Für diesen Mac ist qwen2.5:14b der ruhige, normal antwortende Standard.
+  // Fällt er weg, bleibt die Wahl beim ersten lokal installierten Chatmodell.
+  return models.find((model) => model === "qwen2.5:14b") ?? models[0] ?? "";
+}
+
 /** Probiert eine Verbindung wirklich aus, statt sie zu behaupten. */
 function testButton(ziel, label, target) {
   const button = document.createElement("button");
@@ -1376,9 +1382,35 @@ async function loadSetup() {
       msave.disabled = false;
     }
   });
+  const mdiscover = document.createElement("button");
+  mdiscover.type = "button";
+  mdiscover.className = "ghost";
+  mdiscover.textContent = "Lokales Ollama suchen";
+  mdiscover.addEventListener("click", async () => {
+    mdiscover.disabled = true;
+    mresult.textContent = "Ich suche nur auf diesem Mac…";
+    mresult.classList.remove("error");
+    try {
+      const found = await api("/setup/discover/ollama", { method: "POST" });
+      if (!found.found || !found.models.length) {
+        mresult.textContent = "Kein lokales Chatmodell gefunden. Ollama kann später eingerichtet werden.";
+        return;
+      }
+      const model = preferredOllamaModel(found.models);
+      $("#setup-provider").value = "ollama";
+      $("#setup-model").value = model;
+      $("#setup-endpoint").value = found.endpoint;
+      mresult.textContent = `Ollama gefunden: ${model}. Übernehmen, dann Verbindung prüfen.`;
+    } catch (err) {
+      mresult.textContent = err.message;
+      mresult.classList.add("error");
+    } finally {
+      mdiscover.disabled = false;
+    }
+  });
   const mrow = document.createElement("div");
   mrow.className = "row";
-  mrow.append(msave, testButton("modell", "Verbindung prüfen", mresult));
+  mrow.append(mdiscover, msave, testButton("modell", "Verbindung prüfen", mresult));
   modell.append(mh, mnote, psel, mmodel, mkey, mend, mrow, mresult);
   panel.append(modell);
 

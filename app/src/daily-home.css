@@ -1,0 +1,190 @@
+/* Die Alltagsoberfläche ist bewusst eine letzte, kleine Schicht ueber dem
+   bewaehrten Funktionskern: keine neue Datenhaltung, keine neuen Endpunkte. */
+
+:root {
+  --bg: #f5f2ec;
+  --panel: #fffdf9;
+  --fg: #25241f;
+  --muted: #706e66;
+  --line: #e5dfd3;
+  --accent: #356b5d;
+  --accent-quiet: #e1eee8;
+  --warm: #e9e0d1;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% -8%, #fffdf9 0, transparent 32rem),
+    var(--bg);
+  font: 16px/1.55 ui-rounded, "SF Pro Rounded", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+nav {
+  gap: 0.2rem;
+  min-height: 4.5rem;
+  padding: 0.7rem max(1.2rem, calc((100vw - 72rem) / 2));
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+nav strong {
+  margin-right: 1.4rem;
+  color: var(--fg);
+  font-size: 1.1rem;
+  font-weight: 720;
+  letter-spacing: -0.03em;
+}
+
+.tab,
+.nav-more > summary {
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.tab.active,
+.tab:hover,
+.nav-more > summary:hover,
+.nav-more[open] > summary {
+  color: var(--fg);
+  background: var(--warm);
+}
+
+.status.ready {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  color: var(--muted);
+}
+
+.status.ready::before {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+}
+
+main {
+  max-width: 70rem;
+  padding: 3.25rem 1.35rem 5rem;
+}
+
+#view-chat {
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.conversation-welcome {
+  margin: 2.5rem 0 2.25rem;
+  animation: settle-in 420ms ease-out both;
+}
+
+.conversation-welcome .eyebrow {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+}
+
+.conversation-welcome h1 {
+  max-width: 36rem;
+  margin: 0.25rem 0 0.65rem;
+  color: var(--fg);
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.055em;
+}
+
+.conversation-welcome > p:not(.eyebrow) {
+  max-width: 37rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.conversation-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1.35rem;
+}
+
+button.starter {
+  border-color: var(--line);
+  border-radius: 999px;
+  color: var(--fg);
+  background: var(--panel);
+  box-shadow: 0 1px 1px rgb(37 36 31 / 3%);
+}
+
+button.starter:hover { border-color: var(--accent); background: var(--accent-quiet); }
+
+.messages { gap: 0.9rem; }
+.messages:not(:empty) { margin-bottom: 1.5rem; }
+
+.msg {
+  padding: 0.8rem 1rem;
+  border-radius: 1.1rem;
+  box-shadow: 0 1px 1px rgb(37 36 31 / 3%);
+}
+
+.msg.user { background: var(--accent-quiet); }
+.msg.assistant { border-color: var(--line); background: var(--panel); }
+
+#chat-form {
+  position: relative;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.5rem 0.45rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1.05rem;
+  background: var(--panel);
+  box-shadow: 0 0.7rem 2.4rem rgb(65 52 30 / 8%);
+}
+
+#chat-input {
+  min-width: 0;
+  padding: 0.6rem 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+#chat-form:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+#chat-form button { border-radius: 0.75rem; color: #fff; background: var(--accent); }
+#chat-form button:hover:not(:disabled) { background: #285649; }
+
+.daily-focus,
+.proactive-chief,
+.card,
+#project-detail,
+.decision-section {
+  border-color: var(--line);
+  border-radius: 1rem;
+  background: var(--panel);
+  box-shadow: 0 0.55rem 2rem rgb(65 52 30 / 4%);
+}
+
+.cards { gap: 1.2rem; }
+.card { padding: 1.15rem; }
+
+/* Sobald ein Gespräch läuft, ist der Einstieg nicht mehr nötig. */
+#view-chat.has-conversation .conversation-welcome { display: none; }
+
+@keyframes settle-in {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  nav { min-height: auto; padding: 0.7rem 1rem; }
+  nav strong { width: auto; margin-right: auto; }
+  .status { display: none; }
+  main { padding-top: 1.4rem; }
+  .conversation-welcome { margin-top: 1.5rem; }
+  .conversation-starters { display: grid; grid-template-columns: 1fr; }
+  button.starter { text-align: left; }
+}

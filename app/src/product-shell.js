@@ -162,7 +162,11 @@ function handleWizardState() {
   wizardWasVisible = false;
 
   const goal = localStorage.getItem("icarus-start-goal") ?? "day";
-  const destination = goal === "projects" ? "projects" : goal === "decisions" ? "proposals" : "dashboard";
+  // Die Auswahl beschreibt, worauf Icarus zuerst achten soll, nicht in
+  // welchem Verwaltungsbereich jemand landen muss. Das Gespräch bleibt die
+  // gemeinsame Haustür; nur wer ausdrücklich offene Entscheidungen sehen
+  // wollte, landet direkt in dieser einen Inbox.
+  const destination = goal === "decisions" ? "proposals" : "chat";
   tab(destination)?.click();
 }
 

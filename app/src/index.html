@@ -4,9 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Icarus</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
     <link rel="stylesheet" href="product-shell.css" />
     <link rel="stylesheet" href="chief-of-staff-shell.css" />
+    <link rel="stylesheet" href="daily-home.css" />
     <style>
       /* Die ältere Consumer-Zusammenfassung verlinkt Freigaben noch ins Gespräch.
          Sie bleibt als rückrollbare Schale geladen, ist aber nicht mehr der
@@ -27,9 +29,9 @@
   <body>
     <nav>
       <strong>Icarus</strong>
-      <button data-view="dashboard" class="tab active">Heute</button>
-      <button data-view="projects" class="tab">Projekte</button>
-      <button data-view="chat" class="tab">Gespräch</button>
+      <button data-view="chat" class="tab active">Gespräch</button>
+      <button data-view="dashboard" class="tab">Heute</button>
+      <button data-view="projects" class="tab">Aufgaben</button>
       <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
       <button data-view="proposals" class="tab">Entscheiden <span id="proposals-badge" class="badge" hidden></span></button>
       <button data-view="memory" class="tab">Gedächtnis</button>
@@ -53,7 +55,7 @@
     </div>
 
     <main>
-      <section id="view-dashboard" class="view">
+      <section id="view-dashboard" class="view" hidden>
         <h2 id="greeting"></h2>
 
         <div class="cards">
@@ -113,7 +115,20 @@
         <p id="project-empty" class="muted">Noch keine Projekte.</p>
       </section>
 
-      <section id="view-chat" class="view" hidden>
+      <section id="view-chat" class="view">
+        <header class="conversation-welcome" id="conversation-welcome">
+          <p class="eyebrow">DEIN PERSÖNLICHER ARBEITSRAUM</p>
+          <h1>Womit soll ich dir helfen?</h1>
+          <p>
+            Ich halte den Zusammenhang. Du kannst einfach schreiben, was gerade
+            ansteht – ich frage nach, bevor etwas verändert oder nach außen geht.
+          </p>
+          <div class="conversation-starters" aria-label="Gesprächseinstiege">
+            <button type="button" class="starter" data-prompt="Was ist heute wichtig?">Was ist heute wichtig?</button>
+            <button type="button" class="starter" data-prompt="Welche offenen Aufgaben habe ich?">Offene Aufgaben</button>
+            <button type="button" class="starter" data-prompt="Hilf mir, den nächsten Schritt festzulegen.">Nächsten Schritt finden</button>
+          </div>
+        </header>
         <div id="messages" class="messages"></div>
         <div id="chat-decision-hint" class="notice" role="status" hidden></div>
 
@@ -233,6 +248,7 @@
     <script type="module" src="chief-of-staff-shell.js"></script>
     <script type="module" src="system-cockpit.js"></script>
     <script type="module" src="proactive-chief-of-staff.js"></script>
+    <script type="module" src="daily-home.js"></script>
     <script type="module">
       // Gemeinsame Entscheidungsinbox. Die Serververträge bleiben unverändert:
       // Freigaben laufen weiterhin ausschließlich über /approvals/{id},

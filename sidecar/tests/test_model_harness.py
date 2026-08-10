@@ -334,3 +334,4 @@ def test_legacy_single_provider_path_remains_available(monkeypatch):
     assert provider is not None
     assert provider.model == "local-test"
     assert provider.is_local is True
+    assert provider.name == "ollama"

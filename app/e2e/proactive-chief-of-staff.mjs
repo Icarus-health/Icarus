@@ -39,6 +39,9 @@ try {
     waitUntil: "domcontentloaded",
   });
   await page.locator("#status.ready").waitFor();
+  // Das Gespräch ist der Startpunkt. Der proaktive Tagesblock erscheint über
+  // den sichtbaren Nutzerweg unter „Heute".
+  await page.locator('button[data-view="dashboard"]').click();
   const panel = page.locator("#proactive-chief");
   await panel.waitFor();
   await panel.getByRole("heading", { name: "Was jetzt Aufmerksamkeit verdient" }).waitFor();

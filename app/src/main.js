@@ -445,6 +445,7 @@ function addMessage(role, text) {
   el.textContent = text;
   $("#messages").append(el);
   el.scrollIntoView({ block: "end" });
+  return el;
 }
 
 function addNotice(text) {
@@ -2320,6 +2321,11 @@ async function refreshStatus() {
   $("#chat-input").placeholder = health.chat
     ? "Schreib etwas…"
     : "Kein Modell eingerichtet — siehe Einrichtung";
+
+  // Die Einrichtung kann ein Modell aktivieren, während der Chat geöffnet
+  // bleibt. Dann darf der anfängliche Hinweis nicht stehen bleiben und das
+  // Gegenteil der sichtbaren Statuszeile behaupten.
+  if (health.chat) $("#chat-no-model-hint")?.remove();
   return health;
 }
 
@@ -2338,13 +2344,14 @@ async function start() {
     $("#wizard").hidden = false;
     renderWizard();
   } else if (!health.chat) {
-    addMessage(
+    const hint = addMessage(
       "assistant",
       "Es ist kein Modell eingerichtet — Gespräche gehen noch nicht. " +
         "Das Gedächtnis funktioniert trotzdem: unter „Gedächtnis“ lassen sich " +
         "Aussagen speichern, ansehen und widerrufen, unter „Rohmaterial“ " +
         "vorhandene Notizen einlesen."
     );
+    hint.id = "chat-no-model-hint";
   }
 
   await loadApprovals();

@@ -512,3 +512,82 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .proposal .evidence { margin: 0.6rem 0; }
 .proposal .row { margin-top: 0.8rem; }
 .proposal .error { color: var(--danger); font-size: 0.8125rem; margin: 0.5rem 0 0; }
+
+/* -- Briefing -------------------------------------------------------------- */
+
+/* Icarus spricht in einer Serifenschrift, die Bedienung bleibt serifenlos.
+   Ausdrücklich **keine** Schrift aus dem Netz: eine Anwendung, die verspricht,
+   dass alles auf diesem Rechner bleibt, darf beim Start nicht bei Google
+   anfragen. Was das System mitbringt, reicht. */
+#briefing {
+  margin: 0 0 1.75rem;
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+}
+
+#briefing-intro {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.6;
+  color: var(--fg);
+  text-wrap: pretty;
+}
+
+#briefing-punkte {
+  list-style: none;
+  margin: 1.1rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  counter-reset: punkt;
+}
+
+/* `li` ist im Bestand ein zweispaltiges Raster mit Trennlinie — hier nicht:
+   ein Vortrag hat keine Tabellenzeilen. */
+#briefing-punkte li {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr;
+  gap: 0 0.85rem;
+  padding: 0;
+  border-bottom: none;
+  counter-increment: punkt;
+}
+
+#briefing-punkte li::before {
+  content: counter(punkt);
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 1.15rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* Der erste Punkt ist der dringendste — die Ziffer sagt das, nicht ein Kasten. */
+#briefing-punkte li:first-child::before { color: var(--danger); }
+
+#briefing-punkte .satz {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.6;
+  max-width: 58ch;
+  text-wrap: pretty;
+}
+
+#briefing-punkte .tat {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 0.55rem;
+  justify-self: start;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#briefing-nachsatz {
+  margin: 1.5rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  max-width: 62ch;
+}

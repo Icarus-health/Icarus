@@ -186,6 +186,18 @@ def _heute(bridge: Bridge, arguments: dict[str, Any]) -> str:
     data = bridge.get("/dashboard", days=int(arguments.get("tage", 7)))
     lines: list[str] = []
 
+    # Das Urteil zuerst, die Bestandsliste danach. Ein anderes Modell, das
+    # durch diese Tür kommt, soll dieselbe Gewichtung sehen wie der Mensch
+    # vor dem Fenster — nicht eine zweite, die woanders entstanden ist.
+    kurz = data.get("briefing") or {}
+    if kurz.get("einleitung"):
+        lines.append(kurz["einleitung"])
+        for nummer, punkt in enumerate(kurz.get("punkte", []), start=1):
+            lines.append(f"{nummer}. {punkt['text']}")
+        if kurz.get("nachsatz"):
+            lines.append(kurz["nachsatz"])
+        lines.append("")
+
     projects = data.get("projects", {})
     if projects.get("items"):
         lines.append("Projekte:")

@@ -34,7 +34,7 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import config
+from . import briefing, config
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .scheduler import (
@@ -936,7 +936,12 @@ def create_app(
 
         calendar = getattr(app.state, "calendar", None)
         if calendar is None:
-            result["calendar"]["error"] = "Kein Kalender eingerichtet (ICARUS_CALDAV_URL)."
+            # Kein Variablenname für den Nutzer: `ICARUS_CALDAV_URL` ist Wissen,
+            # das niemand außerhalb der IT hat, und daraus folgt kein nächster
+            # Schritt. Der Weg dorthin steht im Satz.
+            result["calendar"]["error"] = (
+                "Noch kein Kalender verbunden. Unter „Einrichtung“ eintragen."
+            )
         else:
             try:
                 result["calendar"]["items"] = [e.to_dict() for e in calendar.events(days=days)]
@@ -945,7 +950,10 @@ def create_app(
 
         mail = getattr(app.state, "mail", None)
         if mail is None:
-            result["mail"]["error"] = "Kein Mailzugang eingerichtet (ICARUS_IMAP_HOST)."
+            result["mail"]["error"] = (
+                "Noch kein Postfach verbunden. Unter „Einrichtung“ deine "
+                "Adresse eintragen — den Rest sucht Icarus."
+            )
         else:
             try:
                 messages = mail.inbox(limit=8)
@@ -966,17 +974,39 @@ def create_app(
         except Exception as exc:  # noqa: BLE001
             result["episodes"] = {"pending": 0, "counts": {}, "error": str(exc)}
 
+        # Die Vorschläge kommen mit Wortlaut, nicht nur als Zahl: das Briefing
+        # zitiert sie, und eine Zahl kann man nicht zitieren.
+        offene_vorschlaege: list[dict[str, Any]] = []
         try:
-            offen = app.state.proposals.counts().get("pending", 0)
-            result["proposals"] = {"pending": offen, "error": None}
+            offene_vorschlaege = [
+                v.to_dict() for v in app.state.proposals.pending(limit=20)
+            ]
+            result["proposals"] = {
+                "pending": len(offene_vorschlaege),
+                "items": offene_vorschlaege,
+                "error": None,
+            }
         except Exception as exc:  # noqa: BLE001
-            result["proposals"] = {"pending": 0, "error": str(exc)}
+            result["proposals"] = {"pending": 0, "items": [], "error": str(exc)}
 
         usable = app.state.store.usable()
         result["memory"]["count"] = len(usable)
         result["memory"]["recent"] = [
             a.to_dict() for a in sorted(usable, key=lambda x: x.recorded_at, reverse=True)[:5]
         ]
+
+        # Zuletzt das Urteil: was von alldem heute zählt. Es liest nur, was
+        # oben steht — deshalb kann es die Seite auch nicht kippen.
+        try:
+            result["briefing"] = briefing.erstelle(
+                result,
+                jetzt=datetime.now().astimezone(),
+                vorschlaege=offene_vorschlaege,
+            ).to_dict()
+        except Exception as exc:  # noqa: BLE001
+            result["briefing"] = None
+            result["briefing_error"] = str(exc)
+
         return result
 
     # -- Aufgaben ----------------------------------------------------------

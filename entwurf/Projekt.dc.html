@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&family=Instrument+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3b6ea5; } a:hover { color: #2c5580; }
+    .prosa { font-family: Newsreader, Georgia, "Times New Roman", serif; }
+    .ui { font-family: "Instrument Sans", system-ui, -apple-system, sans-serif; }
+  </style>
+</helmet>
+
+<div class="ui" style="width: 1120px; height: 900px; background: #fbfaf8; color: #1b1a18; font-size: 15px; line-height: 1.55; display: flex; flex-direction: column; overflow: hidden;">
+
+  <div style="display: flex; align-items: center; gap: 28px; padding: 0 24px; height: 52px; border-bottom: 1px solid #e3e0d9; background: rgba(255,255,255,0.72); flex: 0 0 auto;">
+    <div class="prosa" style="font-size: 18px; font-weight: 500;">Icarus</div>
+    <div style="display: flex; gap: 2px;">
+      <div style="padding: 6px 12px; border-radius: 7px; color: #6d6a64; font-size: 14px;">Heute</div>
+      <div style="padding: 6px 12px; border-radius: 7px; color: #6d6a64; font-size: 14px;">Gespräch</div>
+      <div style="padding: 6px 12px; border-radius: 7px; background: #ece8e0; font-weight: 500; font-size: 14px;">Ablage</div>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 6px; color: #a8a49b;">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+      <span style="font-size: 12px;">⌘K</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; display: flex; justify-content: center; gap: 40px; padding: 40px 24px 0; overflow: hidden;">
+
+    <div style="width: 660px;">
+      <div style="font-size: 12.5px; color: #a8a49b;">Ablage · Projekte</div>
+      <h1 class="prosa" style="margin: 8px 0 0; font-size: 32px; font-weight: 400; letter-spacing: -0.01em;">Kooperationsvertrag Klinikum</h1>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px;">
+        <span style="display: flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: #e8f0e9; font-size: 12.5px; color: #2f7a55;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #2f7a55;"></span>läuft</span>
+        <span style="padding: 4px 11px; border-radius: 999px; background: #f0ece4; font-size: 12.5px; color: #6d6a64;">Wichtig</span>
+        <span style="padding: 4px 11px; border-radius: 999px; background: #f6ece1; font-size: 12.5px; color: #a8621f;">Frist 1. September — in 12 Tagen</span>
+      </div>
+
+      <!-- Der Stand in einem Satz, nicht als Balkendiagramm. -->
+      <p class="prosa" style="margin: 24px 0 0; font-size: 18.5px; line-height: 1.65; color: #35322e; max-width: 58ch; text-wrap: pretty;">Der Entwurf liegt seit dem 12.&nbsp;Mai. Laufzeit und Kündigungsfrist sind geklärt, die Vergütung nicht. <strong style="font-weight: 500;">Es hängt an dir</strong> — seit acht Tagen wartet niemand auf jemand anderen.</p>
+
+      <div style="display: flex; flex-direction: column; gap: 0; margin-top: 30px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #a8a49b; margin-bottom: 10px;">Was offen ist</div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #ece8e0;">
+          <div style="flex: 0 0 16px; height: 16px; margin-top: 2px; border: 1.5px solid #d6d2c9; border-radius: 5px;"></div>
+          <div style="flex-grow: 1;">
+            <div style="font-size: 15px; color: #b4483c;">Vergütungsspanne festlegen</div>
+            <div style="font-size: 13px; color: #a8a49b; margin-top: 2px;">seit 7. August fällig</div>
+          </div>
+          <div style="padding: 5px 12px; border-radius: 8px; border: 1px solid #e3e0d9; color: #6d6a64; font-size: 13px;">Heute machen</div>
+        </div>
+
+        <div style="display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #ece8e0;">
+          <div style="flex: 0 0 16px; height: 16px; margin-top: 2px; border: 1.5px solid #d6d2c9; border-radius: 5px;"></div>
+          <div style="flex-grow: 1;">
+            <div style="font-size: 15px;">Entwurf an die Rechtsabteilung</div>
+            <div style="font-size: 13px; color: #a8a49b; margin-top: 2px;">nach der Vergütung</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 28px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #a8a49b; margin-bottom: 12px;">Was entschieden ist</div>
+        <div style="display: flex; flex-direction: column; gap: 11px;">
+
+          <div style="display: flex; gap: 12px;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2f7a55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg>
+            <div>
+              <div class="prosa" style="font-size: 16.5px; line-height: 1.5;">Laufzeit drei Jahre, Verlängerung stillschweigend.</div>
+              <div style="font-size: 12.5px; color: #a8a49b; margin-top: 2px;">aus dem Entwurf · 12. Mai</div>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2f7a55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 3px;"><path d="M20 6 9 17l-5-5"></path></svg>
+            <div>
+              <div class="prosa" style="font-size: 16.5px; line-height: 1.5;">Kündigungsfrist sechs Monate zum Quartalsende.</div>
+              <div style="font-size: 12.5px; color: #a8a49b; margin-top: 2px;">von dir · 12. Mai · <span style="color: #a8621f;">seit 3 Monaten unbestätigt</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <div style="width: 264px; display: flex; flex-direction: column; gap: 26px; padding-top: 30px;">
+
+      <div>
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #a8a49b; margin-bottom: 12px;">Wer dabei ist</div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+
+          <div style="display: flex; align-items: center; gap: 11px;">
+            <div class="prosa" style="flex: 0 0 32px; height: 32px; border-radius: 999px; background: #ece8e0; color: #6d6a64; display: flex; align-items: center; justify-content: center; font-size: 14px;">UB</div>
+            <div>
+              <div style="font-size: 14px; font-weight: 500;">Dr. Ulrich Brandt</div>
+              <div style="font-size: 12.5px; color: #a8a49b;">zuletzt Dienstag</div>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 11px;">
+            <div class="prosa" style="flex: 0 0 32px; height: 32px; border-radius: 999px; background: #ece8e0; color: #6d6a64; display: flex; align-items: center; justify-content: center; font-size: 14px;">ML</div>
+            <div>
+              <div style="font-size: 14px; font-weight: 500;">Martina Lehmann</div>
+              <div style="font-size: 12.5px; color: #a8a49b;">zuletzt im Juli</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #a8a49b; margin-bottom: 12px;">Woraus ich das weiß</div>
+        <div style="display: flex; flex-direction: column; gap: 9px;">
+          <div style="display: flex; gap: 9px; align-items: center; font-size: 13.5px; color: #35322e;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a8a49b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto;"><path d="M5.5 3h9L19 7.5V21H5.5Z"></path><path d="M14 3v5h5"></path></svg>
+            vertrag-entwurf.md
+          </div>
+          <div style="display: flex; gap: 9px; align-items: center; font-size: 13.5px; color: #35322e;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a8a49b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto;"><rect x="2.5" y="5" width="19" height="14" rx="2.5"></rect><path d="m3 7 9 6 9-6"></path></svg>
+            4 Mails mit Dr. Brandt
+          </div>
+          <div style="display: flex; gap: 9px; align-items: center; font-size: 13.5px; color: #35322e;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a8a49b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto;"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H18a2 2 0 0 1 2 2v14.5"></path><path d="M4 5.5v13A2.5 2.5 0 0 0 6.5 21H20"></path></svg>
+            2 Notizen
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

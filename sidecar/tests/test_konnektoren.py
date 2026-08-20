@@ -261,9 +261,24 @@ def test_dashboard_ohne_konnektoren(client: TestClient) -> None:
     """Nicht eingerichtete Bereiche fehlen mit Begründung — die Seite steht."""
     data = client.get("/dashboard").json()
     assert data["tasks"]["items"] == []
-    assert "Kein Kalender eingerichtet" in data["calendar"]["error"]
-    assert "Kein Mailzugang eingerichtet" in data["mail"]["error"]
+    assert data["calendar"]["error"]
+    assert data["mail"]["error"]
     assert data["memory"]["count"] == 0
+
+
+def test_dashboard_meldungen_nennen_keine_variablennamen(client: TestClient) -> None:
+    """Auf der Startseite steht kein Name aus einer Konfigurationsdatei.
+
+    `ICARUS_CALDAV_URL` ist Wissen, das niemand außerhalb der IT hat, und aus
+    dem für den Nutzer kein nächster Schritt folgt. Statt des Namens muss der
+    Weg dastehen — auf „Einrichtung“ ist der Zugang zu finden.
+    """
+    data = client.get("/dashboard").json()
+    meldungen = [data["calendar"]["error"], data["mail"]["error"]]
+
+    for meldung in meldungen:
+        assert "ICARUS_" not in meldung, f"Variablenname in der Oberfläche: {meldung}"
+        assert "Einrichtung" in meldung, f"Kein Weg zum nächsten Schritt: {meldung}"
 
 
 def test_dashboard_zeigt_aufgaben(client: TestClient) -> None:

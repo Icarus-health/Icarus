@@ -42,6 +42,15 @@
       <section id="view-dashboard" class="view">
         <h2 id="greeting"></h2>
 
+        <!-- Das Briefing: was heute zählt, in Sätzen. Steht vor den Karten,
+             weil ein Urteil vor einer Aufzählung kommt. Ist nichts zu sagen,
+             steht hier ein Satz und keine erfundenen Punkte. -->
+        <section id="briefing" hidden>
+          <p id="briefing-intro"></p>
+          <ol id="briefing-punkte"></ol>
+          <p id="briefing-nachsatz" class="muted"></p>
+        </section>
+
         <div class="cards">
           <article class="card">
             <h3>Projekte</h3>
@@ -218,6 +227,10 @@
           nicht ändern und nicht löschen.
         </p>
         <ul id="audit"></ul>
+        <p id="audit-empty" class="muted">
+          Noch nichts eingetragen. Hier steht erst etwas, wenn Icarus zum
+          ersten Mal ein Werkzeug benutzt hat.
+        </p>
       </section>
     </main>
 

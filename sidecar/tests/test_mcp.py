@@ -188,8 +188,11 @@ def test_heute_fasst_alles_in_einem_aufruf_zusammen(server: Server, app) -> None
     assert "NutriFlow Pro" in text
     assert "BLS-Import" in text
     # Nicht eingerichtete Konnektoren fehlen mit Begründung, statt die Seite
-    # zu kippen.
-    assert "Kein Mailzugang" in text
+    # zu kippen — und die Begründung nennt keinen Variablennamen, auch nicht
+    # auf diesem Weg. Was über die MCP-Tür geht, liest am Ende ein Mensch.
+    assert "Nachrichten:" in text
+    assert "ICARUS_" not in text
+    assert "Einrichtung" in text
     assert "Gedächtnis:" in text
 
 

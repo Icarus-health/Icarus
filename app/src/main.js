@@ -88,14 +88,20 @@ async function loadChat() {
   await loadMailbox().catch(() => {});
 }
 
+// Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann,
+// ohne dieselben vier Zeilen ein zweites Mal zu tragen.
+function openTab(name) {
+  const tab = document.querySelector(`.tab[data-view="${name}"]`);
+  if (!tab) return;
+  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+  tab.classList.add("active");
+  for (const view of document.querySelectorAll(".view")) view.hidden = true;
+  $(`#view-${name}`).hidden = false;
+  REFRESH[name]?.();
+}
+
 document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    tab.classList.add("active");
-    for (const view of document.querySelectorAll(".view")) view.hidden = true;
-    $(`#view-${tab.dataset.view}`).hidden = false;
-    REFRESH[tab.dataset.view]?.();
-  });
+  tab.addEventListener("click", () => openTab(tab.dataset.view));
 });
 
 
@@ -218,9 +224,93 @@ function renderProjectTeaser(block) {
   }
 }
 
+// Je Quelle die Handlung, die der Knopf wirklich auslöst. Fehlt hier ein
+// Eintrag oder die Kennung, bekommt der Punkt **keinen** Knopf: ein Knopf,
+// der nichts tut, ist schlimmer als keiner.
+const BRIEFING_TATEN = {
+  aufgabe: (ref) => api(`/tasks/${ref}/done`, { method: "POST" }),
+  bestaetigung: (ref) => api(`/proposals/${ref}/accept`, { method: "POST" }),
+};
+
+// Punkte ohne eigene Handlung führen dorthin, wo man sie erledigt.
+const BRIEFING_ZIELE = {
+  widerspruch: "proposals",
+  vorschlag: "proposals",
+  mail: "chat",
+  termin: null,
+};
+
+function renderBriefing(briefing) {
+  const kasten = $("#briefing");
+  const liste = $("#briefing-punkte");
+  liste.replaceChildren();
+
+  if (!briefing) {
+    // Kein Urteil zu haben ist etwas anderes, als ein leeres zu zeigen.
+    kasten.hidden = true;
+    return;
+  }
+
+  kasten.hidden = false;
+  $("#briefing-intro").textContent = briefing.einleitung ?? "";
+
+  for (const punkt of briefing.punkte ?? []) {
+    const li = document.createElement("li");
+
+    const satz = document.createElement("p");
+    satz.className = "satz";
+    satz.textContent = punkt.text;
+    li.append(satz);
+
+    const tat = BRIEFING_TATEN[punkt.quelle];
+    const ziel = BRIEFING_ZIELE[punkt.quelle];
+
+    if (punkt.aktion && punkt.ref && tat) {
+      const knopf = document.createElement("button");
+      knopf.className = "tat small";
+      knopf.type = "button";
+      knopf.textContent = punkt.aktion;
+      knopf.addEventListener("click", async () => {
+        knopf.disabled = true;
+        try {
+          await tat(punkt.ref);
+          await loadDashboard();
+        } catch (err) {
+          // Jede Aktion antwortet — mit Ergebnis oder mit Grund.
+          knopf.disabled = false;
+          satz.after(fehlerzeile(err.message));
+        }
+      });
+      li.append(knopf);
+    } else if (punkt.aktion && ziel) {
+      const knopf = document.createElement("button");
+      knopf.className = "tat small ghost";
+      knopf.type = "button";
+      knopf.textContent = punkt.aktion;
+      knopf.addEventListener("click", () => openTab(ziel));
+      li.append(knopf);
+    }
+
+    liste.append(li);
+  }
+
+  const nachsatz = $("#briefing-nachsatz");
+  nachsatz.textContent = briefing.nachsatz ?? "";
+  nachsatz.hidden = !briefing.nachsatz;
+}
+
+function fehlerzeile(text) {
+  const p = document.createElement("p");
+  p.className = "meta";
+  p.style.color = "var(--danger)";
+  p.textContent = text;
+  return p;
+}
+
 async function loadDashboard() {
   $("#greeting").textContent = greeting();
   const data = await api("/dashboard");
+  renderBriefing(data.briefing);
   renderProjectTeaser(data.projects);
   renderTasks(data.tasks);
   renderEvents(data.calendar);
@@ -1043,6 +1133,11 @@ const ASSERTION_KIND_LABELS = {
   preference: "Vorliebe",
   goal: "Ziel",
   constraint: "Grenze",
+  // Über die Auswahl im Formular nicht erreichbar, aus einer Verdichtung aber
+  // sehr wohl. Ohne Eintrag stünde hier sonst das englische Rohwort.
+  episode: "Begebenheit",
+  relationship: "Beziehung",
+  skill: "Fähigkeit",
 };
 
 // Je Art eine passende Beschriftung: „Übernehmen“ träfe eine Bestätigung nicht,
@@ -2184,7 +2279,8 @@ async function loadMemory() {
     const meta = document.createElement("p");
     meta.className = "meta";
     const origin = SOURCE_LABELS[a.provenance.source_type] ?? a.provenance.source_type;
-    meta.textContent = `${a.kind} · ${origin} · ${new Date(a.recorded_at).toLocaleDateString("de-DE")}`;
+    const art = ASSERTION_KIND_LABELS[a.kind] ?? a.kind;
+    meta.textContent = `${art} · ${origin} · ${new Date(a.recorded_at).toLocaleDateString("de-DE")}`;
     if (a.provenance.source_type === "inference") meta.classList.add("inferred");
 
     const forget = document.createElement("button");
@@ -2239,6 +2335,8 @@ async function loadAudit() {
   const entries = await api("/audit?limit=100");
   const list = $("#audit");
   list.replaceChildren();
+  // Wie überall sonst: eine leere Ansicht sagt, dass sie leer ist, und warum.
+  $("#audit-empty").hidden = entries.length > 0;
 
   for (const e of entries) {
     const li = document.createElement("li");

@@ -40,6 +40,18 @@ async function connectionInfo() {
 const $ = (sel) => document.querySelector(sel);
 const statusEl = $("#status");
 
+/** Schreibt in die Zustandsanzeige — und blendet sie dabei ein.
+ *
+ * Sie ist im Normalfall leer und versteckt. Wer sie nur beschreibt, ohne
+ * `hidden` zu lösen, schickt seine Meldung ins Nichts. Deshalb geht jede
+ * Meldung durch hier. */
+function meldeZustand(text, art = "") {
+  statusEl.classList.remove("ready", "error");
+  if (art) statusEl.classList.add(art);
+  statusEl.textContent = text;
+  statusEl.hidden = !text;
+}
+
 async function api(path, options = {}) {
   const response = await fetch(`${base}${path}`, {
     ...options,
@@ -87,6 +99,155 @@ async function loadChat() {
   await loadApprovals();
   await loadMailbox().catch(() => {});
 }
+
+// -- Suche ------------------------------------------------------------------
+//
+// Ein Feld für alles. Wer suchen will, muss nicht wissen, in welcher Schicht
+// etwas liegt — das ist die Arbeit des Programms, nicht die des Nutzers.
+
+let sucheTreffer = [];
+let sucheGewaehlt = 0;
+let sucheLauf = 0;
+
+function sucheOeffnen() {
+  $("#suche").hidden = false;
+  const feld = $("#suche-feld");
+  feld.value = "";
+  feld.focus();
+  sucheTreffer = [];
+  sucheGewaehlt = 0;
+  $("#suche-ergebnis").replaceChildren();
+}
+
+function sucheSchliessen() {
+  $("#suche").hidden = true;
+}
+
+function sucheMarkieren() {
+  document.querySelectorAll(".suche-treffer").forEach((el, i) => {
+    el.classList.toggle("gewaehlt", i === sucheGewaehlt);
+    if (i === sucheGewaehlt) el.scrollIntoView({ block: "nearest" });
+  });
+}
+
+function sucheOeffneTreffer(treffer) {
+  sucheSchliessen();
+  // Kein Ziel heißt: dafür gibt es noch keine Ansicht. Dann passiert nichts,
+  // statt irgendwohin zu springen.
+  if (treffer?.ziel) openTab(treffer.ziel);
+}
+
+function sucheZeichnen(ergebnis) {
+  const kasten = $("#suche-ergebnis");
+  kasten.replaceChildren();
+  sucheTreffer = [];
+  sucheGewaehlt = 0;
+
+  if (!ergebnis.gruppen.length) {
+    const leer = document.createElement("p");
+    leer.id = "suche-leer";
+    leer.className = "muted";
+    // Nichts gefunden ist ein Ergebnis, keine Panne — und es wird gesagt.
+    leer.textContent = ergebnis.frage.length < 2
+      ? "Tipp weiter — ab zwei Zeichen suche ich."
+      : `Nichts gefunden zu „${ergebnis.frage}“.`;
+    kasten.append(leer);
+    return;
+  }
+
+  for (const gruppe of ergebnis.gruppen) {
+    const titel = document.createElement("div");
+    titel.className = "suche-gruppe";
+    titel.textContent = gruppe.beschriftung;
+    kasten.append(titel);
+
+    for (const treffer of gruppe.treffer) {
+      const knopf = document.createElement("button");
+      knopf.type = "button";
+      knopf.className = "suche-treffer";
+
+      const zeile = document.createElement("span");
+      zeile.className = "titel";
+      if (treffer.fremd) {
+        const marke = document.createElement("span");
+        marke.className = "fremd";
+        marke.textContent = "von außen";
+        zeile.append(marke);
+      }
+      zeile.append(document.createTextNode(treffer.titel));
+      knopf.append(zeile);
+
+      if (treffer.zeile) {
+        const unten = document.createElement("span");
+        unten.className = "zeile";
+        unten.textContent = treffer.zeile;
+        knopf.append(unten);
+      }
+
+      knopf.addEventListener("click", () => sucheOeffneTreffer(treffer));
+      kasten.append(knopf);
+      sucheTreffer.push(treffer);
+    }
+  }
+
+  sucheMarkieren();
+}
+
+$("#suche-feld").addEventListener("input", async (event) => {
+  const frage = event.target.value;
+  // Jede Eingabe bekommt eine Nummer: eine langsame Antwort auf eine alte
+  // Frage darf eine schnellere auf eine neue nicht überschreiben.
+  const meine = ++sucheLauf;
+  try {
+    const ergebnis = await api(`/suche?q=${encodeURIComponent(frage)}`);
+    if (meine === sucheLauf) sucheZeichnen(ergebnis);
+  } catch (err) {
+    if (meine !== sucheLauf) return;
+    const kasten = $("#suche-ergebnis");
+    kasten.replaceChildren();
+    const p = document.createElement("p");
+    p.id = "suche-leer";
+    p.className = "muted";
+    p.style.color = "var(--danger)";
+    p.textContent = err.message;
+    kasten.append(p);
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  const offen = !$("#suche").hidden;
+
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    offen ? sucheSchliessen() : sucheOeffnen();
+    return;
+  }
+
+  if (!offen) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    sucheSchliessen();
+  } else if (event.key === "ArrowDown" && sucheTreffer.length) {
+    event.preventDefault();
+    sucheGewaehlt = (sucheGewaehlt + 1) % sucheTreffer.length;
+    sucheMarkieren();
+  } else if (event.key === "ArrowUp" && sucheTreffer.length) {
+    event.preventDefault();
+    sucheGewaehlt = (sucheGewaehlt - 1 + sucheTreffer.length) % sucheTreffer.length;
+    sucheMarkieren();
+  } else if (event.key === "Enter" && sucheTreffer.length) {
+    event.preventDefault();
+    sucheOeffneTreffer(sucheTreffer[sucheGewaehlt]);
+  }
+});
+
+$("#suche-knopf").addEventListener("click", sucheOeffnen);
+
+// Ein Klick daneben schließt — wie bei jedem Blatt, das über etwas liegt.
+$("#suche").addEventListener("click", (event) => {
+  if (event.target.id === "suche") sucheSchliessen();
+});
 
 // Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann,
 // ohne dieselben vier Zeilen ein zweites Mal zu tragen.
@@ -2291,8 +2452,13 @@ async function loadMemory() {
         method: "POST",
         body: JSON.stringify({ reason: "user_request" }),
       });
-      if (affected.length > 1) {
-        statusEl.textContent = `Vergessen — samt ${affected.length - 1} daraus abgeleiteten Aussagen.`;
+      const mit = affected.length - 1;
+      if (mit > 0) {
+        meldeZustand(
+          mit === 1
+            ? "Vergessen — samt einer daraus abgeleiteten Aussage."
+            : `Vergessen — samt ${mit} daraus abgeleiteten Aussagen.`,
+        );
       }
       await loadMemory();
     });
@@ -2374,13 +2540,17 @@ async function loadAudit() {
 async function refreshStatus() {
   const health = await api("/health");
 
-  const bits = [];
-  bits.push(health.chat ? `Modell: ${health.model}` : "kein Modell");
-  bits.push(health.semantic_search ? "semantische Suche" : "Textsuche");
-  if (health.mail) bits.push("Mail");
-  if (health.calendar) bits.push("Kalender");
-  statusEl.textContent = bits.join(" · ");
-  statusEl.classList.add("ready");
+  // Läuft alles, steht hier **nichts**. Eine Leiste, die dauernd meldet, dass
+  // alles in Ordnung ist, meldet nichts — und wenn dann wirklich etwas fehlt,
+  // geht es zwischen den Selbstverständlichkeiten unter. Was eingerichtet ist,
+  // steht unter „Einrichtung“; hierher gehört nur, was den Nutzer heute
+  // einschränkt.
+  if (health.chat) {
+    meldeZustand("");
+  } else {
+    meldeZustand("Kein Modell", "error");
+    statusEl.title = "Ohne Modell gehen keine Gespräche. Unter „Einrichtung“ einrichten.";
+  }
 
   // Lieber ehrlich sagen, was fehlt, als einen kaputten Chat anbieten.
   $("#chat-input").placeholder = health.chat
@@ -2426,7 +2596,7 @@ async function startWithRetry(attempts = 40) {
       await new Promise((r) => setTimeout(r, 250));
     }
   }
-  statusEl.textContent = "Der Sidecar antwortet nicht.";
+  meldeZustand("Der Sidecar antwortet nicht.", "error");
   statusEl.classList.add("error");
 }
 

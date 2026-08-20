@@ -1,0 +1,43 @@
+{
+  "pages": [
+    { "id": "flaechen", "name": "Die Oberfläche" },
+    { "id": "bausteine", "name": "Bausteine" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html",        "title": "Heute",            "x": 0,    "y": 0,    "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Freigabe.dc.html",    "title": "Freigabe",         "x": 1200, "y": 0,    "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Gespraech.dc.html",   "title": "Gespräch",         "x": 2400, "y": 0,    "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Projekt.dc.html",     "title": "Projekt",          "x": 0,    "y": 1010, "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Kontakt.dc.html",     "title": "Mensch",           "x": 1200, "y": 1010, "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Herkunft.dc.html",    "title": "Woher ich das weiß","x": 2400,"y": 1010, "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Einrichtung.dc.html", "title": "Erster Start",     "x": 0,    "y": 2020, "w": 1120, "h": 900,  "page": "flaechen" },
+    { "file": "Bausteine.dc.html",   "title": "Bausteine",        "x": 0,    "y": 0,    "w": 1120, "h": 1180, "page": "bausteine" }
+  ],
+  "annotations": [
+    {
+      "id": "these",
+      "x": -420, "y": 0, "w": 380,
+      "page": "flaechen",
+      "text": "Die These\n\nIcarus ist kein Dashboard, sondern ein Briefing. Der Startbildschirm ist ein kurzer Text, der dir sagt, was heute zählt — kein Raster aus Kacheln.\n\nAus acht Reitern werden drei Orte: Heute, Gespräch, Ablage. Rohmaterial, Vorschläge, Gedächtnis und Protokoll sind keine Orte mehr — sie sind das, was hinter jedem Satz liegt und aufgeht, wenn man fragt."
+    },
+    {
+      "id": "freigabe-aenderung",
+      "x": 1200, "y": -230, "w": 380,
+      "page": "flaechen",
+      "text": "Änderung an der Zusage\n\nHeute muss man den Empfänger abtippen — er steht direkt darüber und wird kopiert, ohne gelesen zu werden.\n\nStattdessen: erkennen statt tippen. Drei Adressen, eine ist richtig. Das ist ein Klick statt einer Zeile, und es prüft, was wirklich zählt — ob du den richtigen Empfänger vom falschen unterscheidest."
+    },
+    {
+      "id": "einrichtung-aenderung",
+      "x": -420, "y": 2020, "w": 380,
+      "page": "flaechen",
+      "text": "Erst Nutzen, dann Technik\n\nDer gebaute Assistent fragt nach Modellanbieter, Ordnerpfad und IMAP — bevor Icarus einen Tag lang etwas genützt hat.\n\nHier steht die Frage der Vision am Anfang: Wobei soll ich dir zuerst helfen? Aus der Antwort folgt, was eingerichtet werden muss — und nur das."
+    },
+    {
+      "id": "mensch-neu",
+      "x": 1200, "y": 1960, "w": 380,
+      "page": "flaechen",
+      "text": "Das fehlt heute ganz\n\nMenschen gibt es im Bestand nicht — nur `participants` als Namensliste an jeder Episode. Genau daraus lässt sich diese Seite bauen, ohne ein neues Datenmodell.\n\nEin Chief of Staff, der Projekte kennt, aber keine Menschen, ist ein Aktenschrank."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "flaechen" }
+}

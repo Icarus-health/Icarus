@@ -45,6 +45,10 @@ body {
 nav {
   display: flex;
   align-items: center;
+  /* Ohne Umbruch schiebt die Leiste bei einem schmalen Fenster die ganze
+     Seite nach rechts, und die letzten Reiter stehen außerhalb. Gemessen ab
+     etwa 900 px abwärts. */
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.6rem 1rem;
   border-bottom: 1px solid var(--line);

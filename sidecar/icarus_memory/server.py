@@ -936,7 +936,12 @@ def create_app(
 
         calendar = getattr(app.state, "calendar", None)
         if calendar is None:
-            result["calendar"]["error"] = "Kein Kalender eingerichtet (ICARUS_CALDAV_URL)."
+            # Kein Variablenname für den Nutzer: `ICARUS_CALDAV_URL` ist Wissen,
+            # das niemand außerhalb der IT hat, und daraus folgt kein nächster
+            # Schritt. Der Weg dorthin steht im Satz.
+            result["calendar"]["error"] = (
+                "Noch kein Kalender verbunden. Unter „Einrichtung“ eintragen."
+            )
         else:
             try:
                 result["calendar"]["items"] = [e.to_dict() for e in calendar.events(days=days)]
@@ -945,7 +950,10 @@ def create_app(
 
         mail = getattr(app.state, "mail", None)
         if mail is None:
-            result["mail"]["error"] = "Kein Mailzugang eingerichtet (ICARUS_IMAP_HOST)."
+            result["mail"]["error"] = (
+                "Noch kein Postfach verbunden. Unter „Einrichtung“ deine "
+                "Adresse eintragen — den Rest sucht Icarus."
+            )
         else:
             try:
                 messages = mail.inbox(limit=8)

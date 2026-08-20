@@ -1043,6 +1043,11 @@ const ASSERTION_KIND_LABELS = {
   preference: "Vorliebe",
   goal: "Ziel",
   constraint: "Grenze",
+  // Über die Auswahl im Formular nicht erreichbar, aus einer Verdichtung aber
+  // sehr wohl. Ohne Eintrag stünde hier sonst das englische Rohwort.
+  episode: "Begebenheit",
+  relationship: "Beziehung",
+  skill: "Fähigkeit",
 };
 
 // Je Art eine passende Beschriftung: „Übernehmen“ träfe eine Bestätigung nicht,
@@ -2184,7 +2189,8 @@ async function loadMemory() {
     const meta = document.createElement("p");
     meta.className = "meta";
     const origin = SOURCE_LABELS[a.provenance.source_type] ?? a.provenance.source_type;
-    meta.textContent = `${a.kind} · ${origin} · ${new Date(a.recorded_at).toLocaleDateString("de-DE")}`;
+    const art = ASSERTION_KIND_LABELS[a.kind] ?? a.kind;
+    meta.textContent = `${art} · ${origin} · ${new Date(a.recorded_at).toLocaleDateString("de-DE")}`;
     if (a.provenance.source_type === "inference") meta.classList.add("inferred");
 
     const forget = document.createElement("button");
@@ -2239,6 +2245,8 @@ async function loadAudit() {
   const entries = await api("/audit?limit=100");
   const list = $("#audit");
   list.replaceChildren();
+  // Wie überall sonst: eine leere Ansicht sagt, dass sie leer ist, und warum.
+  $("#audit-empty").hidden = entries.length > 0;
 
   for (const e of entries) {
     const li = document.createElement("li");

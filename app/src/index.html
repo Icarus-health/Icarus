@@ -17,7 +17,21 @@
       <button data-view="memory" class="tab">Gedächtnis</button>
       <button data-view="audit" class="tab">Protokoll</button>
       <button data-view="setup" class="tab">Einrichtung</button>
-      <span id="status" class="status">Verbinde…</span>
+      <!-- Suchknopf und Zustand als **eine** Gruppe ans Ende. Getrennt mit je
+           einem `margin-left: auto` funktioniert das nicht: das erste frisst
+           den ganzen freien Platz, und das zweite fällt in die nächste Zeile.
+           Ein Tastenkürzel, das niemand sieht, gibt es für den Nutzer nicht —
+           deshalb steht „Suchen“ sichtbar da und ist anklickbar. -->
+      <span class="nav-rechts">
+        <button id="suche-knopf" class="tab suche-knopf" type="button" title="Suchen (⌘K)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
+          </svg>
+          <span class="nur-vorlesen">Suchen</span>
+        </button>
+        <span id="status" class="status">Verbinde…</span>
+      </span>
     </nav>
 
     <!-- Erststart. Liegt über allem, bis jemand ihn beendet — aber jeder
@@ -39,6 +53,18 @@
 
     <main>
       <!-- Heute: Aufgaben, Termine, Nachrichten auf einen Blick -->
+      <!-- Suche: ein Feld für alles. Der Nutzer weiß nicht, ob „Brandt“ eine
+           Aussage, eine Notiz oder ein Projekt ist — er weiß nur den Namen.
+           Liegt über allem, gehört zu keiner Ansicht. -->
+      <div id="suche" hidden>
+        <div id="suche-fenster">
+          <input id="suche-feld" type="search" placeholder="Suchen …"
+                 autocomplete="off" spellcheck="false" aria-label="Suchen" />
+          <div id="suche-ergebnis"></div>
+          <p id="suche-fuss" class="muted">Esc schließt · ↑ ↓ blättert · ⏎ öffnet</p>
+        </div>
+      </div>
+
       <section id="view-dashboard" class="view">
         <h2 id="greeting"></h2>
 

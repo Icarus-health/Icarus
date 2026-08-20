@@ -34,7 +34,7 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import briefing, config
+from . import briefing, config, suche
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .scheduler import (
@@ -869,6 +869,23 @@ def create_app(
     @app.get("/assertions", dependencies=guard)
     def usable() -> list[dict[str, Any]]:
         return [a.to_dict() for a in app.state.store.usable()]
+
+    @app.get("/suche", dependencies=guard)
+    def suchen(q: str, limit: int = 6) -> dict[str, Any]:
+        """Ein Feld für alles.
+
+        Der Nutzer weiß nicht, ob „Brandt“ eine Aussage, eine Notiz, ein
+        Projekt oder eine Mail ist. Ihn nach der Schicht zu fragen, hieße ihm
+        die Architektur zuzumuten.
+        """
+        return suche.suche(
+            q,
+            store=app.state.store,
+            tasks=app.state.tasks,
+            workspace=app.state.workspace,
+            episodes=app.state.episodes,
+            limit=max(1, min(limit, 20)),
+        )
 
     @app.get("/recall", dependencies=guard)
     def recall(q: str, limit: int = 10) -> list[dict[str, Any]]:

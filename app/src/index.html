@@ -83,25 +83,47 @@
       </div>
 
       <section id="view-dashboard" class="view">
+        <p id="datum" class="datum"></p>
         <h2 id="greeting"></h2>
 
-        <!-- Das Briefing: was heute zählt, in Sätzen. Steht vor den Karten,
-             weil ein Urteil vor einer Aufzählung kommt. Ist nichts zu sagen,
-             steht hier ein Satz und keine erfundenen Punkte. -->
-        <section id="briefing" hidden>
+        <!-- Die Hauptkarte: was heute zählt, in Sätzen, je Sache genau ein
+             Knopf. Ist nichts zu sagen, steht hier ein Satz und keine
+             erfundenen Punkte. -->
+        <section id="briefing" class="karte" hidden>
+          <div class="karte-kopf">
+            <h3>Heute</h3>
+            <span id="briefing-nichts-gesendet" class="muted"></span>
+          </div>
           <p id="briefing-intro"></p>
           <ol id="briefing-punkte"></ol>
           <p id="briefing-nachsatz" class="muted"></p>
         </section>
 
-        <div class="cards">
+        <!-- Drei kleine Karten. Von hier ist alles Tiefere erreichbar; nichts
+             Tieferes ist nötig. -->
+        <div id="kacheln"></div>
 
+        <!-- Fragen geht von hier. Man muss nirgendwo hin. -->
+        <form id="dashboard-frage">
+          <input id="dashboard-frage-feld" type="text" autocomplete="off"
+                 placeholder="Frag mich etwas, oder sag mir etwas zum Merken" />
+          <button type="submit" class="primary rund" aria-label="Senden">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path>
+            </svg>
+          </button>
+        </form>
+
+        <!-- Aufgaben und Termine bleiben erreichbar, stehen aber nicht mehr
+             vor dem Briefing. -->
+        <div class="cards">
           <article class="card">
             <h3>Aufgaben <span id="task-badge" class="badge" hidden></span></h3>
             <form id="task-form">
               <input id="task-title" type="text" placeholder="Was ist zu tun?" autocomplete="off" required />
               <input id="task-due" type="date" aria-label="Fällig am" />
-              <button type="submit" class="primary">Anlegen</button>
+              <button type="submit">Anlegen</button>
             </form>
             <ul id="task-list"></ul>
             <p id="task-empty" class="muted">Nichts offen.</p>
@@ -112,9 +134,9 @@
             <ul id="event-list"></ul>
             <p id="event-note" class="muted"></p>
           </article>
-
         </div>
       </section>
+
 
       <!-- Projekte: die Ebene, an der Aufgaben und Notizen hängen -->
       <section id="view-projects" class="view" hidden>

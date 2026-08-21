@@ -1,97 +1,129 @@
 :root {
-  /* -- Farben ------------------------------------------------------------
-     Der warme Papierton bleibt. Neu sind die Ebenen: eine Fläche liegt auf
-     einem Grund, statt einen 1px-Rahmen um sich zu ziehen. Das ist der
-     Unterschied zwischen einer Anwendung und einem Formular. */
-  --grund: #f2f0ec;
-  --flaeche: #ffffff;
-  --flaeche-gehoben: #fbfaf8;
+  /* -- Grund und Flächen -------------------------------------------------
+     Der Grund ist kein Farbwert, sondern eine belichtete Fläche: warm von
+     oben links, kühl von rechts, mit feinem Korn darüber. Eine flache Farbe
+     sieht nach Vorlage aus. */
+  --grund-1: #faf7f2;
+  --grund-2: #f2ede5;
+  --flaeche-1: #fffefc;
+  --flaeche-2: #fbf9f5;
+  --mulde: #f7f4ef;
 
-  --schrift: #1b1a18;
-  --schrift-2: #6d6a64;
-  --schrift-3: #a29d94;
+  --schrift: #211e1a;
+  --schrift-2: #6f6a61;
+  --schrift-3: #a8a299;
 
-  --trenner: #e0dcd4;
-  --fuellung: rgba(60, 54, 44, 0.05);
+  --kante: rgba(48, 40, 30, 0.09);
+  --kante-stark: rgba(48, 40, 30, 0.17);
+  --fuellung: rgba(48, 40, 30, 0.055);
 
-  --akzent: #2f6ba8;
-  --akzent-schwach: rgba(47, 107, 168, 0.12);
-  --warn: #a8621f;
-  --gefahr: #b4483c;
-  --gut: #2f7a55;
+  --akzent: #3572b0;
+  --akzent-hell: #4f8ccb;
+  --akzent-dunkel: #3670ac;
+  --akzent-schwach: rgba(53, 114, 176, 0.13);
+  --warn: #a9805a;
+  --gefahr: #b0483c;
+  --gut: #3f7f5e;
 
-  /* -- Abstände — 4-Punkt-Raster, nichts dazwischen -------------------- */
-  --a1: 4px;
-  --a2: 8px;
-  --a3: 12px;
-  --a4: 16px;
-  --a5: 20px;
-  --a6: 24px;
-  --a8: 32px;
-  --a10: 40px;
-  --a12: 48px;
+  /* -- Material ----------------------------------------------------------
+     Eine Karte trägt eine Lichtkante oben, eine haarfeine Fassung und zwei
+     Schatten: einer eng für die Kante, einer weit für den Raum. Das ist der
+     Unterschied zwischen gebaut und gezeichnet. */
+  --karte-schatten:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 0.5px rgba(48, 40, 30, 0.09),
+    0 2px 4px -1px rgba(48, 40, 30, 0.07),
+    0 12px 28px -8px rgba(48, 40, 30, 0.16),
+    0 36px 68px -20px rgba(48, 40, 30, 0.14);
 
-  /* -- Radien — vier, nicht sieben ------------------------------------- */
-  --r-klein: 6px;
-  --r-mittel: 10px;
-  --r-gross: 14px;
+  --knopf-schatten:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 0 0 0.5px rgba(48, 40, 30, 0.17),
+    0 1px 2px rgba(48, 40, 30, 0.10);
+
+  --knopf-voll-schatten:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(20, 40, 70, 0.18),
+    0 1px 2px rgba(28, 48, 78, 0.30),
+    0 2px 6px -1px rgba(28, 48, 78, 0.20);
+
+  /* -- Abstände — 4-Punkt-Raster ---------------------------------------- */
+  --a1: 4px;  --a2: 8px;  --a3: 12px; --a4: 16px;
+  --a5: 20px; --a6: 24px; --a8: 32px; --a10: 40px; --a12: 48px;
+
+  /* -- Radien — vier Stufen, eine Reihe --------------------------------- */
+  --r-klein: 9px;
+  --r-mittel: 13px;
+  --r-gross: 20px;
   --r-rund: 999px;
-
-  /* -- Schriftstufen ---------------------------------------------------
-     Neun benannte Stufen statt vierzehn gewachsener Werte. Hierarchie
-     entsteht über Größe und Strichstärke, nicht über einen Schriftwechsel:
-     eine zweite Schriftfamilie in einer Anwendung sieht nach Textverarbeitung
-     aus, nicht nach Programm. */
-  --t-titel-1: 400 28px/34px var(--familie);
-  --t-titel-2: 400 22px/28px var(--familie);
-  --t-titel-3: 590 20px/25px var(--familie);
-  --t-kopf: 590 17px/22px var(--familie);
-  --t-fliess: 400 17px/25px var(--familie);
-  --t-ruf: 400 16px/21px var(--familie);
-  --t-unter: 400 15px/20px var(--familie);
-  --t-fuss: 400 13px/18px var(--familie);
-  --t-bild: 400 12px/16px var(--familie);
 
   --familie: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
              system-ui, sans-serif;
 
-  /* Die kleinste Fläche, die ein Finger sicher trifft. */
+  /* -- Schriftstufen ----------------------------------------------------- */
+  --t-titel-1: 650 32px/38px var(--familie);
+  --t-titel-2: 650 24px/30px var(--familie);
+  --t-titel-3: 600 17px/23px var(--familie);
+  --t-kopf: 600 15px/21px var(--familie);
+  --t-fliess: 400 16px/24px var(--familie);
+  --t-ruf: 400 15px/22px var(--familie);
+  --t-unter: 400 13.5px/20px var(--familie);
+  --t-fuss: 400 12.5px/18px var(--familie);
+  --t-bild: 550 11.5px/16px var(--familie);
+
   --griff: 44px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --grund: #121110;
-    --flaeche: #1c1a18;
-    --flaeche-gehoben: #232120;
+    --grund-1: #1a1816;
+    --grund-2: #141210;
+    --flaeche-1: #262320;
+    --flaeche-2: #221f1c;
+    --mulde: #1c1a17;
 
-    --schrift: #ece9e3;
-    --schrift-2: #9a958c;
-    --schrift-3: #6f6a62;
+    --schrift: #f0ece5;
+    --schrift-2: #a49e94;
+    --schrift-3: #736d64;
 
-    --trenner: #2e2b27;
-    --fuellung: rgba(255, 253, 248, 0.06);
+    --kante: rgba(255, 250, 240, 0.10);
+    --kante-stark: rgba(255, 250, 240, 0.16);
+    --fuellung: rgba(255, 250, 240, 0.06);
 
-    --akzent: #6fa3d6;
-    --akzent-schwach: rgba(111, 163, 214, 0.16);
-    --warn: #d9a05f;
-    --gefahr: #d97b6f;
-    --gut: #66b088;
+    --akzent: #6ea5da;
+    --akzent-hell: #6ea5da;
+    --akzent-dunkel: #4a80b4;
+    --akzent-schwach: rgba(110, 165, 218, 0.16);
+    --warn: #cf9f6d;
+    --gefahr: #d3796c;
+    --gut: #63a884;
+
+    --karte-schatten:
+      inset 0 1px 0 rgba(255, 255, 255, 0.055),
+      0 0 0 0.5px rgba(0, 0, 0, 0.5),
+      0 12px 28px -8px rgba(0, 0, 0, 0.45),
+      0 36px 68px -20px rgba(0, 0, 0, 0.4);
+    --knopf-schatten:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 0.5px rgba(0, 0, 0, 0.55),
+      0 1px 2px rgba(0, 0, 0, 0.35);
   }
 }
 
 /* Die alten Namen bleiben gültig, solange noch Regeln darauf zeigen. */
 :root {
-  --bg: var(--grund);
-  --panel: var(--flaeche);
+  --bg: var(--grund-1);
+  --panel: var(--flaeche-1);
   --fg: var(--schrift);
   --muted: var(--schrift-2);
-  --line: var(--trenner);
+  --line: var(--kante);
   --accent: var(--akzent);
   --danger: var(--gefahr);
 }
 
 * { box-sizing: border-box; }
+
+html { background: var(--grund-2); }
 
 /* Die Browser-Regel für `hidden` ist `display: none` mit der schwächsten
    Spezifität, die es gibt. Jede eigene Regel mit `display:` schlägt sie —
@@ -104,11 +136,29 @@
 
 body {
   margin: 0;
-  background: var(--grund);
+  min-height: 100vh;
   color: var(--schrift);
   font: var(--t-fliess);
   -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(255, 252, 246, 0.85), transparent 58%),
+    radial-gradient(760px 460px at 102% 2%, rgba(206, 219, 236, 0.42), transparent 56%),
+    linear-gradient(168deg, var(--grund-1) 0%, var(--grund-2) 100%);
+  background-attachment: fixed;
 }
+
+/* Feines Korn über allem. Der Unterschied zwischen gedruckt und gerendert —
+   und der Grund, warum eine flache Fläche billig aussieht. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+}
+
+body > * { position: relative; z-index: 1; }
 
 /* -- Navigation ---------------------------------------------------------- */
 
@@ -119,33 +169,36 @@ nav {
      Seite nach rechts, und die letzten Reiter stehen außerhalb. Gemessen ab
      etwa 900 px abwärts. */
   flex-wrap: wrap;
-  gap: var(--a1);
+  gap: var(--a3);
   padding: 0 var(--a5);
   min-height: 52px;
-  border-bottom: 1px solid var(--trenner);
-  background: color-mix(in srgb, var(--flaeche) 78%, transparent);
-  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: none;
+  box-shadow: 0 0.5px 0 var(--kante);
+  background: color-mix(in srgb, var(--flaeche-1) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(24px);
   position: sticky;
   top: 0;
   z-index: 5;
 }
 
-nav strong { margin-right: 0.5rem; }
+nav strong { font: var(--t-kopf); font-weight: 650; letter-spacing: -0.015em; margin-right: var(--a2); }
 
 .tab {
   border: none;
   background: transparent;
+  box-shadow: none;
   color: var(--schrift-2);
   padding: 0 var(--a3);
-  min-height: 30px;
+  min-height: 28px;
   border-radius: var(--r-klein);
   cursor: pointer;
   font: var(--t-unter);
   font-weight: 500;
 }
 
-.tab:hover { background: var(--fuellung); color: var(--schrift); }
-.tab.active { color: var(--schrift); background: var(--fuellung); }
+.tab:hover { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
+.tab:active:not(:disabled) { box-shadow: none; transform: none; }
+.tab.active { color: var(--schrift); background: var(--akzent-schwach); }
 
 .status {
   margin-left: auto;
@@ -155,20 +208,26 @@ nav strong { margin-right: 0.5rem; }
 .status.ready { color: var(--accent); }
 .status.error { color: var(--warn); }
 
-main { max-width: 720px; margin: 0 auto; padding: var(--a10) var(--a5) var(--a12); }
+main { max-width: 980px; margin: 0 auto; padding: var(--a6) var(--a10) var(--a12); }
 
 /* -- Formulare ----------------------------------------------------------- */
 
 form { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
+/* Ein Eingabefeld ist eine Mulde: der Schatten liegt innen. Ein Knopf ist
+   erhaben: der Schatten liegt außen. Daran erkennt eine Hand, was sie tun
+   soll, bevor sie den Text gelesen hat. */
 input, select, textarea {
   font: var(--t-ruf);
-  border: 1px solid var(--trenner);
-  border-radius: var(--r-mittel);
+  border: none;
+  border-radius: var(--r-klein);
   padding: 0 var(--a3);
-  min-height: 36px;
-  background: var(--flaeche);
+  min-height: 34px;
+  background: var(--mulde);
   color: inherit;
+  box-shadow:
+    inset 0 1px 2px rgba(48, 40, 30, 0.07),
+    inset 0 0 0 0.5px var(--kante-stark);
 }
 
 input:focus-visible, select:focus-visible, textarea:focus-visible,
@@ -180,46 +239,61 @@ button:focus-visible {
 textarea { padding: var(--a2) var(--a3); }
 input { flex: 1 1 16rem; }
 input:disabled { opacity: 0.5; }
+input::placeholder, textarea::placeholder { color: var(--schrift-3); }
 
-/* Die stille Vorgabe: getönter Text, kein Rahmen. Ein Rahmen ist ein
-   Versprechen von Gewicht — wenn ihn alles trägt, trägt ihn niemand. */
 button {
-  font: var(--t-ruf);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--t-unter);
   font-weight: 500;
   border: none;
-  border-radius: var(--r-mittel);
-  padding: 0 var(--a3);
-  min-height: 36px;
-  background: transparent;
-  color: var(--akzent);
+  border-radius: var(--r-klein);
+  padding: 0 var(--a4);
+  min-height: 32px;
   cursor: pointer;
+  color: #3a3630;
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, #f4f1ec 100%);
+  box-shadow: var(--knopf-schatten);
 }
 
-button:hover:not(:disabled) { background: var(--akzent-schwach); }
-button:active:not(:disabled) { opacity: 0.7; }
-button:disabled { opacity: 0.4; cursor: default; }
+button:hover:not(:disabled) { background: linear-gradient(180deg, #ffffff 0%, #efebe4 100%); }
+/* Beim Drücken sinkt der Knopf ein — Schatten nach innen, ein Pixel tiefer. */
+button:active:not(:disabled) {
+  box-shadow: inset 0 1px 3px rgba(48, 40, 30, 0.20), 0 0 0 0.5px var(--kante-stark);
+  transform: translateY(0.5px);
+}
+button:disabled { opacity: 0.45; cursor: default; box-shadow: var(--knopf-schatten); }
 
 /* Genau einer je Ansicht: der, den man drücken soll. */
 button.primary {
-  background: var(--akzent);
   color: #ffffff;
+  font-weight: 550;
   padding: 0 var(--a5);
+  text-shadow: 0 1px 0 rgba(20, 40, 70, 0.22);
+  background: linear-gradient(180deg, var(--akzent-hell) 0%, var(--akzent-dunkel) 100%);
+  box-shadow: var(--knopf-voll-schatten);
 }
-button.primary:hover:not(:disabled) { background: var(--akzent); filter: brightness(1.08); }
-
-/* Zurückhaltend, aber vorhanden. */
-button.ghost { color: var(--schrift-2); }
-button.ghost:hover:not(:disabled) { background: var(--fuellung); color: var(--schrift); }
-
-/* Zerstörerisches färbt sich erst, wenn die Hand darüber ist. */
-button.gefahr:hover:not(:disabled) { color: var(--gefahr); background: color-mix(in srgb, var(--gefahr) 10%, transparent); }
-
-button.small {
-  font: var(--t-fuss);
-  font-weight: 500;
-  min-height: 30px;
-  padding: 0 var(--a3);
+button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5a95d2 0%, #3d79b6 100%);
 }
+button.primary:active:not(:disabled) {
+  box-shadow: inset 0 2px 4px rgba(20, 40, 70, 0.35);
+  transform: translateY(0.5px);
+}
+
+/* Ohne Fassung: was da ist, aber nicht ruft. */
+button.ghost {
+  background: transparent;
+  box-shadow: none;
+  color: var(--schrift-2);
+}
+button.ghost:hover:not(:disabled) { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
+button.ghost:active:not(:disabled) { box-shadow: none; }
+
+button.gefahr:hover:not(:disabled) { color: var(--gefahr); }
+
+button.small { font: var(--t-fuss); font-weight: 500; min-height: 28px; padding: 0 var(--a3); }
 
 .row { display: flex; gap: var(--a2); width: 100%; }
 
@@ -371,9 +445,8 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
    groß. Sie ist das Erste, was jemand liest. */
 #greeting {
   font: var(--t-titel-1);
-  font-weight: 640;
-  letter-spacing: -0.02em;
-  margin: 0 0 var(--a5);
+  letter-spacing: -0.026em;
+  margin: var(--a2) 0 0;
 }
 
 .cards {
@@ -628,84 +701,140 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 .proposal .row { margin-top: 0.8rem; }
 .proposal .error { color: var(--danger); font: var(--t-fuss); margin: 0.5rem 0 0; }
 
-/* -- Briefing -------------------------------------------------------------- */
+/* -- Dashboard -------------------------------------------------------------- */
 
-/* Vorher stand hier eine Serifenschrift. Das sah aus wie ein Textdokument in
-   einem Programmfenster — der klassische Fehlgriff, Hierarchie über einen
-   Schriftwechsel zu bauen statt über Größe und Strichstärke. Eine Familie. */
-#briefing { margin: 0 0 var(--a8); }
-
-#briefing-intro {
+.datum {
   margin: 0;
-  font: var(--t-fliess);
-  color: var(--schrift-2);
-  text-wrap: pretty;
+  font: var(--t-bild);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--schrift-3);
 }
+
+/* Eine Karte ist Material. Verlauf, Lichtkante, Fassung, zwei Schatten. */
+.karte {
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  border-radius: var(--r-gross);
+  box-shadow: var(--karte-schatten);
+  padding: var(--a5) var(--a6);
+}
+
+.karte-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: var(--a3);
+  margin-bottom: var(--a3);
+}
+
+.karte-kopf h3 { margin: 0; font: var(--t-kopf); }
+.karte-kopf .muted { margin: 0; margin-left: auto; font: var(--t-fuss); }
+
+#briefing { margin-top: var(--a5); }
+#briefing-intro { margin: 0; font: var(--t-ruf); color: var(--schrift-2); }
 
 #briefing-punkte {
   list-style: none;
-  margin: var(--a5) 0 0;
+  margin: var(--a2) 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--a1);
-  counter-reset: punkt;
 }
 
-/* `li` ist im Bestand ein zweispaltiges Raster mit Trennlinie — hier nicht. */
+/* Je Sache eine Zeile: Satz links, ein Knopf rechts, Haarlinie dazwischen. */
 #briefing-punkte li {
-  display: grid;
-  grid-template-columns: 26px 1fr;
-  gap: 0 var(--a3);
-  padding: var(--a3) var(--a3) var(--a3) 0;
-  margin-left: calc(var(--a3) * -1);
-  padding-left: var(--a3);
-  border-bottom: none;
-  border-radius: var(--r-mittel);
-  counter-increment: punkt;
+  display: flex;
+  align-items: center;
+  gap: var(--a5);
+  padding: var(--a3) 0;
+  min-height: var(--griff);
+  border-bottom: 0.5px solid var(--kante);
 }
 
-#briefing-punkte li:hover { background: var(--fuellung); }
-
-/* Die Ziffer ist eine Marke, kein Text: kleiner, tabellarisch, ruhig. */
-#briefing-punkte li::before {
-  content: counter(punkt);
-  grid-column: 1;
-  grid-row: 1;
-  font: var(--t-fuss);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--schrift-3);
-  line-height: 25px;
-}
-
-#briefing-punkte li:first-child::before { color: var(--gefahr); }
+#briefing-punkte li:last-child { border-bottom: none; padding-bottom: 0; }
 
 #briefing-punkte .satz {
-  grid-column: 2;
-  grid-row: 1;
   margin: 0;
+  flex-grow: 1;
   font: var(--t-fliess);
-  max-width: 62ch;
+  max-width: 68ch;
   text-wrap: pretty;
 }
 
-#briefing-punkte .tat {
-  grid-column: 2;
-  grid-row: 2;
-  margin-top: var(--a2);
-  margin-left: calc(var(--a3) * -1);
-  justify-self: start;
-}
+#briefing-punkte .tat { flex: 0 0 auto; }
 
 #briefing-nachsatz {
-  margin: var(--a6) 0 0;
-  padding-top: var(--a4);
-  border-top: 1px solid var(--trenner);
+  margin: var(--a4) 0 0;
+  padding-top: var(--a3);
+  border-top: 0.5px solid var(--kante);
   font: var(--t-unter);
   color: var(--schrift-2);
-  max-width: 68ch;
 }
+
+/* -- Kacheln ----------------------------------------------------------------
+   Drei Wege in die Tiefe. Sie stehen nur da, wenn es etwas zu zeigen gibt. */
+
+#kacheln {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--a4);
+  margin-top: var(--a4);
+}
+
+#kacheln:empty { display: none; }
+
+.kachel {
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  border-radius: var(--r-gross);
+  box-shadow: var(--karte-schatten);
+  padding: var(--a4) var(--a5);
+}
+
+.kachel .marke {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--r-rund);
+  font: var(--t-bild);
+  background: var(--fuellung);
+  color: var(--schrift-2);
+}
+
+.kachel .marke.jetzt { background: var(--akzent-schwach); color: var(--akzent); }
+
+.kachel h4 { margin: var(--a3) 0 0; font: var(--t-titel-3); letter-spacing: -0.012em; }
+.kachel p { margin: var(--a1) 0 0; font: var(--t-unter); color: var(--schrift-2); }
+.kachel button { margin-top: var(--a4); align-self: flex-start; }
+
+/* -- Die Frage auf dem Dashboard --------------------------------------------- */
+
+#dashboard-frage {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  margin-top: var(--a5);
+  padding: var(--a1);
+  padding-left: var(--a5);
+  border-radius: var(--r-mittel);
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 0.5px var(--kante-stark),
+    0 2px 6px -1px rgba(48, 40, 30, 0.09),
+    0 10px 24px -10px rgba(48, 40, 30, 0.14);
+}
+
+#dashboard-frage-feld {
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font: var(--t-ruf);
+}
+
+button.rund { width: 34px; min-height: 34px; padding: 0; border-radius: var(--r-klein); }
 
 /* -- Orte und Fächer -------------------------------------------------------- */
 
@@ -835,5 +964,45 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 
 /* Überfälliges wird nicht rot durchgefärbt — der Satz bleibt lesbar, das
    Merkmal steht daneben. */
+.overdue .statement { color: var(--schrift); }
+.overdue .meta { color: var(--gefahr); }
+
+/* -- Aufgaben und Termine unter dem Dashboard -------------------------------
+   Dasselbe Material wie die Hauptkarte. Zwei Sprachen auf einer Seite sind
+   der sicherste Weg, dass beide billig aussehen. */
+
+#view-dashboard .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--a4);
+  margin-top: var(--a5);
+}
+
+#view-dashboard .card {
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  border: none;
+  border-radius: var(--r-gross);
+  box-shadow: var(--karte-schatten);
+  padding: var(--a5);
+}
+
+#view-dashboard .card h3 {
+  margin: 0 0 var(--a3);
+  font: var(--t-kopf);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#view-dashboard .card ul { margin: var(--a3) 0 0; }
+
+#view-dashboard .card li {
+  padding: var(--a3) 0;
+  min-height: var(--griff);
+  align-content: center;
+  border-bottom: 0.5px solid var(--kante);
+}
+#view-dashboard .card li:last-child { border-bottom: none; }
+
+/* Überfälliges färbt nicht den Satz, sondern seine Angabe. */
 .overdue .statement { color: var(--schrift); }
 .overdue .meta { color: var(--gefahr); }

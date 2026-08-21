@@ -488,6 +488,10 @@ function renderBriefing(briefing) {
 
   kasten.hidden = false;
   $("#briefing-intro").textContent = briefing.einleitung ?? "";
+  // Der Satz, der das ganze Vertrauensmodell trägt, steht im Kartenkopf und
+  // nicht irgendwo unten: nichts verlässt den Rechner von selbst.
+  const gesendet = $("#briefing-nichts-gesendet");
+  if (gesendet) gesendet.textContent = "Nichts wurde versendet";
 
   for (const punkt of briefing.punkte ?? []) {
     const li = document.createElement("li");
@@ -542,10 +546,91 @@ function fehlerzeile(text) {
   return p;
 }
 
+// Drei Wege in die Tiefe — aber nur die, für die es heute etwas zu zeigen
+// gibt. Eine Kachel, die „nichts" sagt, ist eine Kachel zu viel.
+function kachel({ marke, jetzt, titel, zeile, knopf, ziel }) {
+  const el = document.createElement("article");
+  el.className = "kachel";
+
+  const m = document.createElement("span");
+  m.className = jetzt ? "marke jetzt" : "marke";
+  m.textContent = marke;
+
+  const h = document.createElement("h4");
+  h.textContent = titel;
+
+  const p = document.createElement("p");
+  p.textContent = zeile;
+
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = knopf;
+  b.addEventListener("click", () => openTab(ziel));
+
+  el.append(m, h, p, b);
+  return el;
+}
+
+function renderKacheln(data) {
+  const feld = $("#kacheln");
+  if (!feld) return;
+  feld.replaceChildren();
+
+  const termin = (data.calendar?.items ?? [])[0];
+  if (termin) {
+    const beginn = new Date(termin.start);
+    feld.append(kachel({
+      marke: `Um ${beginn.getHours()}:${String(beginn.getMinutes()).padStart(2, "0")} Uhr`,
+      jetzt: true,
+      titel: termin.summary || "Termin",
+      zeile: termin.location || "Nichts weiter notiert",
+      knopf: "Vorbereiten",
+      ziel: "chat",
+    }));
+  }
+
+  const ungelesen = data.mail?.unread ?? 0;
+  if (ungelesen) {
+    feld.append(kachel({
+      marke: "Posteingang",
+      titel: ungelesen === 1 ? "Eine ungelesene Nachricht" : `${ungelesen} ungelesene Nachrichten`,
+      zeile: "Nichts davon gilt als deine Meinung",
+      knopf: "Ansehen",
+      ziel: "chat",
+    }));
+  }
+
+  const offen = data.proposals?.pending ?? 0;
+  if (offen) {
+    feld.append(kachel({
+      marke: "Aus deinen Notizen",
+      titel: offen === 1 ? "Eine Sache herausgelesen" : `${offen} Dinge herausgelesen`,
+      zeile: "Nichts davon steht schon im Gedächtnis",
+      knopf: "Durchgehen",
+      ziel: "proposals",
+    }));
+  }
+
+  const roh = data.episodes?.pending ?? 0;
+  if (roh && !offen) {
+    feld.append(kachel({
+      marke: "Eingelesen",
+      titel: roh === 1 ? "Eine Notiz wartet" : `${roh} Notizen warten`,
+      zeile: "Noch nicht angesehen",
+      knopf: "Verdichten",
+      ziel: "ingest",
+    }));
+  }
+}
+
 async function loadDashboard() {
   $("#greeting").textContent = greeting();
+  $("#datum").textContent = new Date().toLocaleDateString("de-DE", {
+    weekday: "long", day: "numeric", month: "long",
+  });
   const data = await api("/dashboard");
   renderBriefing(data.briefing);
+  renderKacheln(data);
   renderProjectTeaser(data.projects);
   renderTasks(data.tasks);
   renderEvents(data.calendar);
@@ -1056,6 +1141,22 @@ function betreffFuerAntwort(betreff) {
   if (!rein) return "Re:";
   return /^(re|aw|antw)\s*:/i.test(rein) ? rein : `Re: ${rein}`;
 }
+
+// Die Frage vom Dashboard führt ins Gespräch und schickt sie dort ab. Kein
+// zweiter Weg zum Modell — derselbe Weg, nur kürzer. Sonst gäbe es zwei
+// Stellen, an denen die Freigabeprüfung hängt, und irgendwann nur noch eine.
+$("#dashboard-frage").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const feld = $("#dashboard-frage-feld");
+  const text = feld.value.trim();
+  if (!text) return;
+
+  feld.value = "";
+  openTab("chat");
+  const eingabe = $("#chat-input");
+  eingabe.value = text;
+  $("#chat-form").requestSubmit();
+});
 
 $("#chat-form").addEventListener("submit", async (event) => {
   event.preventDefault();

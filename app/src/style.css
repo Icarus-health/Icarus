@@ -1,28 +1,129 @@
 :root {
-  --bg: #fbfaf8;
-  --panel: #ffffff;
-  --fg: #1b1a18;
-  --muted: #6d6a64;
-  --line: #e3e0d9;
-  --accent: #3b6ea5;
-  --warn: #a8621f;
-  --danger: #b4483c;
+  /* -- Grund und Flächen -------------------------------------------------
+     Der Grund ist kein Farbwert, sondern eine belichtete Fläche: warm von
+     oben links, kühl von rechts, mit feinem Korn darüber. Eine flache Farbe
+     sieht nach Vorlage aus. */
+  --grund-1: #faf7f2;
+  --grund-2: #f2ede5;
+  --flaeche-1: #fffefc;
+  --flaeche-2: #fbf9f5;
+  --mulde: #f7f4ef;
+
+  --schrift: #211e1a;
+  --schrift-2: #6f6a61;
+  --schrift-3: #a8a299;
+
+  --kante: rgba(48, 40, 30, 0.09);
+  --kante-stark: rgba(48, 40, 30, 0.17);
+  --fuellung: rgba(48, 40, 30, 0.055);
+
+  --akzent: #3572b0;
+  --akzent-hell: #4f8ccb;
+  --akzent-dunkel: #3670ac;
+  --akzent-schwach: rgba(53, 114, 176, 0.13);
+  --warn: #a9805a;
+  --gefahr: #b0483c;
+  --gut: #3f7f5e;
+
+  /* -- Material ----------------------------------------------------------
+     Eine Karte trägt eine Lichtkante oben, eine haarfeine Fassung und zwei
+     Schatten: einer eng für die Kante, einer weit für den Raum. Das ist der
+     Unterschied zwischen gebaut und gezeichnet. */
+  --karte-schatten:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 0.5px rgba(48, 40, 30, 0.09),
+    0 2px 4px -1px rgba(48, 40, 30, 0.07),
+    0 12px 28px -8px rgba(48, 40, 30, 0.16),
+    0 36px 68px -20px rgba(48, 40, 30, 0.14);
+
+  --knopf-schatten:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 0 0 0.5px rgba(48, 40, 30, 0.17),
+    0 1px 2px rgba(48, 40, 30, 0.10);
+
+  --knopf-voll-schatten:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    inset 0 -1px 0 rgba(20, 40, 70, 0.18),
+    0 1px 2px rgba(28, 48, 78, 0.30),
+    0 2px 6px -1px rgba(28, 48, 78, 0.20);
+
+  /* -- Abstände — 4-Punkt-Raster ---------------------------------------- */
+  --a1: 4px;  --a2: 8px;  --a3: 12px; --a4: 16px;
+  --a5: 20px; --a6: 24px; --a8: 32px; --a10: 40px; --a12: 48px;
+
+  /* -- Radien — vier Stufen, eine Reihe --------------------------------- */
+  --r-klein: 9px;
+  --r-mittel: 13px;
+  --r-gross: 20px;
+  --r-rund: 999px;
+
+  --familie: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
+             system-ui, sans-serif;
+
+  /* -- Schriftstufen ----------------------------------------------------- */
+  --t-titel-1: 650 32px/38px var(--familie);
+  --t-titel-2: 650 24px/30px var(--familie);
+  --t-titel-3: 600 17px/23px var(--familie);
+  --t-kopf: 600 15px/21px var(--familie);
+  --t-fliess: 400 16px/24px var(--familie);
+  --t-ruf: 400 15px/22px var(--familie);
+  --t-unter: 400 13.5px/20px var(--familie);
+  --t-fuss: 400 12.5px/18px var(--familie);
+  --t-bild: 550 11.5px/16px var(--familie);
+
+  --griff: 44px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #171614;
-    --panel: #201e1c;
-    --fg: #ece9e3;
-    --muted: #9a958c;
-    --line: #302e2a;
-    --accent: #7aa7d9;
-    --warn: #d9a05f;
-    --danger: #d97b6f;
+    --grund-1: #1a1816;
+    --grund-2: #141210;
+    --flaeche-1: #262320;
+    --flaeche-2: #221f1c;
+    --mulde: #1c1a17;
+
+    --schrift: #f0ece5;
+    --schrift-2: #a49e94;
+    --schrift-3: #736d64;
+
+    --kante: rgba(255, 250, 240, 0.10);
+    --kante-stark: rgba(255, 250, 240, 0.16);
+    --fuellung: rgba(255, 250, 240, 0.06);
+
+    --akzent: #6ea5da;
+    --akzent-hell: #6ea5da;
+    --akzent-dunkel: #4a80b4;
+    --akzent-schwach: rgba(110, 165, 218, 0.16);
+    --warn: #cf9f6d;
+    --gefahr: #d3796c;
+    --gut: #63a884;
+
+    --karte-schatten:
+      inset 0 1px 0 rgba(255, 255, 255, 0.055),
+      0 0 0 0.5px rgba(0, 0, 0, 0.5),
+      0 12px 28px -8px rgba(0, 0, 0, 0.45),
+      0 36px 68px -20px rgba(0, 0, 0, 0.4);
+    --knopf-schatten:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 0 0 0.5px rgba(0, 0, 0, 0.55),
+      0 1px 2px rgba(0, 0, 0, 0.35);
   }
 }
 
+/* Die alten Namen bleiben gültig, solange noch Regeln darauf zeigen. */
+:root {
+  --bg: var(--grund-1);
+  --panel: var(--flaeche-1);
+  --fg: var(--schrift);
+  --muted: var(--schrift-2);
+  --line: var(--kante);
+  --accent: var(--akzent);
+  --danger: var(--gefahr);
+}
+
 * { box-sizing: border-box; }
+
+html { background: var(--grund-2); }
 
 /* Die Browser-Regel für `hidden` ist `display: none` mit der schwächsten
    Spezifität, die es gibt. Jede eigene Regel mit `display:` schlägt sie —
@@ -35,10 +136,29 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  min-height: 100vh;
+  color: var(--schrift);
+  font: var(--t-fliess);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(255, 252, 246, 0.85), transparent 58%),
+    radial-gradient(760px 460px at 102% 2%, rgba(206, 219, 236, 0.42), transparent 56%),
+    linear-gradient(168deg, var(--grund-1) 0%, var(--grund-2) 100%);
+  background-attachment: fixed;
 }
+
+/* Feines Korn über allem. Der Unterschied zwischen gedruckt und gerendert —
+   und der Grund, warum eine flache Fläche billig aussieht. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+}
+
+body > * { position: relative; z-index: 1; }
 
 /* -- Navigation ---------------------------------------------------------- */
 
@@ -49,70 +169,133 @@ nav {
      Seite nach rechts, und die letzten Reiter stehen außerhalb. Gemessen ab
      etwa 900 px abwärts. */
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  gap: var(--a3);
+  padding: 0 var(--a5);
+  min-height: 52px;
+  border-bottom: none;
+  box-shadow: 0 0.5px 0 var(--kante);
+  background: color-mix(in srgb, var(--flaeche-1) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(24px);
   position: sticky;
   top: 0;
   z-index: 5;
 }
 
-nav strong { margin-right: 0.5rem; }
+nav strong { font: var(--t-kopf); font-weight: 650; letter-spacing: -0.015em; margin-right: var(--a2); }
 
 .tab {
   border: none;
   background: transparent;
-  color: var(--muted);
-  padding: 0.35rem 0.6rem;
-  border-radius: 0.4rem;
+  box-shadow: none;
+  color: var(--schrift-2);
+  padding: 0 var(--a3);
+  min-height: 28px;
+  border-radius: var(--r-klein);
   cursor: pointer;
-  font: inherit;
+  font: var(--t-unter);
+  font-weight: 500;
 }
 
-.tab:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.tab.active { color: var(--fg); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.tab:hover { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
+.tab:active:not(:disabled) { box-shadow: none; transform: none; }
+.tab.active { color: var(--schrift); background: var(--akzent-schwach); }
 
 .status {
   margin-left: auto;
-  font-size: 0.8125rem;
-  color: var(--muted);
+  font: var(--t-fuss);
+  color: var(--schrift-3);
 }
 .status.ready { color: var(--accent); }
-.status.error { color: var(--danger); }
+.status.error { color: var(--warn); }
 
-main { max-width: 46rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+main { max-width: 980px; margin: 0 auto; padding: var(--a6) var(--a10) var(--a12); }
 
 /* -- Formulare ----------------------------------------------------------- */
 
 form { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
-input, select, button, textarea {
-  font: inherit;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.55rem 0.7rem;
-  background: var(--panel);
+/* Ein Eingabefeld ist eine Mulde: der Schatten liegt innen. Ein Knopf ist
+   erhaben: der Schatten liegt außen. Daran erkennt eine Hand, was sie tun
+   soll, bevor sie den Text gelesen hat. */
+input, select, textarea {
+  font: var(--t-ruf);
+  border: none;
+  border-radius: var(--r-klein);
+  padding: 0 var(--a3);
+  min-height: 34px;
+  background: var(--mulde);
   color: inherit;
+  box-shadow:
+    inset 0 1px 2px rgba(48, 40, 30, 0.07),
+    inset 0 0 0 0.5px var(--kante-stark);
 }
 
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--akzent);
+  outline-offset: 2px;
+}
+
+textarea { padding: var(--a2) var(--a3); }
 input { flex: 1 1 16rem; }
-input:disabled { opacity: 0.6; }
+input:disabled { opacity: 0.5; }
+input::placeholder, textarea::placeholder { color: var(--schrift-3); }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--t-unter);
+  font-weight: 500;
+  border: none;
+  border-radius: var(--r-klein);
+  padding: 0 var(--a4);
+  min-height: 32px;
   cursor: pointer;
-  border-color: var(--accent);
-  color: var(--accent);
-  background: transparent;
+  color: #3a3630;
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, #f4f1ec 100%);
+  box-shadow: var(--knopf-schatten);
 }
-button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-button:disabled { opacity: 0.5; cursor: default; }
 
-button.ghost { border-color: var(--line); color: var(--muted); }
-button.ghost:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
-button.small { padding: 0.3rem 0.55rem; font-size: 0.8125rem; }
+button:hover:not(:disabled) { background: linear-gradient(180deg, #ffffff 0%, #efebe4 100%); }
+/* Beim Drücken sinkt der Knopf ein — Schatten nach innen, ein Pixel tiefer. */
+button:active:not(:disabled) {
+  box-shadow: inset 0 1px 3px rgba(48, 40, 30, 0.20), 0 0 0 0.5px var(--kante-stark);
+  transform: translateY(0.5px);
+}
+button:disabled { opacity: 0.45; cursor: default; box-shadow: var(--knopf-schatten); }
 
-.row { display: flex; gap: 0.5rem; width: 100%; }
+/* Genau einer je Ansicht: der, den man drücken soll. */
+button.primary {
+  color: #ffffff;
+  font-weight: 550;
+  padding: 0 var(--a5);
+  text-shadow: 0 1px 0 rgba(20, 40, 70, 0.22);
+  background: linear-gradient(180deg, var(--akzent-hell) 0%, var(--akzent-dunkel) 100%);
+  box-shadow: var(--knopf-voll-schatten);
+}
+button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5a95d2 0%, #3d79b6 100%);
+}
+button.primary:active:not(:disabled) {
+  box-shadow: inset 0 2px 4px rgba(20, 40, 70, 0.35);
+  transform: translateY(0.5px);
+}
+
+/* Ohne Fassung: was da ist, aber nicht ruft. */
+button.ghost {
+  background: transparent;
+  box-shadow: none;
+  color: var(--schrift-2);
+}
+button.ghost:hover:not(:disabled) { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
+button.ghost:active:not(:disabled) { box-shadow: none; }
+
+button.gefahr:hover:not(:disabled) { color: var(--gefahr); }
+
+button.small { font: var(--t-fuss); font-weight: 500; min-height: 28px; padding: 0 var(--a3); }
+
+.row { display: flex; gap: var(--a2); width: 100%; }
 
 /* -- Gespräch ------------------------------------------------------------ */
 
@@ -120,7 +303,7 @@ button.small { padding: 0.3rem 0.55rem; font-size: 0.8125rem; }
 
 .msg {
   padding: 0.6rem 0.8rem;
-  border-radius: 0.75rem;
+  border-radius: var(--r-gross);
   max-width: 85%;
   white-space: pre-wrap;
 }
@@ -136,7 +319,7 @@ button.small { padding: 0.3rem 0.55rem; font-size: 0.8125rem; }
 /* Was ohne Rückfrage lief — sichtbar, aber zurückhaltend. */
 .notice {
   align-self: flex-start;
-  font-size: 0.8125rem;
+  font: var(--t-fuss);
   color: var(--muted);
   border-left: 2px solid var(--line);
   padding-left: 0.6rem;
@@ -169,13 +352,13 @@ textarea.reply:disabled { opacity: 0.6; }
 .approval {
   display: block;
   border: 1px solid var(--warn);
-  border-radius: 0.75rem;
+  border-radius: var(--r-gross);
   padding: 0.9rem;
   margin-bottom: 1rem;
   background: color-mix(in srgb, var(--warn) 7%, var(--panel));
 }
 
-.approval h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: var(--warn); }
+.approval h3 { margin: 0 0 var(--a2); font: var(--t-kopf); color: var(--warn); }
 
 /* Der Trockenlauf ist der wichtigste Teil der Karte: vollständig und
    monospaced, damit Empfänger und Inhalt exakt lesbar sind. */
@@ -184,16 +367,16 @@ textarea.reply:disabled { opacity: 0.6; }
   padding: 0.7rem;
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--r-mittel);
   font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
   overflow-x: auto;
 }
 
-.confirm { display: block; font-size: 0.8125rem; color: var(--muted); margin: 0.6rem 0; }
+.confirm { display: block; font: var(--t-fuss); color: var(--muted); margin: 0.6rem 0; }
 .confirm input { width: 100%; margin-top: 0.3rem; }
 
-.approval .error { color: var(--danger); font-size: 0.8125rem; margin: 0.5rem 0 0; }
+.approval .error { color: var(--danger); font: var(--t-fuss); margin: 0.5rem 0 0; }
 
 /* -- Listen -------------------------------------------------------------- */
 
@@ -202,9 +385,11 @@ ul { list-style: none; margin: 1rem 0 0; padding: 0; }
 li {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 0.15rem 1rem;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid var(--line);
+  gap: var(--a1) var(--a4);
+  padding: var(--a3) 0;
+  min-height: var(--griff);
+  align-content: center;
+  border-bottom: 1px solid var(--trenner);
 }
 
 .statement { margin: 0; grid-column: 1; }
@@ -212,8 +397,8 @@ li {
 .meta {
   margin: 0;
   grid-column: 1;
-  font-size: 0.8125rem;
-  color: var(--muted);
+  font: var(--t-fuss);
+  color: var(--schrift-2);
 }
 
 .meta.inferred::before { content: "≈ "; }
@@ -239,14 +424,14 @@ li > button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
 /* -- Sonstiges ----------------------------------------------------------- */
 
 details { margin: 1rem 0; }
-summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
+summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 
 #context {
   margin: 0.5rem 0 0;
   padding: 0.7rem;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--r-mittel);
   font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   white-space: pre-wrap;
   overflow-x: auto;
@@ -256,10 +441,12 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 
 /* -- Heute ---------------------------------------------------------------- */
 
+/* Die Begrüßung ist kein Titel, sondern eine Anrede — Serife, leicht,
+   groß. Sie ist das Erste, was jemand liest. */
 #greeting {
-  font-size: 1.3rem;
-  font-weight: 600;
-  margin: 0 0 1rem;
+  font: var(--t-titel-1);
+  letter-spacing: -0.026em;
+  margin: var(--a2) 0 0;
 }
 
 .cards {
@@ -271,7 +458,7 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--r-gross);
   padding: 1rem;
 }
 
@@ -280,7 +467,7 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 0.6rem;
-  font-size: 0.95rem;
+  font: var(--t-unter);
 }
 
 .card ul { margin: 0.5rem 0 0; }
@@ -288,10 +475,11 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .card li:last-child { border-bottom: none; }
 
 .badge {
-  font-size: 0.75rem;
+  font: var(--t-bild);
+  font-weight: 590;
   font-weight: 500;
   padding: 0.1rem 0.45rem;
-  border-radius: 999px;
+  border-radius: var(--r-rund);
   background: color-mix(in srgb, var(--danger) 18%, transparent);
   color: var(--danger);
 }
@@ -321,7 +509,7 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 
 .project {
   padding: 0.6rem 0.7rem;
-  border-radius: 0.5rem;
+  border-radius: var(--r-mittel);
   cursor: pointer;
 }
 
@@ -339,12 +527,12 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 #project-detail {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--r-gross);
   padding: 1rem 1.25rem;
 }
 
 #project-detail h3 { margin: 0 0 0.3rem; }
-#project-detail h4 { margin: 1.2rem 0 0.4rem; font-size: 0.9rem; }
+#project-detail h4 { margin: var(--a6) 0 var(--a2); font: var(--t-kopf); }
 #project-detail ul { margin: 0; }
 #project-detail select { margin-top: 0.75rem; }
 #project-detail form { margin-top: 0.75rem; }
@@ -376,7 +564,7 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .episode details { margin-top: 0.4rem; }
 .episode summary {
   cursor: pointer;
-  font-size: 0.8rem;
+  font: var(--t-fuss);
   color: var(--muted, #777);
 }
 .episode pre {
@@ -394,19 +582,19 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .setup-block {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--r-gross);
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
   max-width: 42rem;
 }
 
-.setup-block h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
-.setup-block > p.muted { margin: 0 0 0.9rem; }
+.setup-block h3 { margin: 0 0 var(--a1); font: var(--t-kopf); }
+.setup-block > p.muted { margin: 0 0 var(--a4); font: var(--t-unter); color: var(--schrift-2); max-width: 62ch; }
 
 .field {
   display: block;
   margin-bottom: 0.7rem;
-  font-size: 0.85rem;
+  font: var(--t-fuss);
 }
 
 .field input,
@@ -466,7 +654,7 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .wizard-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.9rem;
+  border-radius: var(--r-gross);
   padding: 1.75rem 2rem;
   width: min(34rem, 100%);
   max-height: 90vh;
@@ -477,7 +665,7 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .wizard-card > p.muted { margin: 0 0 1.25rem; }
 
 .wizard-actions { margin-top: 1.25rem; justify-content: flex-end; }
-.wizard-steps { margin: 0.75rem 0 0; text-align: right; font-size: 0.75rem; }
+.wizard-steps { margin: 0.75rem 0 0; text-align: right; font: var(--t-bild); }
 
 #wizard-result:not(:empty) { margin-top: 0.9rem; }
 #wizard-result.error { color: var(--danger); }
@@ -494,13 +682,13 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .proposal {
   display: block;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--r-gross);
   padding: 0.9rem 1rem;
   margin-bottom: 1rem;
   background: var(--panel);
 }
 
-.proposal h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.proposal h3 { margin: 0 0 0.5rem; font: var(--t-unter); }
 
 /* Die drei Arten dürfen sich unterscheiden lassen, ohne dass die Ansicht
    unruhig wirkt — ein schmaler Rand reicht, kein Farbfeld. */
@@ -511,218 +699,310 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 .proposal .statement + .statement { margin-top: 0.2rem; }
 .proposal .evidence { margin: 0.6rem 0; }
 .proposal .row { margin-top: 0.8rem; }
-.proposal .error { color: var(--danger); font-size: 0.8125rem; margin: 0.5rem 0 0; }
+.proposal .error { color: var(--danger); font: var(--t-fuss); margin: 0.5rem 0 0; }
 
-/* -- Briefing -------------------------------------------------------------- */
+/* -- Dashboard -------------------------------------------------------------- */
 
-/* Icarus spricht in einer Serifenschrift, die Bedienung bleibt serifenlos.
-   Ausdrücklich **keine** Schrift aus dem Netz: eine Anwendung, die verspricht,
-   dass alles auf diesem Rechner bleibt, darf beim Start nicht bei Google
-   anfragen. Was das System mitbringt, reicht. */
-#briefing {
-  margin: 0 0 1.75rem;
-  font-family: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-}
-
-#briefing-intro {
+.datum {
   margin: 0;
-  font-size: 1.2rem;
-  line-height: 1.6;
-  color: var(--fg);
-  text-wrap: pretty;
+  font: var(--t-bild);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--schrift-3);
 }
+
+/* Eine Karte ist Material. Verlauf, Lichtkante, Fassung, zwei Schatten. */
+.karte {
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  border-radius: var(--r-gross);
+  box-shadow: var(--karte-schatten);
+  padding: var(--a5) var(--a6);
+}
+
+.karte-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: var(--a3);
+  margin-bottom: var(--a3);
+}
+
+.karte-kopf h3 { margin: 0; font: var(--t-kopf); }
+.karte-kopf .muted { margin: 0; margin-left: auto; font: var(--t-fuss); }
+
+#briefing { margin-top: var(--a5); }
+#briefing-intro { margin: 0; font: var(--t-ruf); color: var(--schrift-2); }
 
 #briefing-punkte {
   list-style: none;
-  margin: 1.1rem 0 0;
+  margin: var(--a2) 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-  counter-reset: punkt;
 }
 
-/* `li` ist im Bestand ein zweispaltiges Raster mit Trennlinie — hier nicht:
-   ein Vortrag hat keine Tabellenzeilen. */
+/* Je Sache eine Zeile: Satz links, ein Knopf rechts, Haarlinie dazwischen. */
 #briefing-punkte li {
-  display: grid;
-  grid-template-columns: 1.4rem 1fr;
-  gap: 0 0.85rem;
-  padding: 0;
-  border-bottom: none;
-  counter-increment: punkt;
+  display: flex;
+  align-items: center;
+  gap: var(--a5);
+  padding: var(--a3) 0;
+  min-height: var(--griff);
+  border-bottom: 0.5px solid var(--kante);
 }
 
-#briefing-punkte li::before {
-  content: counter(punkt);
-  grid-column: 1;
-  grid-row: 1;
-  font-size: 1.15rem;
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-/* Der erste Punkt ist der dringendste — die Ziffer sagt das, nicht ein Kasten. */
-#briefing-punkte li:first-child::before { color: var(--danger); }
+#briefing-punkte li:last-child { border-bottom: none; padding-bottom: 0; }
 
 #briefing-punkte .satz {
-  grid-column: 2;
-  grid-row: 1;
   margin: 0;
-  font-size: 1.15rem;
-  line-height: 1.6;
-  max-width: 58ch;
+  flex-grow: 1;
+  font: var(--t-fliess);
+  max-width: 68ch;
   text-wrap: pretty;
 }
 
-#briefing-punkte .tat {
-  grid-column: 2;
-  grid-row: 2;
-  margin-top: 0.55rem;
-  justify-self: start;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
+#briefing-punkte .tat { flex: 0 0 auto; }
 
 #briefing-nachsatz {
-  margin: 1.5rem 0 0;
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--line);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  max-width: 62ch;
+  margin: var(--a4) 0 0;
+  padding-top: var(--a3);
+  border-top: 0.5px solid var(--kante);
+  font: var(--t-unter);
+  color: var(--schrift-2);
 }
 
-/* -- Suche ----------------------------------------------------------------- */
+/* -- Kacheln ----------------------------------------------------------------
+   Drei Wege in die Tiefe. Sie stehen nur da, wenn es etwas zu zeigen gibt. */
 
-#suche {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 8vh 1rem 1rem;
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
-  backdrop-filter: blur(3px);
+#kacheln {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--a4);
+  margin-top: var(--a4);
 }
 
-#suche-fenster {
-  width: min(36rem, 100%);
-  max-height: 76vh;
+#kacheln:empty { display: none; }
+
+.kachel {
   display: flex;
   flex-direction: column;
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  border-radius: var(--r-gross);
+  box-shadow: var(--karte-schatten);
+  padding: var(--a4) var(--a5);
+}
+
+.kachel .marke {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--r-rund);
+  font: var(--t-bild);
+  background: var(--fuellung);
+  color: var(--schrift-2);
+}
+
+.kachel .marke.jetzt { background: var(--akzent-schwach); color: var(--akzent); }
+
+.kachel h4 { margin: var(--a3) 0 0; font: var(--t-titel-3); letter-spacing: -0.012em; }
+.kachel p { margin: var(--a1) 0 0; font: var(--t-unter); color: var(--schrift-2); }
+.kachel button { margin-top: var(--a4); align-self: flex-start; }
+
+/* -- Die Frage auf dem Dashboard --------------------------------------------- */
+
+#dashboard-frage {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  margin-top: var(--a5);
+  padding: var(--a1);
+  padding-left: var(--a5);
+  border-radius: var(--r-mittel);
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 0.5px var(--kante-stark),
+    0 2px 6px -1px rgba(48, 40, 30, 0.09),
+    0 10px 24px -10px rgba(48, 40, 30, 0.14);
+}
+
+#dashboard-frage-feld {
+  flex: 1 1 auto;
+  min-height: 38px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font: var(--t-ruf);
+}
+
+button.rund { width: 34px; min-height: 34px; padding: 0; border-radius: var(--r-klein); }
+
+/* -- Orte und Fächer -------------------------------------------------------- */
+
+/* Die Ablage-Leiste ist eine Ebene tiefer als die Orte oben — sie muss
+   leiser sein, sonst konkurrieren zwei Navigationen miteinander. */
+#ablage-leiste {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--a1);
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--a5) var(--a5) 0;
+}
+
+.fach {
+  border: none;
+  background: transparent;
+  color: var(--schrift-2);
+  font: var(--t-unter);
+  padding: 0 var(--a3);
+  min-height: 30px;
+  border-radius: var(--r-klein);
+  cursor: pointer;
+}
+
+.fach:hover { color: var(--fg); }
+.fach.active { color: var(--schrift); font-weight: 590; background: var(--fuellung); }
+
+/* Wenn die Ablage-Leiste steht, hat der Inhalt darunter schon Abstand. */
+#ablage-leiste:not([hidden]) + main { padding-top: var(--a5); }
+
+#mehr-menue {
+  position: absolute;
+  right: 1.4rem;
+  top: 3.2rem;
+  z-index: 20;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 0.9rem;
-  box-shadow: 0 1.5rem 3rem -0.75rem rgb(0 0 0 / 0.22);
-  overflow: hidden;
+  border-radius: var(--r-mittel);
+  box-shadow: 0 12px 28px -8px rgba(40, 34, 24, 0.22);
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
 }
 
-#suche-feld {
-  flex: 0 0 auto;
+#mehr-menue button {
   border: none;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  padding: 0.9rem 1.1rem;
-  font-size: 1.05rem;
   background: transparent;
-}
-
-#suche-feld:focus { outline: none; }
-
-#suche-ergebnis {
-  overflow-y: auto;
-  padding: 0.35rem 0;
-}
-
-.suche-gruppe {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 0.7rem 1.1rem 0.3rem;
-}
-
-.suche-treffer {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0.5rem 1.1rem;
-  cursor: pointer;
+  color: var(--fg);
   font: inherit;
-  color: inherit;
+  font: var(--t-unter);
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--r-mittel);
+  cursor: pointer;
 }
 
-.suche-treffer:hover:not(:disabled),
-.suche-treffer.gewaehlt {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+#mehr-menue button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* -- Ruhe ------------------------------------------------------------------- */
+
+/* Zwei Gruppen, nicht fünf Kacheln. Eine Gruppe ist eine Fläche mit einer
+   Überschrift darüber — nicht ein Kasten mit Rahmen. */
+/* Bei 720px Inhaltsbreite bricht in zwei Spalten jeder Aufgabentitel
+   dreimal um. Eine Spalte, untereinander. */
+#view-dashboard .cards {
+  grid-template-columns: 1fr;
+  gap: var(--a8);
+  margin-top: var(--a10);
 }
 
-.suche-treffer .titel { display: block; }
-.suche-treffer .zeile {
-  display: block;
-  font-size: 0.8125rem;
-  color: var(--muted);
-  margin-top: 0.1rem;
+#view-dashboard .card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 
-/* Fremder Text bleibt als fremder Text erkennbar, auch in einer Trefferliste.
-   Herkunft ist nicht Vertrauenswürdigkeit — das gilt hier genauso. */
-.suche-treffer .fremd {
-  display: inline-block;
-  font-size: 0.6875rem;
+/* Versalien mit Sperrung sind ein Dashboard-Reflex. Eine Gruppenüberschrift
+   ist ein normaler kleiner Satz in Sekundärfarbe. */
+#view-dashboard .card h3 {
+  font: var(--t-fuss);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--warn);
-  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
-  border-radius: 999px;
-  padding: 0 0.4rem;
-  margin-right: 0.4rem;
-  vertical-align: 0.05em;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--schrift-2);
+  margin: 0 0 var(--a2);
+  padding-left: var(--a3);
 }
 
-#suche-fuss {
-  flex: 0 0 auto;
+#view-dashboard .card > ul {
   margin: 0;
-  padding: 0.55rem 1.1rem;
-  border-top: 1px solid var(--line);
-  font-size: 0.75rem;
-}
-
-#suche-leer { padding: 1.1rem; margin: 0; }
-
-/* Suchknopf und Zustand wandern als Gruppe ans Ende. Das `auto` sitzt an der
-   Gruppe, nicht an ihren Teilen: zwei `margin-left: auto` in einer Flex-Zeile
-   teilen den freien Platz unter sich auf, und bei `flex-wrap` fällt der
-   zweite Posten in die nächste Zeile. Genau das ist hier einmal passiert —
-   sichtbar nur im Bildschirmfoto, nicht in der Messung auf Überlauf. */
-.nav-rechts {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
-
-.nav-rechts .status { margin-left: 0; }
-
-.suche-knopf {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* Nur für Vorlesegeräte: der Knopf trägt eine Lupe, aber sein Name muss
-   trotzdem irgendwo stehen. `display: none` würde ihn auch dort verschweigen. */
-.nur-vorlesen {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+  background: var(--flaeche);
+  border-radius: var(--r-gross);
   overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
+
+#view-dashboard .card li {
+  padding: var(--a3);
+  min-height: var(--griff);
+  align-content: center;
+  border-bottom: 1px solid var(--trenner);
+}
+
+/* Der Trenner beginnt am Text, nicht an der Kante — sonst zerschneidet er
+   die Fläche, statt die Zeilen zu gliedern. */
+#view-dashboard .card li:not(:last-child) {
+  border-bottom: none;
+  box-shadow: inset 0 -1px 0 0 var(--trenner);
+}
+#view-dashboard .card li:last-child { border-bottom: none; }
+
+#view-dashboard .card > .muted {
+  margin: 0;
+  padding: var(--a4) var(--a3);
+  background: var(--flaeche);
+  border-radius: var(--r-gross);
+  font: var(--t-ruf);
+  color: var(--schrift-2);
+}
+
+#task-form {
+  margin-bottom: var(--a3);
+  padding-left: 0;
+}
+
+/* Überfälliges wird nicht rot durchgefärbt — der Satz bleibt lesbar, das
+   Merkmal steht daneben. */
+.overdue .statement { color: var(--schrift); }
+.overdue .meta { color: var(--gefahr); }
+
+/* -- Aufgaben und Termine unter dem Dashboard -------------------------------
+   Dasselbe Material wie die Hauptkarte. Zwei Sprachen auf einer Seite sind
+   der sicherste Weg, dass beide billig aussehen. */
+
+#view-dashboard .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--a4);
+  margin-top: var(--a5);
+}
+
+#view-dashboard .card {
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--flaeche-2) 100%);
+  border: none;
+  border-radius: var(--r-gross);
+  box-shadow: var(--karte-schatten);
+  padding: var(--a5);
+}
+
+#view-dashboard .card h3 {
+  margin: 0 0 var(--a3);
+  font: var(--t-kopf);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#view-dashboard .card ul { margin: var(--a3) 0 0; }
+
+#view-dashboard .card li {
+  padding: var(--a3) 0;
+  min-height: var(--griff);
+  align-content: center;
+  border-bottom: 0.5px solid var(--kante);
+}
+#view-dashboard .card li:last-child { border-bottom: none; }
+
+/* Überfälliges färbt nicht den Satz, sondern seine Angabe. */
+.overdue .statement { color: var(--schrift); }
+.overdue .meta { color: var(--gefahr); }

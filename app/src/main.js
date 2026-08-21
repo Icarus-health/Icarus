@@ -249,20 +249,79 @@ $("#suche").addEventListener("click", (event) => {
   if (event.target.id === "suche") sucheSchliessen();
 });
 
-// Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann,
-// ohne dieselben vier Zeilen ein zweites Mal zu tragen.
+// Drei Orte, mehr Ansichten. Welche Ansicht zu welchem Ort gehört, steht
+// hier — und nur hier. `null` heißt: erreichbar, aber kein eigener Ort.
+const ORT = {
+  dashboard: "dashboard",
+  chat: "chat",
+  projects: "projects",
+  memory: "projects",
+  proposals: "projects",
+  ingest: "projects",
+  audit: null,
+  setup: null,
+};
+
+// Die Ablage ist der einzige Ort mit Fächern.
+const ABLAGE = new Set(["projects", "memory", "proposals", "ingest"]);
+
+// Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann.
 function openTab(name) {
-  const tab = document.querySelector(`.tab[data-view="${name}"]`);
-  if (!tab) return;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  tab.classList.add("active");
+  const ansicht = $(`#view-${name}`);
+  if (!ansicht) return;
+
   for (const view of document.querySelectorAll(".view")) view.hidden = true;
-  $(`#view-${name}`).hidden = false;
+  ansicht.hidden = false;
+
+  // Oben leuchtet der **Ort**, nicht die Ansicht: wer in „Was ich weiß“
+  // steht, ist immer noch in der Ablage.
+  const ort = ORT[name];
+  document.querySelectorAll("nav .tab").forEach((t) => {
+    t.classList.toggle("active", Boolean(ort) && t.dataset.view === ort);
+  });
+
+  const leiste = $("#ablage-leiste");
+  if (leiste) {
+    leiste.hidden = !ABLAGE.has(name);
+    leiste.querySelectorAll(".fach").forEach((f) => {
+      f.classList.toggle("active", f.dataset.view === name);
+    });
+  }
+
+  mehrSchliessen();
   REFRESH[name]?.();
 }
 
-document.querySelectorAll(".tab").forEach((tab) => {
+document.querySelectorAll("nav .tab[data-view]").forEach((tab) => {
   tab.addEventListener("click", () => openTab(tab.dataset.view));
+});
+
+document.querySelectorAll("#ablage-leiste .fach, #mehr-menue button").forEach((el) => {
+  el.addEventListener("click", () => openTab(el.dataset.view));
+});
+
+// -- Das Zahnrad ------------------------------------------------------------
+
+function mehrSchliessen() {
+  const menue = $("#mehr-menue");
+  if (!menue || menue.hidden) return;
+  menue.hidden = true;
+  $("#mehr-knopf")?.setAttribute("aria-expanded", "false");
+}
+
+$("#mehr-knopf")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const menue = $("#mehr-menue");
+  const offen = !menue.hidden;
+  menue.hidden = offen;
+  $("#mehr-knopf").setAttribute("aria-expanded", String(!offen));
+});
+
+// Ein Menü, das sich nur über seinen eigenen Knopf schließen lässt, ist eine
+// Falle. Klick daneben und Esc schließen es auch.
+document.addEventListener("click", mehrSchliessen);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") mehrSchliessen();
 });
 
 
@@ -341,6 +400,11 @@ function renderEvents(block) {
 }
 
 function renderMail(block) {
+  // Diese Karte hat „Heute“ verlassen und einen eigenen Ort bekommen.
+  // Fehlt sie, ist das kein Fehler — und kein Grund, die Seite
+  // mittendrin abbrechen zu lassen.
+  if (!$("#mail-list")) return;
+
   const list = $("#mail-list");
   list.replaceChildren();
   $("#mail-note").textContent = block.error ?? (block.items.length ? "" : "Nichts Neues.");
@@ -358,6 +422,11 @@ function renderMail(block) {
 }
 
 function renderMemoryCard(block) {
+  // Diese Karte hat „Heute“ verlassen und einen eigenen Ort bekommen.
+  // Fehlt sie, ist das kein Fehler — und kein Grund, die Seite
+  // mittendrin abbrechen zu lassen.
+  if (!$("#memory-list")) return;
+
   const list = $("#memory-list");
   list.replaceChildren();
   $("#memory-note").textContent = block.count
@@ -370,6 +439,11 @@ function renderMemoryCard(block) {
 }
 
 function renderProjectTeaser(block) {
+  // Diese Karte hat „Heute“ verlassen und einen eigenen Ort bekommen.
+  // Fehlt sie, ist das kein Fehler — und kein Grund, die Seite
+  // mittendrin abbrechen zu lassen.
+  if (!$("#project-teaser")) return;
+
   const list = $("#project-teaser");
   const items = block?.items ?? [];
   list.replaceChildren();
@@ -414,6 +488,10 @@ function renderBriefing(briefing) {
 
   kasten.hidden = false;
   $("#briefing-intro").textContent = briefing.einleitung ?? "";
+  // Der Satz, der das ganze Vertrauensmodell trägt, steht im Kartenkopf und
+  // nicht irgendwo unten: nichts verlässt den Rechner von selbst.
+  const gesendet = $("#briefing-nichts-gesendet");
+  if (gesendet) gesendet.textContent = "Nichts wurde versendet";
 
   for (const punkt of briefing.punkte ?? []) {
     const li = document.createElement("li");
@@ -468,10 +546,91 @@ function fehlerzeile(text) {
   return p;
 }
 
+// Drei Wege in die Tiefe — aber nur die, für die es heute etwas zu zeigen
+// gibt. Eine Kachel, die „nichts" sagt, ist eine Kachel zu viel.
+function kachel({ marke, jetzt, titel, zeile, knopf, ziel }) {
+  const el = document.createElement("article");
+  el.className = "kachel";
+
+  const m = document.createElement("span");
+  m.className = jetzt ? "marke jetzt" : "marke";
+  m.textContent = marke;
+
+  const h = document.createElement("h4");
+  h.textContent = titel;
+
+  const p = document.createElement("p");
+  p.textContent = zeile;
+
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = knopf;
+  b.addEventListener("click", () => openTab(ziel));
+
+  el.append(m, h, p, b);
+  return el;
+}
+
+function renderKacheln(data) {
+  const feld = $("#kacheln");
+  if (!feld) return;
+  feld.replaceChildren();
+
+  const termin = (data.calendar?.items ?? [])[0];
+  if (termin) {
+    const beginn = new Date(termin.start);
+    feld.append(kachel({
+      marke: `Um ${beginn.getHours()}:${String(beginn.getMinutes()).padStart(2, "0")} Uhr`,
+      jetzt: true,
+      titel: termin.summary || "Termin",
+      zeile: termin.location || "Nichts weiter notiert",
+      knopf: "Vorbereiten",
+      ziel: "chat",
+    }));
+  }
+
+  const ungelesen = data.mail?.unread ?? 0;
+  if (ungelesen) {
+    feld.append(kachel({
+      marke: "Posteingang",
+      titel: ungelesen === 1 ? "Eine ungelesene Nachricht" : `${ungelesen} ungelesene Nachrichten`,
+      zeile: "Nichts davon gilt als deine Meinung",
+      knopf: "Ansehen",
+      ziel: "chat",
+    }));
+  }
+
+  const offen = data.proposals?.pending ?? 0;
+  if (offen) {
+    feld.append(kachel({
+      marke: "Aus deinen Notizen",
+      titel: offen === 1 ? "Eine Sache herausgelesen" : `${offen} Dinge herausgelesen`,
+      zeile: "Nichts davon steht schon im Gedächtnis",
+      knopf: "Durchgehen",
+      ziel: "proposals",
+    }));
+  }
+
+  const roh = data.episodes?.pending ?? 0;
+  if (roh && !offen) {
+    feld.append(kachel({
+      marke: "Eingelesen",
+      titel: roh === 1 ? "Eine Notiz wartet" : `${roh} Notizen warten`,
+      zeile: "Noch nicht angesehen",
+      knopf: "Verdichten",
+      ziel: "ingest",
+    }));
+  }
+}
+
 async function loadDashboard() {
   $("#greeting").textContent = greeting();
+  $("#datum").textContent = new Date().toLocaleDateString("de-DE", {
+    weekday: "long", day: "numeric", month: "long",
+  });
   const data = await api("/dashboard");
   renderBriefing(data.briefing);
+  renderKacheln(data);
   renderProjectTeaser(data.projects);
   renderTasks(data.tasks);
   renderEvents(data.calendar);
@@ -983,6 +1142,22 @@ function betreffFuerAntwort(betreff) {
   return /^(re|aw|antw)\s*:/i.test(rein) ? rein : `Re: ${rein}`;
 }
 
+// Die Frage vom Dashboard führt ins Gespräch und schickt sie dort ab. Kein
+// zweiter Weg zum Modell — derselbe Weg, nur kürzer. Sonst gäbe es zwei
+// Stellen, an denen die Freigabeprüfung hängt, und irgendwann nur noch eine.
+$("#dashboard-frage").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const feld = $("#dashboard-frage-feld");
+  const text = feld.value.trim();
+  if (!text) return;
+
+  feld.value = "";
+  openTab("chat");
+  const eingabe = $("#chat-input");
+  eingabe.value = text;
+  $("#chat-form").requestSubmit();
+});
+
 $("#chat-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const input = $("#chat-input");
@@ -1286,7 +1461,7 @@ const PROPOSAL_KIND_LABELS = {
   conflict: "Widersprechen sich diese?",
 };
 
-// Dieselben Bezeichnungen wie im Formular unter „Gedächtnis“ — eine Art heißt
+// Dieselben Bezeichnungen wie im Formular unter „Was ich weiß“ — eine Art heißt
 // überall gleich, ob die Aussage schon im Bestand steht oder erst vorgeschlagen wird.
 const ASSERTION_KIND_LABELS = {
   state: "Zustand",
@@ -2359,7 +2534,7 @@ const WIZARD_STEPS = [
   {
     title: "E-Mail und Kalender",
     text:
-      "Kannst du auch später einrichten, unter „Einrichtung“. Mail ist der " +
+      "Kannst du auch später einrichten — oben unter „Mehr“. Mail ist der " +
       "gefährlichste Weg für untergeschobene Anweisungen — gelesene Nachrichten " +
       "gelten deshalb immer als fremder Inhalt und heben die Freigabestufe an.",
     build: () => document.createDocumentFragment(),
@@ -2549,7 +2724,7 @@ async function refreshStatus() {
     meldeZustand("");
   } else {
     meldeZustand("Kein Modell", "error");
-    statusEl.title = "Ohne Modell gehen keine Gespräche. Unter „Einrichtung“ einrichten.";
+    statusEl.title = "Ohne Modell gehen keine Gespräche. Oben unter „Mehr“ einrichten.";
   }
 
   // Lieber ehrlich sagen, was fehlt, als einen kaputten Chat anbieten.
@@ -2577,8 +2752,9 @@ async function start() {
     addMessage(
       "assistant",
       "Es ist kein Modell eingerichtet — Gespräche gehen noch nicht. " +
-        "Das Gedächtnis funktioniert trotzdem: unter „Gedächtnis“ lassen sich " +
-        "Aussagen speichern, ansehen und widerrufen, unter „Rohmaterial“ " +
+        "Das Gedächtnis funktioniert trotzdem: in der Ablage unter „Was ich " +
+        "weiß“ lassen sich Aussagen speichern, ansehen und widerrufen, unter " +
+        "„Eingelesenes“ " +
         "vorhandene Notizen einlesen."
     );
   }

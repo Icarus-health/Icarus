@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #dedad3; }
+    a { color: #2f6cae; text-decoration: none; } a:hover { color: #24558a; }
+    .ui { font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Instrument Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  </style>
+</helmet>
+
+<div class="ui" style="width: 1200px; height: 820px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #e6e2db 0%, #d8d3cb 100%);">
+  <div style="width: 1104px; height: 736px; border-radius: 12px; box-shadow: 0 32px 64px -16px rgba(40,34,26,0.28), 0 0 0 0.5px rgba(40,34,26,0.14); overflow: hidden; position: relative; background: #faf9f7;">
+
+    <!-- Das Fenster dahinter, gedämpft. Die Freigabe kommt zu dir. -->
+    <div style="position: absolute; inset: 0; display: flex; filter: blur(0.4px);">
+      <div style="width: 232px; background: rgba(243,240,235,0.86); border-right: 0.5px solid rgba(40,34,26,0.10);"></div>
+      <div style="flex-grow: 1; padding: 84px 88px;">
+        <div style="font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: #cdc8bf;">Thursday, 20 August</div>
+        <div style="margin-top: 12px; font-size: 40px; font-weight: 600; letter-spacing: -0.025em; color: #cdc8bf;">Good morning.</div>
+        <div style="margin-top: 34px; font-size: 21px; line-height: 31px; color: #d8d3cb; max-width: 640px;">The clinic agreement has been waiting on you since the 7th.</div>
+      </div>
+    </div>
+    <div style="position: absolute; inset: 0; background: rgba(250,249,247,0.62);"></div>
+
+    <!-- Das Blatt -->
+    <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 560px; background: #ffffff; border-radius: 16px; box-shadow: 0 24px 56px -12px rgba(40,34,26,0.30), 0 0 0 0.5px rgba(40,34,26,0.12); padding: 30px 32px 24px;">
+
+      <!-- Die Folge, nicht der Mechanismus. Kein Wort über Werkzeuge oder Stufen. -->
+      <h2 style="margin: 0; font-size: 22px; line-height: 29px; font-weight: 600; letter-spacing: -0.018em; color: #1d1c1a; text-wrap: pretty;">Send this reminder to Ms. Becker?</h2>
+
+      <div style="margin-top: 18px; border-radius: 11px; background: #faf9f7; box-shadow: inset 0 0 0 0.5px rgba(40,34,26,0.10); overflow: hidden;">
+        <div style="padding: 11px 15px; border-bottom: 0.5px solid rgba(40,34,26,0.08); font-size: 13.5px; color: #4a4640;">
+          <span style="color: #a9a49b;">Subject&nbsp;&nbsp;</span>A quick reminder about the 1 September milestone
+        </div>
+        <div style="padding: 15px; font-size: 14.5px; line-height: 22px; color: #2a2825; white-space: pre-line;">Dear Ms. Becker,
+
+The next milestone is due on 1 September and we’re still waiting on your sign-off. If something is holding it up, let me know — I’ll sort it out quickly.
+
+Kind regards
+Sören Kube</div>
+      </div>
+
+      <!-- Erkennen statt abtippen. Die Adresse steht nirgends darüber zum
+           Abschreiben — man muss die richtige von der falschen unterscheiden. -->
+      <div style="margin-top: 20px;">
+        <div style="font-size: 13.5px; color: #4a4640; margin-bottom: 9px;">Which address is hers?</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+
+          <div style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 13px; border-radius: 9px; box-shadow: inset 0 0 0 0.5px rgba(40,34,26,0.14);">
+            <span style="width: 15px; height: 15px; border-radius: 999px; box-shadow: inset 0 0 0 1.2px #c4bfb6;"></span>
+            <span class="mono" style="font-size: 12.5px; color: #2a2825;">becker@klinikum-example.de</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="font-size: 12px; color: #b3ada3;">31 messages since 2024</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 13px; border-radius: 9px; box-shadow: inset 0 0 0 0.5px rgba(40,34,26,0.14);">
+            <span style="width: 15px; height: 15px; border-radius: 999px; box-shadow: inset 0 0 0 1.2px #c4bfb6;"></span>
+            <span class="mono" style="font-size: 12.5px; color: #2a2825;">m.becker@klinikum-example.de</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="font-size: 12px; color: #b3ada3;">never written to</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 13px; border-radius: 9px; box-shadow: inset 0 0 0 0.5px rgba(40,34,26,0.14);">
+            <span style="width: 15px; height: 15px; border-radius: 999px; box-shadow: inset 0 0 0 1.2px #c4bfb6;"></span>
+            <span class="mono" style="font-size: 12.5px; color: #2a2825;">becker.klinikum@mail-example.net</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="font-size: 12px; color: #b3ada3;">never written to</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin-top: 22px;">
+        <span style="font-size: 14px; color: #8a857d;">Edit</span>
+        <span style="flex-grow: 1;"></span>
+        <span style="font-size: 14px; color: #8a857d; padding: 0 6px;">Don’t send</span>
+        <span style="display: inline-flex; align-items: center; height: 32px; padding: 0 18px; border-radius: 8px; background: #b8c6d6; color: #ffffff; font-size: 14px; font-weight: 500;">Send</span>
+      </div>
+
+      <div style="margin-top: 18px; padding-top: 14px; border-top: 0.5px solid rgba(40,34,26,0.08); font-size: 12.5px; line-height: 18px; color: #a9a49b;">This draft came out of a message somebody else wrote. That’s why I’m asking instead of acting.</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

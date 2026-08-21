@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3572b0; text-decoration: none; } a:hover { color: #28588a; }
+    .ui {
+      font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Instrument Sans", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ein Grund mit Licht: eine warme Quelle oben links, eine kühle Spiegelung
+       rechts. Eine flache Farbe sieht nach Vorlage aus, das hier nach Fläche. */
+    .grund {
+      background:
+        radial-gradient(1100px 620px at 18% -12%, rgba(255,250,240,0.80), transparent 60%),
+        radial-gradient(880px 520px at 104% 4%, rgba(178,196,219,0.55), transparent 56%),
+        linear-gradient(163deg, #d6cfc4 0%, #bcb4a8 100%);
+      position: relative;
+    }
+    /* Feines Korn — der Unterschied zwischen „gedruckt“ und „gerendert“. */
+    .grund::after {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    }
+
+    /* Eine Karte ist Material: eine Lichtkante oben, eine haarfeine Fassung,
+       und zwei Schatten — einer nah für die Kante, einer weit für den Raum. */
+    .karte {
+      background: linear-gradient(180deg, #fffefc 0%, #fbf9f5 100%);
+      border-radius: 20px;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.95),
+        0 0 0 0.5px rgba(48,40,30,0.09),
+        0 1px 2px rgba(48,40,30,0.05),
+        0 2px 4px -1px rgba(48,40,30,0.07),
+        0 12px 28px -8px rgba(48,40,30,0.16),
+        0 36px 68px -20px rgba(48,40,30,0.14);
+    }
+
+    /* Der eine Knopf, den man drücken soll. Verlauf, Lichtkante, Fallschatten
+       — er sitzt auf der Fläche, statt hineingezeichnet zu sein. */
+    .knopf-voll {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 32px; padding: 0 16px; border-radius: 9px;
+      background: linear-gradient(180deg, #4f8ccb 0%, #3670ac 100%);
+      color: #fff; font-size: 13.5px; font-weight: 550;
+      text-shadow: 0 1px 0 rgba(20,40,70,0.22);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.38),
+        inset 0 -1px 0 rgba(20,40,70,0.18),
+        0 1px 2px rgba(28,48,78,0.30),
+        0 2px 6px -1px rgba(28,48,78,0.20);
+    }
+
+    /* Der zurückhaltende: dieselbe Physik, nur ohne Farbe. */
+    .knopf {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 32px; padding: 0 15px; border-radius: 9px;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f1ec 100%);
+      color: #3a3630; font-size: 13.5px; font-weight: 500;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,1),
+        0 0 0 0.5px rgba(48,40,30,0.17),
+        0 1px 2px rgba(48,40,30,0.10);
+    }
+
+    .marke {
+      display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+      border-radius: 999px; font-size: 11.5px; font-weight: 550;
+    }
+  </style>
+</helmet>
+<div class="ui grund" style="width: 1280px; height: 900px; display: flex; align-items: center; justify-content: center;">
+  <div style="position: relative; width: 1184px; height: 742px; border-radius: 22px; overflow: hidden; box-shadow: 0 50px 100px -24px rgba(40,32,22,0.45), 0 12px 28px -8px rgba(40,32,22,0.22), 0 0 0 0.5px rgba(255,255,255,0.45); background: linear-gradient(168deg, #faf7f2 0%, #f2ede5 100%);">
+
+    <div style="position: absolute; inset: 0; padding: 78px 38px; opacity: 0.5;">
+      <div style="font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: #c5bfb5;">Thursday, 20 August</div>
+      <div style="margin-top: 9px; font-size: 32px; font-weight: 650; letter-spacing: -0.026em; color: #c5bfb5;">Good morning, Sören.</div>
+      <div style="margin-top: 20px; height: 300px; border-radius: 20px; background: rgba(255,255,255,0.5);"></div>
+    </div>
+    <div style="position: absolute; inset: 0; background: rgba(246,242,235,0.55); backdrop-filter: blur(2px);"></div>
+
+    <!-- Das Blatt liegt auf allem und wirft einen entsprechenden Schatten. -->
+    <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 568px; border-radius: 20px; background: linear-gradient(180deg, #fffefc 0%, #fbf9f5 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 0 0 0.5px rgba(48,40,30,0.10), 0 4px 10px -2px rgba(48,40,30,0.12), 0 26px 56px -12px rgba(48,40,30,0.30); padding: 28px 30px 24px;">
+
+      <h2 style="margin: 0; font-size: 21px; line-height: 28px; font-weight: 650; letter-spacing: -0.02em; color: #211e1a; text-wrap: pretty;">Send this reminder to Ms. Becker?</h2>
+
+      <div style="margin-top: 16px; border-radius: 13px; background: #f7f4ef; box-shadow: inset 0 1px 2px rgba(48,40,30,0.07), inset 0 0 0 0.5px rgba(48,40,30,0.09); overflow: hidden;">
+        <div style="padding: 10px 14px; border-bottom: 0.5px solid rgba(48,40,30,0.09); font-size: 13px; color: #4a4640;">
+          <span style="color: #a8a299;">Subject&nbsp;&nbsp;</span>A quick reminder about the 1 September milestone
+        </div>
+        <div style="padding: 14px; font-size: 14px; line-height: 21px; color: #2c2925; white-space: pre-line;">Dear Ms. Becker,
+
+The next milestone is due on 1 September and we are still waiting on your sign-off. If something is holding it up, let me know — I will sort it out quickly.
+
+Kind regards
+Sören Kube</div>
+      </div>
+
+      <div style="margin-top: 18px;">
+        <div style="font-size: 13.5px; color: #4a4640; margin-bottom: 8px;">Which address is hers?</div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+
+          <div style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 13px; border-radius: 10px; background: linear-gradient(180deg, #ffffff 0%, #fbf9f5 100%); box-shadow: inset 0 1px 0 #fff, 0 0 0 0.5px rgba(48,40,30,0.14), 0 1px 2px rgba(48,40,30,0.06);">
+            <span style="width: 15px; height: 15px; border-radius: 999px; box-shadow: inset 0 0 0 1.3px #c2bcb2, inset 0 1px 2px rgba(48,40,30,0.10);"></span>
+            <span style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; color: #2c2925;">becker@klinikum-example.de</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="font-size: 11.5px; color: #a8a299;">31 messages since 2024</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 13px; border-radius: 10px; background: linear-gradient(180deg, #ffffff 0%, #fbf9f5 100%); box-shadow: inset 0 1px 0 #fff, 0 0 0 0.5px rgba(48,40,30,0.14), 0 1px 2px rgba(48,40,30,0.06);">
+            <span style="width: 15px; height: 15px; border-radius: 999px; box-shadow: inset 0 0 0 1.3px #c2bcb2, inset 0 1px 2px rgba(48,40,30,0.10);"></span>
+            <span style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; color: #2c2925;">m.becker@klinikum-example.de</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="font-size: 11.5px; color: #a8a299;">never written to</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 13px; border-radius: 10px; background: linear-gradient(180deg, #ffffff 0%, #fbf9f5 100%); box-shadow: inset 0 1px 0 #fff, 0 0 0 0.5px rgba(48,40,30,0.14), 0 1px 2px rgba(48,40,30,0.06);">
+            <span style="width: 15px; height: 15px; border-radius: 999px; box-shadow: inset 0 0 0 1.3px #c2bcb2, inset 0 1px 2px rgba(48,40,30,0.10);"></span>
+            <span style="font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; color: #2c2925;">becker.klinikum@mail-example.net</span>
+            <span style="flex-grow: 1;"></span>
+            <span style="font-size: 11.5px; color: #a8a299;">never written to</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 9px; margin-top: 20px;">
+        <div class="knopf">Edit</div>
+        <div style="flex-grow: 1;"></div>
+        <div style="font-size: 13.5px; color: #8c867c; padding: 0 8px;">Don’t send</div>
+        <div class="knopf-voll" style="opacity: 0.45;">Send</div>
+      </div>
+
+      <div style="margin-top: 16px; padding-top: 13px; border-top: 0.5px solid rgba(48,40,30,0.09); font-size: 12.5px; line-height: 18px; color: #a8a299;">This draft came out of a message somebody else wrote. That is why I am asking instead of acting.</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

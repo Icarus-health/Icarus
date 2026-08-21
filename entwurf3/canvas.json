@@ -1,0 +1,31 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",     "title": "Dashboard",             "x": 0,    "y": 0,   "w": 1280, "h": 900 },
+    { "file": "Prepare.dc.html",  "title": "One thing, opened",     "x": 1360, "y": 0,   "w": 1280, "h": 900 },
+    { "file": "Approval.dc.html", "title": "Before it goes out",    "x": 0,    "y": 980, "w": 1280, "h": 900 },
+    { "file": "Settings.dc.html", "title": "Settings",              "x": 1360, "y": 980, "w": 1280, "h": 900 }
+  ],
+  "annotations": [
+    {
+      "id": "material",
+      "x": -470, "y": 0, "w": 410,
+      "text": "Material, not paint\n\nA lit ground — warm from the top left, cool from the right — with fine grain over it. Flat colour reads as a template; this reads as a surface.\n\nEvery card carries a light edge along its top, a hairline frame, and two shadows: one tight for the edge, one wide for the room it sits in. That is what makes it look made rather than drawn."
+    },
+    {
+      "id": "knoepfe",
+      "x": -470, "y": 320, "w": 410,
+      "text": "Buttons you want to press\n\nA gradient, a highlight along the top edge, a darker lip at the bottom, and a drop shadow. The button sits on the surface instead of being drawn into it.\n\nOne filled button per view — the one you are meant to press. Everything else is the same physics without the colour."
+    },
+    {
+      "id": "dashboard",
+      "x": 1360, "y": -260, "w": 410,
+      "text": "Everything on one screen\n\nThree things today, each with exactly one button. Three cards for what is next, what is drafted, what was learned. One field at the bottom to ask or to tell.\n\nSix buttons on the whole screen. Anything deeper is reachable from here, but nothing deeper is required."
+    },
+    {
+      "id": "einfach",
+      "x": 1360, "y": 1720, "w": 410,
+      "text": "Settings that admit there is little to set\n\nFour rows and one switch. Model, connectors, log and backups sit behind a single quiet word.\n\nThe empty space under it is the message: there really is not much here to configure."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

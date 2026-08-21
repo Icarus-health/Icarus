@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3572b0; text-decoration: none; } a:hover { color: #28588a; }
+    .ui {
+      font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Instrument Sans", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ein Grund mit Licht: eine warme Quelle oben links, eine kühle Spiegelung
+       rechts. Eine flache Farbe sieht nach Vorlage aus, das hier nach Fläche. */
+    .grund {
+      background:
+        radial-gradient(1100px 620px at 18% -12%, rgba(255,250,240,0.80), transparent 60%),
+        radial-gradient(880px 520px at 104% 4%, rgba(178,196,219,0.55), transparent 56%),
+        linear-gradient(163deg, #d6cfc4 0%, #bcb4a8 100%);
+      position: relative;
+    }
+    /* Feines Korn — der Unterschied zwischen „gedruckt“ und „gerendert“. */
+    .grund::after {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    }
+
+    /* Eine Karte ist Material: eine Lichtkante oben, eine haarfeine Fassung,
+       und zwei Schatten — einer nah für die Kante, einer weit für den Raum. */
+    .karte {
+      background: linear-gradient(180deg, #fffefc 0%, #fbf9f5 100%);
+      border-radius: 20px;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.95),
+        0 0 0 0.5px rgba(48,40,30,0.09),
+        0 1px 2px rgba(48,40,30,0.05),
+        0 2px 4px -1px rgba(48,40,30,0.07),
+        0 12px 28px -8px rgba(48,40,30,0.16),
+        0 36px 68px -20px rgba(48,40,30,0.14);
+    }
+
+    /* Der eine Knopf, den man drücken soll. Verlauf, Lichtkante, Fallschatten
+       — er sitzt auf der Fläche, statt hineingezeichnet zu sein. */
+    .knopf-voll {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 32px; padding: 0 16px; border-radius: 9px;
+      background: linear-gradient(180deg, #4f8ccb 0%, #3670ac 100%);
+      color: #fff; font-size: 13.5px; font-weight: 550;
+      text-shadow: 0 1px 0 rgba(20,40,70,0.22);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.38),
+        inset 0 -1px 0 rgba(20,40,70,0.18),
+        0 1px 2px rgba(28,48,78,0.30),
+        0 2px 6px -1px rgba(28,48,78,0.20);
+    }
+
+    /* Der zurückhaltende: dieselbe Physik, nur ohne Farbe. */
+    .knopf {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 32px; padding: 0 15px; border-radius: 9px;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f1ec 100%);
+      color: #3a3630; font-size: 13.5px; font-weight: 500;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,1),
+        0 0 0 0.5px rgba(48,40,30,0.17),
+        0 1px 2px rgba(48,40,30,0.10);
+    }
+
+    .marke {
+      display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+      border-radius: 999px; font-size: 11.5px; font-weight: 550;
+    }
+  </style>
+</helmet>
+
+<div class="ui grund" style="width: 1280px; height: 900px; display: flex; align-items: center; justify-content: center;">
+
+  <div style="position: relative; width: 1184px; height: 742px; border-radius: 22px; overflow: hidden; box-shadow: 0 50px 100px -24px rgba(40,32,22,0.45), 0 12px 28px -8px rgba(40,32,22,0.22), 0 0 0 0.5px rgba(255,255,255,0.45); background: linear-gradient(168deg, #faf7f2 0%, #f2ede5 100%);">
+
+    <!-- Fensterleiste: Name, Suche, Einstellungen. Drei Dinge. -->
+    <div style="height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 22px; background: rgba(252,250,246,0.72); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 0.5px 0 rgba(48,40,30,0.10);">
+      <div style="font-size: 15px; font-weight: 650; letter-spacing: -0.015em; color: #26231f;">Icarus</div>
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; width: 260px; height: 28px; padding: 0 11px; border-radius: 8px; background: rgba(48,40,30,0.055); box-shadow: inset 0 0.5px 1px rgba(48,40,30,0.09);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a49e94" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+        <span style="font-size: 13px; color: #a49e94;">Search anything</span>
+      </div>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c867c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.6v2.3M12 19.1v2.3M21.4 12h-2.3M4.9 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6 17 17M7 7 5.4 5.4"></path></svg>
+    </div>
+
+    <div style="padding: 26px 38px;">
+
+      <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #a8a299;">Thursday, 20 August</div>
+      <h1 style="margin: 9px 0 0; font-size: 32px; line-height: 38px; font-weight: 650; letter-spacing: -0.026em; color: #211e1a;">Good morning, Sören.</h1>
+
+      <!-- Die Hauptkarte: was heute zählt. Je Sache genau ein Knopf. -->
+      <div class="karte" style="margin-top: 20px; padding: 22px 24px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <div style="font-size: 15px; font-weight: 600; color: #211e1a;">Three things today</div>
+          <div style="flex-grow: 1;"></div>
+          <div style="font-size: 12.5px; color: #a8a299;">Nothing has been sent</div>
+        </div>
+
+        <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 2px;">
+
+          <div style="display: flex; align-items: center; gap: 18px; padding: 13px 0;">
+            <div style="flex-grow: 1; font-size: 16px; line-height: 24px; color: #2c2925; max-width: 68ch;">The <span style="background-image: linear-gradient(transparent 92%, rgba(48,40,30,0.24) 92%);">clinic agreement</span> has been waiting on you since the 7th — only the fee range is still open.</div>
+            <div class="knopf-voll">Draft a reminder</div>
+          </div>
+
+          <div style="height: 0.5px; background: rgba(48,40,30,0.09);"></div>
+
+          <div style="display: flex; align-items: center; gap: 18px; padding: 13px 0;">
+            <div style="flex-grow: 1; font-size: 16px; line-height: 24px; color: #2c2925; max-width: 68ch;">You’re seeing <span style="background-image: linear-gradient(transparent 92%, rgba(48,40,30,0.24) 92%);">Dr. Brandt</span> at two. I’ve put the decisions, the open question and his message together.</div>
+            <div class="knopf">Open</div>
+          </div>
+
+          <div style="height: 0.5px; background: rgba(48,40,30,0.09);"></div>
+
+          <div style="display: flex; align-items: center; gap: 18px; padding: 13px 0;">
+            <div style="flex-grow: 1; font-size: 16px; line-height: 24px; color: #2c2925; max-width: 68ch;">You told me in May that <span style="background-image: linear-gradient(transparent 92%, rgba(48,40,30,0.24) 92%);">billing goes through code 20</span>. Does that still hold?</div>
+            <div class="knopf">Still true</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Drei kleine Karten. Alles Weitere ist von hier aus erreichbar. -->
+      <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+
+        <div class="karte" style="padding: 16px 18px; display: flex; flex-direction: column;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="marke" style="background: rgba(53,114,176,0.13); color: #2f679f;">At two</span>
+          </div>
+          <div style="margin-top: 11px; font-size: 17px; font-weight: 600; letter-spacing: -0.012em; color: #211e1a;">Dr. Brandt</div>
+          <div style="margin-top: 3px; font-size: 13.5px; line-height: 20px; color: #8c867c;">Two open points, one message from Tuesday</div>
+          <div style="flex-grow: 1;"></div>
+          <div class="knopf" style="margin-top: 14px; align-self: flex-start;">Prepare</div>
+        </div>
+
+        <div class="karte" style="padding: 16px 18px; display: flex; flex-direction: column;">
+          <div>
+            <span class="marke" style="background: rgba(48,40,30,0.07); color: #6f6a61;">Drafted</span>
+          </div>
+          <div style="margin-top: 11px; font-size: 17px; font-weight: 600; letter-spacing: -0.012em; color: #211e1a;">Two replies ready</div>
+          <div style="margin-top: 3px; font-size: 13.5px; line-height: 20px; color: #8c867c;">To Ms. Becker and to Martina</div>
+          <div style="flex-grow: 1;"></div>
+          <div class="knopf" style="margin-top: 14px; align-self: flex-start;">Review</div>
+        </div>
+
+        <div class="karte" style="padding: 16px 18px; display: flex; flex-direction: column;">
+          <div>
+            <span class="marke" style="background: rgba(48,40,30,0.07); color: #6f6a61;">From your notes</span>
+          </div>
+          <div style="margin-top: 11px; font-size: 17px; font-weight: 600; letter-spacing: -0.012em; color: #211e1a;">Three things learned</div>
+          <div style="margin-top: 3px; font-size: 13.5px; line-height: 20px; color: #8c867c;">None of it is saved yet</div>
+          <div style="flex-grow: 1;"></div>
+          <div class="knopf" style="margin-top: 14px; align-self: flex-start;">Go through</div>
+        </div>
+
+      </div>
+
+      <!-- Fragen geht von hier. Man muss nirgendwo hin. -->
+      <div style="margin-top: 20px; display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 8px 0 18px; border-radius: 14px; background: linear-gradient(180deg, #fffefc 0%, #fbf9f5 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 0 0 0.5px rgba(48,40,30,0.11), 0 2px 6px -1px rgba(48,40,30,0.09), 0 8px 20px -8px rgba(48,40,30,0.10);">
+        <span style="flex-grow: 1; font-size: 15px; color: #a8a299;">Ask anything, or tell me something to remember</span>
+        <div style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(180deg, #4f8ccb 0%, #3670ac 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.38), 0 1px 2px rgba(28,48,78,0.30);">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="m5 12 7-7 7 7"></path></svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

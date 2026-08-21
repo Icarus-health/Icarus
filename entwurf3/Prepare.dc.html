@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #3572b0; text-decoration: none; } a:hover { color: #28588a; }
+    .ui {
+      font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Instrument Sans", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ein Grund mit Licht: eine warme Quelle oben links, eine kühle Spiegelung
+       rechts. Eine flache Farbe sieht nach Vorlage aus, das hier nach Fläche. */
+    .grund {
+      background:
+        radial-gradient(1100px 620px at 18% -12%, rgba(255,250,240,0.80), transparent 60%),
+        radial-gradient(880px 520px at 104% 4%, rgba(178,196,219,0.55), transparent 56%),
+        linear-gradient(163deg, #d6cfc4 0%, #bcb4a8 100%);
+      position: relative;
+    }
+    /* Feines Korn — der Unterschied zwischen „gedruckt“ und „gerendert“. */
+    .grund::after {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    }
+
+    /* Eine Karte ist Material: eine Lichtkante oben, eine haarfeine Fassung,
+       und zwei Schatten — einer nah für die Kante, einer weit für den Raum. */
+    .karte {
+      background: linear-gradient(180deg, #fffefc 0%, #fbf9f5 100%);
+      border-radius: 20px;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.95),
+        0 0 0 0.5px rgba(48,40,30,0.09),
+        0 1px 2px rgba(48,40,30,0.05),
+        0 2px 4px -1px rgba(48,40,30,0.07),
+        0 12px 28px -8px rgba(48,40,30,0.16),
+        0 36px 68px -20px rgba(48,40,30,0.14);
+    }
+
+    /* Der eine Knopf, den man drücken soll. Verlauf, Lichtkante, Fallschatten
+       — er sitzt auf der Fläche, statt hineingezeichnet zu sein. */
+    .knopf-voll {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 32px; padding: 0 16px; border-radius: 9px;
+      background: linear-gradient(180deg, #4f8ccb 0%, #3670ac 100%);
+      color: #fff; font-size: 13.5px; font-weight: 550;
+      text-shadow: 0 1px 0 rgba(20,40,70,0.22);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.38),
+        inset 0 -1px 0 rgba(20,40,70,0.18),
+        0 1px 2px rgba(28,48,78,0.30),
+        0 2px 6px -1px rgba(28,48,78,0.20);
+    }
+
+    /* Der zurückhaltende: dieselbe Physik, nur ohne Farbe. */
+    .knopf {
+      display: inline-flex; align-items: center; justify-content: center;
+      height: 32px; padding: 0 15px; border-radius: 9px;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f1ec 100%);
+      color: #3a3630; font-size: 13.5px; font-weight: 500;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,1),
+        0 0 0 0.5px rgba(48,40,30,0.17),
+        0 1px 2px rgba(48,40,30,0.10);
+    }
+
+    .marke {
+      display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+      border-radius: 999px; font-size: 11.5px; font-weight: 550;
+    }
+  </style>
+</helmet>
+<div class="ui grund" style="width: 1280px; height: 900px; display: flex; align-items: center; justify-content: center;">
+  <div style="position: relative; width: 1184px; height: 742px; border-radius: 22px; overflow: hidden; box-shadow: 0 50px 100px -24px rgba(40,32,22,0.45), 0 12px 28px -8px rgba(40,32,22,0.22), 0 0 0 0.5px rgba(255,255,255,0.45); background: linear-gradient(168deg, #faf7f2 0%, #f2ede5 100%);">    <div style="height: 52px; display: flex; align-items: center; gap: 16px; padding: 0 22px; background: rgba(252,250,246,0.72); backdrop-filter: blur(24px) saturate(180%); box-shadow: 0 0.5px 0 rgba(48,40,30,0.10);">
+      <div style="font-size: 15px; font-weight: 650; letter-spacing: -0.015em; color: #26231f;">Icarus</div>
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px; width: 260px; height: 28px; padding: 0 11px; border-radius: 8px; background: rgba(48,40,30,0.055); box-shadow: inset 0 0.5px 1px rgba(48,40,30,0.09);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a49e94" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+        <span style="font-size: 13px; color: #a49e94;">Search anything</span>
+      </div>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8c867c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.6v2.3M12 19.1v2.3M21.4 12h-2.3M4.9 12H2.6"></path></svg>
+    </div>
+    <div style="padding: 26px 38px;">
+      <div style="display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: #8c867c; margin-bottom: 14px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"></path></svg>
+        Today
+      </div>
+      <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #a8a299;">Today at 14:00</div>
+      <h1 style="margin: 8px 0 0; font-size: 30px; line-height: 36px; font-weight: 650; letter-spacing: -0.026em; color: #211e1a;">Dr. Ulrich Brandt</h1>
+
+      <div style="margin-top: 20px; display: grid; grid-template-columns: 1.55fr 1fr; gap: 18px;">
+
+        <div class="karte" style="padding: 22px 24px;">
+          <div style="font-size: 15px; font-weight: 600; color: #211e1a;">Where you left it</div>
+          <p style="margin: 12px 0 0; font-size: 16px; line-height: 25px; color: #2c2925;">Two things are settled: three years, and six months’ notice to the end of a quarter. The fee is not. He wrote on Tuesday that he wants the upper end — you haven’t named a number yet.</p>
+
+          <div style="margin-top: 20px; height: 0.5px; background: rgba(48,40,30,0.09);"></div>
+
+          <div style="margin-top: 18px; font-size: 15px; font-weight: 600; color: #211e1a;">Still open between you</div>
+          <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 11px;">
+            <div style="font-size: 15.5px; line-height: 23px; color: #2c2925;">Follow-up after eight weeks, or twelve? Both are written down.</div>
+            <div style="font-size: 15.5px; line-height: 23px; color: #2c2925;">The fee range.</div>
+          </div>
+
+          <div style="display: flex; gap: 9px; margin-top: 22px;">
+            <div class="knopf-voll">Draft a reply</div>
+            <div class="knopf">Add a note</div>
+          </div>
+
+          <div style="margin-top: 24px; height: 0.5px; background: rgba(48,40,30,0.09);"></div>
+
+          <div style="margin-top: 18px; font-size: 15px; font-weight: 600; color: #211e1a;">How you got here</div>
+          <div style="margin-top: 14px; display: flex; flex-direction: column;">
+
+            <div style="display: flex; gap: 14px;">
+              <div style="flex: 0 0 74px; font-size: 13px; color: #a8a299; padding-top: 1px;">Tuesday</div>
+              <div style="flex-grow: 1; padding-bottom: 14px; border-left: 1.5px solid rgba(48,40,30,0.10); padding-left: 16px; margin-left: 3px;">
+                <div style="font-size: 14.5px; color: #2c2925;">He wrote about the fee</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 14px;">
+              <div style="flex: 0 0 74px; font-size: 13px; color: #a8a299; padding-top: 1px;">12 May</div>
+              <div style="flex-grow: 1; padding-bottom: 14px; border-left: 1.5px solid rgba(48,40,30,0.10); padding-left: 16px; margin-left: 3px;">
+                <div style="font-size: 14.5px; color: #2c2925;">Practice meeting — the notice period was agreed</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 14px;">
+              <div style="flex: 0 0 74px; font-size: 13px; color: #a8a299; padding-top: 1px;">3 May</div>
+              <div style="flex-grow: 1; padding-left: 16px; margin-left: 3px; border-left: 1.5px solid transparent;">
+                <div style="font-size: 14.5px; color: #2c2925;">First draft of the agreement</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div class="karte" style="padding: 16px 18px;">
+            <div style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #a8a299;">His message</div>
+            <div style="margin-top: 10px; padding-left: 13px; border-left: 2px solid rgba(169,128,90,0.45);">
+              <div style="font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #a9805a;">From outside · Tuesday</div>
+              <p style="margin: 7px 0 0; font-size: 14.5px; line-height: 22px; color: #6f6a61;">“…on the fee we should stay at the upper end, otherwise it doesn’t work out for us.”</p>
+            </div>
+            <div style="margin-top: 11px; font-size: 12.5px; color: #a8a299;">Read, not taken as your position.</div>
+          </div>
+
+          <div class="karte" style="padding: 16px 18px;">
+            <div style="font-size: 12.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #a8a299;">Between you</div>
+            <div style="margin-top: 11px; display: flex; flex-direction: column; gap: 9px; font-size: 14px; color: #4a4640;">
+              <div>31 messages since 2024</div>
+              <div>Two shared projects</div>
+              <div>Rarely replies before eleven</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -37,7 +37,9 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* War 15px/1.55. Zu klein und zu eng — der häufigste Grund, warum eine
+     Oberfläche „technisch“ wirkt. */
+  font: 16.5px/1.62 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* -- Navigation ---------------------------------------------------------- */
@@ -49,8 +51,8 @@ nav {
      Seite nach rechts, und die letzten Reiter stehen außerhalb. Gemessen ab
      etwa 900 px abwärts. */
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.6rem 1rem;
+  gap: 0.25rem;
+  padding: 0.7rem 1.4rem;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   position: sticky;
@@ -64,8 +66,8 @@ nav strong { margin-right: 0.5rem; }
   border: none;
   background: transparent;
   color: var(--muted);
-  padding: 0.35rem 0.6rem;
-  border-radius: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.45rem;
   cursor: pointer;
   font: inherit;
 }
@@ -81,7 +83,7 @@ nav strong { margin-right: 0.5rem; }
 .status.ready { color: var(--accent); }
 .status.error { color: var(--danger); }
 
-main { max-width: 46rem; margin: 0 auto; padding: 1.25rem 1rem 4rem; }
+main { max-width: 52rem; margin: 0 auto; padding: 2.4rem 1.4rem 5rem; }
 
 /* -- Formulare ----------------------------------------------------------- */
 
@@ -256,10 +258,14 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 
 /* -- Heute ---------------------------------------------------------------- */
 
+/* Die Begrüßung ist kein Titel, sondern eine Anrede — Serife, leicht,
+   groß. Sie ist das Erste, was jemand liest. */
 #greeting {
-  font-size: 1.3rem;
-  font-weight: 600;
-  margin: 0 0 1rem;
+  font-family: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 2.1rem;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  margin: 0 0 1.2rem;
 }
 
 .cards {
@@ -726,3 +732,94 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* -- Orte und Fächer -------------------------------------------------------- */
+
+/* Die Ablage-Leiste ist eine Ebene tiefer als die Orte oben — sie muss
+   leiser sein, sonst konkurrieren zwei Navigationen miteinander. */
+#ablage-leiste {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 0.9rem 1.4rem 0;
+}
+
+.fach {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.94rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.45rem;
+  cursor: pointer;
+}
+
+.fach:hover { color: var(--fg); }
+.fach.active { color: var(--fg); font-weight: 500; background: color-mix(in srgb, var(--accent) 11%, transparent); }
+
+/* Wenn die Ablage-Leiste steht, hat der Inhalt darunter schon Abstand. */
+#ablage-leiste:not([hidden]) + main { padding-top: 1.4rem; }
+
+#mehr-menue {
+  position: absolute;
+  right: 1.4rem;
+  top: 3.2rem;
+  z-index: 20;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  box-shadow: 0 12px 28px -8px rgba(40, 34, 24, 0.22);
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
+}
+
+#mehr-menue button {
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+#mehr-menue button:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* -- Ruhe ------------------------------------------------------------------- */
+
+/* Das Briefing trägt „Heute“. Die Karten darunter sind Beiwerk und dürfen
+   nicht so laut sein wie es — sie werden schmaler, leiser und rahmenlos. */
+/* Zwei Karten, nicht fünf: „Projekte“ steht in der Ablage, „Nachrichten“ im
+   Gespräch, „Zuletzt gemerkt“ unter „Was ich weiß“. Auf „Heute“ bleibt, was
+   den heutigen Tag betrifft — und das darf breit stehen statt umzubrechen. */
+#view-dashboard .cards {
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.6rem 2.4rem;
+  margin-top: 2.6rem;
+}
+
+#view-dashboard .card {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 1rem 0 0;
+}
+
+#view-dashboard .card h3 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+#view-dashboard .card li { padding: 0.5rem 0; }

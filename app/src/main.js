@@ -249,20 +249,79 @@ $("#suche").addEventListener("click", (event) => {
   if (event.target.id === "suche") sucheSchliessen();
 });
 
-// Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann,
-// ohne dieselben vier Zeilen ein zweites Mal zu tragen.
+// Drei Orte, mehr Ansichten. Welche Ansicht zu welchem Ort gehört, steht
+// hier — und nur hier. `null` heißt: erreichbar, aber kein eigener Ort.
+const ORT = {
+  dashboard: "dashboard",
+  chat: "chat",
+  projects: "projects",
+  memory: "projects",
+  proposals: "projects",
+  ingest: "projects",
+  audit: null,
+  setup: null,
+};
+
+// Die Ablage ist der einzige Ort mit Fächern.
+const ABLAGE = new Set(["projects", "memory", "proposals", "ingest"]);
+
+// Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann.
 function openTab(name) {
-  const tab = document.querySelector(`.tab[data-view="${name}"]`);
-  if (!tab) return;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  tab.classList.add("active");
+  const ansicht = $(`#view-${name}`);
+  if (!ansicht) return;
+
   for (const view of document.querySelectorAll(".view")) view.hidden = true;
-  $(`#view-${name}`).hidden = false;
+  ansicht.hidden = false;
+
+  // Oben leuchtet der **Ort**, nicht die Ansicht: wer in „Was ich weiß“
+  // steht, ist immer noch in der Ablage.
+  const ort = ORT[name];
+  document.querySelectorAll("nav .tab").forEach((t) => {
+    t.classList.toggle("active", Boolean(ort) && t.dataset.view === ort);
+  });
+
+  const leiste = $("#ablage-leiste");
+  if (leiste) {
+    leiste.hidden = !ABLAGE.has(name);
+    leiste.querySelectorAll(".fach").forEach((f) => {
+      f.classList.toggle("active", f.dataset.view === name);
+    });
+  }
+
+  mehrSchliessen();
   REFRESH[name]?.();
 }
 
-document.querySelectorAll(".tab").forEach((tab) => {
+document.querySelectorAll("nav .tab[data-view]").forEach((tab) => {
   tab.addEventListener("click", () => openTab(tab.dataset.view));
+});
+
+document.querySelectorAll("#ablage-leiste .fach, #mehr-menue button").forEach((el) => {
+  el.addEventListener("click", () => openTab(el.dataset.view));
+});
+
+// -- Das Zahnrad ------------------------------------------------------------
+
+function mehrSchliessen() {
+  const menue = $("#mehr-menue");
+  if (!menue || menue.hidden) return;
+  menue.hidden = true;
+  $("#mehr-knopf")?.setAttribute("aria-expanded", "false");
+}
+
+$("#mehr-knopf")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const menue = $("#mehr-menue");
+  const offen = !menue.hidden;
+  menue.hidden = offen;
+  $("#mehr-knopf").setAttribute("aria-expanded", String(!offen));
+});
+
+// Ein Menü, das sich nur über seinen eigenen Knopf schließen lässt, ist eine
+// Falle. Klick daneben und Esc schließen es auch.
+document.addEventListener("click", mehrSchliessen);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") mehrSchliessen();
 });
 
 
@@ -341,6 +400,11 @@ function renderEvents(block) {
 }
 
 function renderMail(block) {
+  // Diese Karte hat „Heute“ verlassen und einen eigenen Ort bekommen.
+  // Fehlt sie, ist das kein Fehler — und kein Grund, die Seite
+  // mittendrin abbrechen zu lassen.
+  if (!$("#mail-list")) return;
+
   const list = $("#mail-list");
   list.replaceChildren();
   $("#mail-note").textContent = block.error ?? (block.items.length ? "" : "Nichts Neues.");
@@ -358,6 +422,11 @@ function renderMail(block) {
 }
 
 function renderMemoryCard(block) {
+  // Diese Karte hat „Heute“ verlassen und einen eigenen Ort bekommen.
+  // Fehlt sie, ist das kein Fehler — und kein Grund, die Seite
+  // mittendrin abbrechen zu lassen.
+  if (!$("#memory-list")) return;
+
   const list = $("#memory-list");
   list.replaceChildren();
   $("#memory-note").textContent = block.count
@@ -370,6 +439,11 @@ function renderMemoryCard(block) {
 }
 
 function renderProjectTeaser(block) {
+  // Diese Karte hat „Heute“ verlassen und einen eigenen Ort bekommen.
+  // Fehlt sie, ist das kein Fehler — und kein Grund, die Seite
+  // mittendrin abbrechen zu lassen.
+  if (!$("#project-teaser")) return;
+
   const list = $("#project-teaser");
   const items = block?.items ?? [];
   list.replaceChildren();

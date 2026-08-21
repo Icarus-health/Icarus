@@ -9,14 +9,14 @@
   <body>
     <nav>
       <strong>Icarus</strong>
+      <!-- Drei Orte. „Rohmaterial“, „Vorschläge“, „Gedächtnis“ und „Protokoll“
+           waren nie Orte, an die jemand gehen will — das sind Namen für
+           Zustände der Maschine. Sie liegen jetzt in der Ablage bzw. hinter
+           dem Zahnrad, und was wirklich Aufmerksamkeit braucht, kommt von
+           selbst ins Briefing. -->
       <button data-view="dashboard" class="tab active">Heute</button>
-      <button data-view="projects" class="tab">Projekte</button>
       <button data-view="chat" class="tab">Gespräch</button>
-      <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
-      <button data-view="proposals" class="tab">Vorschläge <span id="proposals-badge" class="badge" hidden></span></button>
-      <button data-view="memory" class="tab">Gedächtnis</button>
-      <button data-view="audit" class="tab">Protokoll</button>
-      <button data-view="setup" class="tab">Einrichtung</button>
+      <button data-view="projects" class="tab">Ablage <span id="ablage-badge" class="badge" hidden></span></button>
       <!-- Suchknopf und Zustand als **eine** Gruppe ans Ende. Getrennt mit je
            einem `margin-left: auto` funktioniert das nicht: das erste frisst
            den ganzen freien Platz, und das zweite fällt in die nächste Zeile.
@@ -30,8 +30,23 @@
           </svg>
           <span class="nur-vorlesen">Suchen</span>
         </button>
+        <button id="mehr-knopf" class="tab" type="button" title="Mehr" aria-haspopup="true" aria-expanded="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"></path>
+          </svg>
+          <span class="nur-vorlesen">Mehr</span>
+        </button>
         <span id="status" class="status">Verbinde…</span>
       </span>
+
+      <!-- Was selten gebraucht wird, ist erreichbar — aber es steht nicht
+           dauernd im Weg. -->
+      <div id="mehr-menue" hidden>
+        <button type="button" data-view="audit">Protokoll</button>
+        <button type="button" data-view="setup">Einrichtung</button>
+      </div>
     </nav>
 
     <!-- Erststart. Liegt über allem, bis jemand ihn beendet — aber jeder
@@ -49,6 +64,15 @@
         </div>
         <p class="muted wizard-steps"><span id="wizard-progress"></span></p>
       </div>
+    </div>
+
+    <!-- Die Ablage ist ein Ort mit vier Fächern. Sie erscheint nur, wenn man
+         dort ist — im Briefing und im Gespräch hat sie nichts verloren. -->
+    <div id="ablage-leiste" hidden>
+      <button type="button" data-view="projects" class="fach">Projekte</button>
+      <button type="button" data-view="memory" class="fach">Was ich weiß</button>
+      <button type="button" data-view="proposals" class="fach">Zu klären <span id="proposals-badge" class="badge" hidden></span></button>
+      <button type="button" data-view="ingest" class="fach">Eingelesenes <span id="pending-badge" class="badge" hidden></span></button>
     </div>
 
     <main>
@@ -78,11 +102,6 @@
         </section>
 
         <div class="cards">
-          <article class="card">
-            <h3>Projekte</h3>
-            <ul id="project-teaser"></ul>
-            <p id="project-teaser-note" class="muted"></p>
-          </article>
 
           <article class="card">
             <h3>Aufgaben <span id="task-badge" class="badge" hidden></span></h3>
@@ -101,20 +120,6 @@
             <p id="event-note" class="muted"></p>
           </article>
 
-          <article class="card">
-            <h3>Nachrichten <span id="mail-badge" class="badge" hidden></span></h3>
-            <!-- Mail ist der gefährlichste Injection-Weg: jeder kann dir
-                 schreiben. Deshalb hier nur Vorschau, niemals automatisch
-                 verarbeitet. -->
-            <ul id="mail-list"></ul>
-            <p id="mail-note" class="muted"></p>
-          </article>
-
-          <article class="card">
-            <h3>Zuletzt gemerkt</h3>
-            <ul id="memory-list"></ul>
-            <p id="memory-note" class="muted"></p>
-          </article>
         </div>
       </section>
 

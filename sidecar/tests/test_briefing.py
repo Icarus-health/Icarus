@@ -212,3 +212,38 @@ def test_zitat_traegt_keinen_doppelten_punkt() -> None:
 
     assert "Ziffer 20“ hast du mir gesagt" in b.punkte[0].text
     assert "20.“" not in b.punkte[0].text
+
+
+def test_die_saetze_sind_deutsch_und_keine_zahlenausgabe() -> None:
+    """Bei genau einer weiteren Aufgabe steht dort ein Satz, keine Ziffer.
+
+    „Dahinter warten noch 1." ist eine Zeichenkettenverkettung, kein Deutsch.
+    Genau solche Stellen fallen im Test nie auf, wenn er nur prüft, dass
+    überhaupt etwas dasteht — deshalb prüft dieser den Wortlaut.
+    """
+    from datetime import timedelta
+
+    daten = leer()
+    daten["tasks"]["items"] = [
+        aufgabe("Älteres", JETZT - timedelta(days=5), ueberfaellig=True),
+        aufgabe("Jüngeres", JETZT - timedelta(days=2), ueberfaellig=True),
+    ]
+
+    b = briefing.erstelle(daten, jetzt=JETZT)
+
+    assert "Dahinter wartet noch eine." in b.punkte[0].text
+    assert "noch 1." not in b.punkte[0].text
+
+
+def test_bei_mehreren_weiteren_stimmt_der_plural() -> None:
+    from datetime import timedelta
+
+    daten = leer()
+    daten["tasks"]["items"] = [
+        aufgabe(f"Nummer {i}", JETZT - timedelta(days=10 - i), ueberfaellig=True)
+        for i in range(4)
+    ]
+
+    b = briefing.erstelle(daten, jetzt=JETZT)
+
+    assert "Dahinter warten noch 3 weitere." in b.punkte[0].text

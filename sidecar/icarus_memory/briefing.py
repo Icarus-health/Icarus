@@ -183,7 +183,7 @@ def erstelle(
     if ueberfaellig:
         faellig, aufgabe = ueberfaellig[0]
         weitere = len(ueberfaellig) - 1
-        anhang = f" Dahinter warten noch {weitere}." if weitere == 1 else (
+        anhang = " Dahinter wartet noch eine." if weitere == 1 else (
             f" Dahinter warten noch {weitere} weitere." if weitere > 1 else ""
         )
         kandidaten.append(Punkt(

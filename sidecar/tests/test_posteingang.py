@@ -25,7 +25,7 @@ from icarus_memory.connectors.mail import Message
 from icarus_memory.episodes import EpisodeKind, EpisodeStore
 from icarus_memory.model import SourceType
 from icarus_memory.proposals import ProposalStore
-from icarus_memory.server import create_app
+from icarus_memory.server import WEGWEISER, create_app
 from icarus_memory.tasks import TaskStore
 from icarus_memory.workspace import WorkspaceStore
 
@@ -125,7 +125,7 @@ def test_ohne_mailkonto_sagt_es_das(tmp_path, monkeypatch) -> None:
     try:
         antwort = TestClient(app).get("/mail")
         assert antwort.status_code == 409
-        assert "Einrichtung" in antwort.json()["detail"]
+        assert WEGWEISER in antwort.json()["detail"]
     finally:
         app.state.scheduler.stop()
 

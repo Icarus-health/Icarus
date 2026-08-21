@@ -26,7 +26,7 @@ from icarus_memory.mcp import (
     serve,
 )
 from icarus_memory.model import Kind, Provenance, SourceType
-from icarus_memory.server import create_app, write_connection_file
+from icarus_memory.server import WEGWEISER, create_app, write_connection_file
 from icarus_memory.tasks import TaskStore
 from icarus_memory.workspace import WorkspaceStore
 
@@ -192,7 +192,7 @@ def test_heute_fasst_alles_in_einem_aufruf_zusammen(server: Server, app) -> None
     # auf diesem Weg. Was über die MCP-Tür geht, liest am Ende ein Mensch.
     assert "Nachrichten:" in text
     assert "ICARUS_" not in text
-    assert "Einrichtung" in text
+    assert WEGWEISER in text
     assert "Gedächtnis:" in text
 
 

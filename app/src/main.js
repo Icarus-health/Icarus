@@ -1360,7 +1360,7 @@ const PROPOSAL_KIND_LABELS = {
   conflict: "Widersprechen sich diese?",
 };
 
-// Dieselben Bezeichnungen wie im Formular unter „Gedächtnis“ — eine Art heißt
+// Dieselben Bezeichnungen wie im Formular unter „Was ich weiß“ — eine Art heißt
 // überall gleich, ob die Aussage schon im Bestand steht oder erst vorgeschlagen wird.
 const ASSERTION_KIND_LABELS = {
   state: "Zustand",
@@ -2433,7 +2433,7 @@ const WIZARD_STEPS = [
   {
     title: "E-Mail und Kalender",
     text:
-      "Kannst du auch später einrichten, unter „Einrichtung“. Mail ist der " +
+      "Kannst du auch später einrichten — oben unter „Mehr“. Mail ist der " +
       "gefährlichste Weg für untergeschobene Anweisungen — gelesene Nachrichten " +
       "gelten deshalb immer als fremder Inhalt und heben die Freigabestufe an.",
     build: () => document.createDocumentFragment(),
@@ -2623,7 +2623,7 @@ async function refreshStatus() {
     meldeZustand("");
   } else {
     meldeZustand("Kein Modell", "error");
-    statusEl.title = "Ohne Modell gehen keine Gespräche. Unter „Einrichtung“ einrichten.";
+    statusEl.title = "Ohne Modell gehen keine Gespräche. Oben unter „Mehr“ einrichten.";
   }
 
   // Lieber ehrlich sagen, was fehlt, als einen kaputten Chat anbieten.
@@ -2651,8 +2651,9 @@ async function start() {
     addMessage(
       "assistant",
       "Es ist kein Modell eingerichtet — Gespräche gehen noch nicht. " +
-        "Das Gedächtnis funktioniert trotzdem: unter „Gedächtnis“ lassen sich " +
-        "Aussagen speichern, ansehen und widerrufen, unter „Rohmaterial“ " +
+        "Das Gedächtnis funktioniert trotzdem: in der Ablage unter „Was ich " +
+        "weiß“ lassen sich Aussagen speichern, ansehen und widerrufen, unter " +
+        "„Eingelesenes“ " +
         "vorhandene Notizen einlesen."
     );
   }

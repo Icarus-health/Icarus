@@ -66,6 +66,11 @@ from .workspace import (
     WorkspaceStore,
 )
 
+# Wo in der Oberfläche man etwas einrichtet. Steht hier einmal, weil es in
+# mehreren Meldungen vorkommt: ein Wegweiser, der auf einen Ort zeigt, den es
+# nicht mehr gibt, ist schlimmer als keiner.
+WEGWEISER = "Oben unter „Mehr“"
+
 TOKEN_ENV = "ICARUS_SIDECAR_TOKEN"
 DATA_ENV = "ICARUS_DATA_DIR"
 ROOTS_ENV = "ICARUS_FILE_ROOTS"
@@ -768,7 +773,7 @@ def create_app(
         if mail is None:
             raise HTTPException(
                 status_code=409,
-                detail="Kein Mailzugang eingerichtet. Unter „Einrichtung“ deine "
+                detail=f"Kein Mailzugang eingerichtet. {WEGWEISER} deine "
                        "Adresse eintragen — den Rest sucht Icarus.",
             )
         return mail
@@ -957,7 +962,7 @@ def create_app(
             # das niemand außerhalb der IT hat, und daraus folgt kein nächster
             # Schritt. Der Weg dorthin steht im Satz.
             result["calendar"]["error"] = (
-                "Noch kein Kalender verbunden. Unter „Einrichtung“ eintragen."
+                f"Noch kein Kalender verbunden. {WEGWEISER} eintragen."
             )
         else:
             try:
@@ -968,7 +973,7 @@ def create_app(
         mail = getattr(app.state, "mail", None)
         if mail is None:
             result["mail"]["error"] = (
-                "Noch kein Postfach verbunden. Unter „Einrichtung“ deine "
+                f"Noch kein Postfach verbunden. {WEGWEISER} deine "
                 "Adresse eintragen — den Rest sucht Icarus."
             )
         else:

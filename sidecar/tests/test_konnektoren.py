@@ -22,7 +22,7 @@ from icarus_memory.connectors.mail import Message, _decode
 from icarus_memory.model import now
 from icarus_memory.policy import ActionClass, ApprovalLevel, Policy
 from icarus_memory.providers import Reply, ToolCall
-from icarus_memory.server import create_app
+from icarus_memory.server import WEGWEISER, create_app
 from icarus_memory.tasks import TaskStatus, TaskStore
 from icarus_memory.tools import build_registry
 
@@ -278,7 +278,7 @@ def test_dashboard_meldungen_nennen_keine_variablennamen(client: TestClient) -> 
 
     for meldung in meldungen:
         assert "ICARUS_" not in meldung, f"Variablenname in der Oberfläche: {meldung}"
-        assert "Einrichtung" in meldung, f"Kein Weg zum nächsten Schritt: {meldung}"
+        assert WEGWEISER in meldung, f"Kein Weg zum nächsten Schritt: {meldung}"
 
 
 def test_dashboard_zeigt_aufgaben(client: TestClient) -> None:

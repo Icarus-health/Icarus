@@ -30,14 +30,7 @@
           </svg>
           <span class="nur-vorlesen">Suchen</span>
         </button>
-        <button id="mehr-knopf" class="tab" type="button" title="Mehr" aria-haspopup="true" aria-expanded="false">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z"></path>
-          </svg>
-          <span class="nur-vorlesen">Mehr</span>
-        </button>
+        <button id="mehr-knopf" class="tab" type="button" aria-haspopup="true" aria-expanded="false">Mehr</button>
         <span id="status" class="status">Verbinde…</span>
       </span>
 
@@ -108,7 +101,7 @@
             <form id="task-form">
               <input id="task-title" type="text" placeholder="Was ist zu tun?" autocomplete="off" required />
               <input id="task-due" type="date" aria-label="Fällig am" />
-              <button type="submit">Anlegen</button>
+              <button type="submit" class="primary">Anlegen</button>
             </form>
             <ul id="task-list"></ul>
             <p id="task-empty" class="muted">Nichts offen.</p>
@@ -130,7 +123,7 @@
           <input id="project-area" type="text" placeholder="Bereich" autocomplete="off" list="areas" />
           <datalist id="areas"></datalist>
           <input id="project-deadline" type="date" aria-label="Frist" />
-          <button type="submit">Anlegen</button>
+          <button type="submit" class="primary">Anlegen</button>
         </form>
 
         <div class="split">
@@ -155,7 +148,7 @@
 
         <form id="chat-form">
           <input id="chat-input" type="text" placeholder="Schreib etwas…" autocomplete="off" />
-          <button type="submit">Senden</button>
+          <button type="submit" class="primary">Senden</button>
         </form>
 
         <!-- Posteingang. Aufklappbar, damit er das Gespräch nicht verdrängt —
@@ -187,7 +180,7 @@
             <option value="markdown">Markdown-Ordner</option>
             <option value="dateien">Textdateien</option>
           </select>
-          <button type="submit">Aufnehmen</button>
+          <button type="submit" class="primary">Aufnehmen</button>
         </form>
         <p id="ingest-note" class="muted"></p>
 
@@ -230,7 +223,7 @@
             <option value="goal">Ziel</option>
             <option value="constraint">Grenze</option>
           </select>
-          <button type="submit">Merken</button>
+          <button type="submit" class="primary">Merken</button>
         </form>
 
         <details id="context-box">

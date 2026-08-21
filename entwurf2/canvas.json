@@ -1,0 +1,33 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html",     "title": "Today",              "x": 0,    "y": 0,   "w": 1200, "h": 820 },
+    { "file": "Reveal.dc.html",   "title": "Today — under the pointer", "x": 1280, "y": 0, "w": 1200, "h": 820 },
+    { "file": "Approval.dc.html", "title": "Before it goes out", "x": 2560, "y": 0,   "w": 1200, "h": 820 },
+    { "file": "Ask.dc.html",      "title": "Ask",                "x": 0,    "y": 900, "w": 1200, "h": 820 },
+    { "file": "Library.dc.html",  "title": "Library",            "x": 1280, "y": 900, "w": 1200, "h": 820 },
+    { "file": "Welcome.dc.html",  "title": "First run",          "x": 2560, "y": 900, "w": 1200, "h": 820 }
+  ],
+  "annotations": [
+    {
+      "id": "premise",
+      "x": -460, "y": 0, "w": 400,
+      "text": "The premise\n\nThe last attempt tidied a web dashboard. A tidy dashboard is still a dashboard.\n\nThis is a Mac app. One column of type, a quiet sidebar, and almost no chrome. The home screen is three sentences and nothing else — no cards, no counters, no toolbar.\n\nThe accent colour appears three times on screen. That is the budget."
+    },
+    {
+      "id": "buttons",
+      "x": 1280, "y": -230, "w": 400,
+      "text": "Where the buttons went\n\nNothing is a button until you reach for it. Actions live on the thing they act on, revealed under the pointer — not parked in a toolbar at the other end of the window.\n\nThe cost is discoverability, so the first run teaches it once and the sentences stay legible without it."
+    },
+    {
+      "id": "recognise",
+      "x": 2560, "y": -230, "w": 400,
+      "text": "Recognise, don’t retype\n\nToday the app asks you to type the recipient to confirm — and it sits right above the field, so it gets copied unread.\n\nThree addresses, one is right. A click instead of a line, and it tests the thing that matters: can you tell the real recipient from a planted one."
+    },
+    {
+      "id": "firstrun",
+      "x": 2560, "y": 1780, "w": 400,
+      "text": "Benefit before plumbing\n\nThe shipped wizard asks for a model provider, a folder path and an IMAP host — before the app has been useful for a single day.\n\nOne question instead. What gets configured follows from the answer, and only that."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

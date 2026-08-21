@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #dedad3; }
+    a { color: #2f6cae; text-decoration: none; }
+    .ui { font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Instrument Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  </style>
+</helmet>
+
+<div class="ui" style="width: 1200px; height: 820px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #e6e2db 0%, #d8d3cb 100%);">
+  <div style="width: 1104px; height: 736px; background: #faf9f7; border-radius: 12px; box-shadow: 0 32px 64px -16px rgba(40,34,26,0.28), 0 0 0 0.5px rgba(40,34,26,0.14); display: flex; align-items: center; justify-content: center; overflow: hidden;">
+
+    <!-- Der erste Start fragt nach dem Nutzen, nicht nach der Infrastruktur.
+         Kein Anbieter, kein Ordnerpfad, kein Postfachserver auf Seite eins. -->
+    <div style="width: 560px;">
+
+      <h1 style="margin: 0; font-size: 38px; line-height: 45px; font-weight: 600; letter-spacing: -0.026em; color: #1d1c1a; text-wrap: balance;">What should I help you with first?</h1>
+
+      <p style="margin: 16px 0 0; font-size: 17px; line-height: 26px; color: #8a857d; max-width: 44ch;">Pick one. I’ll set up the rest later, when it’s actually needed — and I’ll ask first.</p>
+
+      <div style="margin-top: 34px; display: flex; flex-direction: column; gap: 1px;">
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 15px 16px; border-radius: 12px; background: #ffffff; box-shadow: 0 0 0 1px #2f6cae, 0 1px 3px rgba(47,108,174,0.14);">
+          <div style="flex-grow: 1;">
+            <div style="font-size: 16.5px; font-weight: 500; color: #1d1c1a;">Keep track of my day</div>
+            <div style="font-size: 14px; color: #8a857d; margin-top: 2px;">What’s due, who’s waiting, what’s next</div>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2f6cae" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 15px 16px; border-radius: 12px;">
+          <div style="flex-grow: 1;">
+            <div style="font-size: 16.5px; font-weight: 500; color: #1d1c1a;">Stop explaining things twice</div>
+            <div style="font-size: 14px; color: #8a857d; margin-top: 2px;">I read your notes and remember what holds</div>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c4bfb6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 14px; padding: 15px 16px; border-radius: 12px;">
+          <div style="flex-grow: 1;">
+            <div style="font-size: 16.5px; font-weight: 500; color: #1d1c1a;">Get on top of my inbox</div>
+            <div style="font-size: 14px; color: #8a857d; margin-top: 2px;">Replies drafted — nothing sent without you</div>
+          </div>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c4bfb6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+        </div>
+
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 16px; margin-top: 34px;">
+        <span style="display: inline-flex; align-items: center; height: 34px; padding: 0 22px; border-radius: 9px; background: #2f6cae; color: #ffffff; font-size: 15px; font-weight: 500;">Continue</span>
+        <span style="font-size: 14.5px; color: #8a857d;">I’ll just look around</span>
+      </div>
+
+      <div style="margin-top: 40px; padding-top: 20px; border-top: 0.5px solid rgba(40,34,26,0.10); font-size: 13px; line-height: 20px; color: #a9a49b; max-width: 52ch;">Everything stays on this Mac. There’s no account and no server to sign in to — and nothing leaves without you seeing it first.</div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; background: #dedad3; }
+    a { color: #2f6cae; text-decoration: none; }
+    .ui { font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Instrument Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  </style>
+</helmet>
+
+<div class="ui" style="width: 1200px; height: 820px; display: flex; align-items: center; justify-content: center; background: linear-gradient(160deg, #e6e2db 0%, #d8d3cb 100%);">
+  <div style="width: 1104px; height: 736px; background: #faf9f7; border-radius: 12px; box-shadow: 0 32px 64px -16px rgba(40,34,26,0.28), 0 0 0 0.5px rgba(40,34,26,0.14); display: flex; overflow: hidden;">
+
+    <div style="width: 232px; background: rgba(243,240,235,0.86); border-right: 0.5px solid rgba(40,34,26,0.10); display: flex; flex-direction: column; padding: 44px 12px 16px;">
+      <div style="display: flex; flex-direction: column; gap: 1px;">
+        <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8a857d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5"></path><path d="M12 7v5l3.5 2"></path></svg>
+          <span style="font-size: 13.5px; color: #4a4640;">Today</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8a857d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5a7.5 7.5 0 0 1-7.5 7.5H5l-1.5 2v-9.5a7.5 7.5 0 0 1 7.5-7.5h1.5a7.5 7.5 0 0 1 7.5 7.5Z"></path></svg>
+          <span style="font-size: 13.5px; color: #4a4640;">Ask</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 10px; background: rgba(47,108,174,0.12);">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#2f6cae" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19a1 1 0 0 1 1 1v14"></path><path d="M4 5.5V18a3 3 0 0 0 3 3h13"></path><path d="M8 8h7"></path></svg>
+          <span style="font-size: 13.5px; font-weight: 500; color: #1d1c1a;">Library</span>
+        </div>
+      </div>
+
+      <!-- Die Unterteilung sitzt in der Seitenleiste, nicht als zweite
+           Reiterreihe über dem Inhalt. -->
+      <div style="margin-top: 26px; display: flex; flex-direction: column; gap: 1px;">
+        <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #b8b2a8; padding: 0 10px 7px;">Library</div>
+        <div style="display: flex; align-items: center; height: 28px; padding: 0 10px 0 30px; font-size: 13px; color: #4a4640;">Projects</div>
+        <div style="display: flex; align-items: center; height: 28px; padding: 0 10px 0 30px; border-radius: 8px; background: rgba(40,34,26,0.055); font-size: 13px; color: #1d1c1a; font-weight: 500;">What I know</div>
+        <div style="display: flex; align-items: center; height: 28px; padding: 0 10px 0 30px; font-size: 13px; color: #4a4640;">People</div>
+        <div style="display: flex; align-items: center; height: 28px; padding: 0 10px 0 30px; font-size: 13px; color: #4a4640;">
+          To settle
+          <span style="margin-left: auto; font-size: 11.5px; color: #a9a49b;">4</span>
+        </div>
+      </div>
+
+      <div style="flex-grow: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 10px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a9a49b" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2.5v2.4M12 19.1v2.4M21.5 12h-2.4M4.9 12H2.5"></path></svg>
+        <span style="font-size: 12.5px; color: #8a857d;">Settings</span>
+      </div>
+    </div>
+
+    <div style="flex-grow: 1; display: flex; flex-direction: column;">
+      <div style="height: 44px; display: flex; align-items: center; justify-content: flex-end; padding: 0 22px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b3ada3" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+      </div>
+
+      <div style="padding: 26px 64px 0;">
+        <h1 style="margin: 0; font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.022em; color: #1d1c1a;">What I know</h1>
+        <p style="margin: 8px 0 0; font-size: 14.5px; color: #8a857d;">Everything here you told me or approved. Nothing arrives on its own.</p>
+
+        <div style="margin-top: 26px; display: flex; flex-direction: column;">
+
+          <div style="padding: 15px 0; border-bottom: 0.5px solid rgba(40,34,26,0.09);">
+            <div style="font-size: 16.5px; line-height: 24px; color: #1d1c1a;">The notice period is six months, to the end of a quarter.</div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px; font-size: 12.5px; color: #a9a49b;">
+              <span>A fixed fact</span><span>·</span><span>you told me</span><span>·</span><span>12 May</span>
+              <span style="display: inline-flex; align-items: center; gap: 5px; color: #a9805a;"><span style="width: 5px; height: 5px; border-radius: 999px; background: #a9805a;"></span>unconfirmed for 3 months</span>
+            </div>
+          </div>
+
+          <div style="padding: 15px 0; border-bottom: 0.5px solid rgba(40,34,26,0.09);">
+            <div style="font-size: 16.5px; line-height: 24px; color: #1d1c1a;">Martina is running the training for the assistants.</div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px; font-size: 12.5px; color: #a9a49b;">
+              <span>A current state</span><span>·</span><span>you told me</span><span>·</span><span>12 May</span>
+            </div>
+          </div>
+
+          <div style="padding: 15px 0; border-bottom: 0.5px solid rgba(40,34,26,0.09);">
+            <div style="font-size: 16.5px; line-height: 24px; color: #1d1c1a;">I’d rather have two short appointments than one long block.</div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px; font-size: 12.5px; color: #a9a49b;">
+              <span>A preference</span><span>·</span><span>you told me</span><span>·</span><span>2 June</span>
+            </div>
+          </div>
+
+          <div style="padding: 15px 0; border-bottom: 0.5px solid rgba(40,34,26,0.09);">
+            <div style="font-size: 16.5px; line-height: 24px; color: #1d1c1a;">Screening follows GLIM at every first contact.</div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px; font-size: 12.5px; color: #a9a49b;">
+              <span>A goal</span><span>·</span><span>you told me</span><span>·</span><span>12 May</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

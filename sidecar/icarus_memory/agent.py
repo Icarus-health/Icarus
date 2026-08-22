@@ -385,6 +385,29 @@ class Agent:
             return f"Unbekanntes Werkzeug: {call.name}"
 
         model_name = self._provider.model if self._provider else None
+
+        # **Vor** der Freigabe, nicht erst beim Ausführen. Ein Aufruf, dem
+        # Pflichtfelder fehlen, darf nie als Antrag vorgelegt werden: der
+        # Trockenlauf zeigte dann „An: None / Betreff: None“, und wer die
+        # Bestätigungsphrase tippt, gibt etwas frei, das er nie gesehen hat.
+        # Genau das ist die Zusage, die der Trockenlauf tragen soll.
+        #
+        # Kleine Modelle benennen Parameter regelmäßig falsch — `empfaenger`
+        # statt `to`. Sie sollen erfahren, wie die Felder heißen, statt den
+        # Nutzer mit einem leeren Antrag zu behelligen.
+        fehlend = _fehlende_pflichtfelder(tool, call.arguments)
+        if fehlend:
+            erwartet = ", ".join(tool.parameters.get("properties", {})) or "keine"
+            detail = (
+                f"Dem Aufruf von {tool.name} fehlt: {', '.join(fehlend)}. "
+                f"Erwartete Felder: {erwartet}."
+            )
+            self._audit.record(
+                tool.name, tool.classify(call.arguments).value, "auto", "failed",
+                call.arguments, model=model_name, detail=detail,
+            )
+            return f"Fehlgeschlagen: {detail}"
+
         # Manche Werkzeuge werden erst durch ihre Argumente außenwirksam.
         action_class = tool.classify(call.arguments)
         decision = self._policy.decide(

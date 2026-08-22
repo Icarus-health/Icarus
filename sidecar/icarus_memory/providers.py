@@ -98,6 +98,16 @@ class OpenAICompatible:
         self._base = base_url.rstrip("/")
         self.is_local = is_local_endpoint(base_url)
 
+    @property
+    def base_url(self) -> str:
+        """Wohin dieser Anbieter zeigt.
+
+        Öffentlich, weil die Einrichtung es anzeigen können muss — wer drei
+        Dienste ausprobiert hat, will sehen, welcher gerade eingestellt ist.
+        Der Schlüssel bleibt privat; er hat in keiner Anzeige etwas verloren.
+        """
+        return self._base
+
     def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> Reply:
@@ -147,6 +157,11 @@ class Anthropic:
         self.model = model
         self._key = api_key
         self._base = base_url.rstrip("/")
+
+    @property
+    def base_url(self) -> str:
+        return self._base
+
         self._max_tokens = max_tokens
         self.is_local = is_local_endpoint(base_url)
 
@@ -245,6 +260,39 @@ class Anthropic:
         return {"role": role, "content": message.get("content") or ""}
 
 
+def verfuegbare_modelle(base_url: str, api_key: str | None = None) -> list[str]:
+    """Fragt einen OpenAI-kompatiblen Endpunkt, welche Modelle er kennt.
+
+    Damit wird aus einem Tippfeld eine Liste — der Nutzer muss den genauen
+    Namen eines Modells nicht auswendig können, und ein Tippfehler kann nicht
+    mehr in einen Fehler beim ersten Gespräch münden.
+
+    Wirft nichts: kann der Endpunkt nicht antworten oder kennt er den Weg
+    nicht, kommt eine leere Liste zurück und das Feld bleibt ein Tippfeld.
+    """
+    ziel = base_url.rstrip("/") + "/models"
+    kopf = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    try:
+        with _http(timeout=8.0) as client:
+            antwort = client.get(ziel, headers=kopf)
+            antwort.raise_for_status()
+            daten = antwort.json()
+    except Exception:  # noqa: BLE001 - eine fehlende Liste ist kein Fehler
+        return []
+
+    posten = daten.get("data") if isinstance(daten, dict) else None
+    if not isinstance(posten, list):
+        return []
+
+    namen = []
+    for eintrag in posten:
+        if isinstance(eintrag, dict):
+            name = eintrag.get("id") or eintrag.get("name")
+            if isinstance(name, str) and name:
+                namen.append(name)
+    return sorted(set(namen))
+
+
 def from_env() -> Provider | None:
     """Baut den Anbieter aus der Umgebung.
 
@@ -260,6 +308,21 @@ def from_env() -> Provider | None:
         key = os.environ.get("ANTHROPIC_API_KEY")
         if key:
             return Anthropic(model or "claude-sonnet-5", key)
+
+    # Ein Anbieter, der die OpenAI-Schnittstelle spricht, aber woanders steht.
+    # Das ist der Schlüssel zu OpenRouter, Groq, Together, DeepSeek, Mistral,
+    # LM Studio, llama.cpp und vLLM — eine Zeile statt eines Anbieters je Dienst.
+    if choice == "kompatibel":
+        adresse = os.environ.get("ICARUS_BASE_URL", "").strip()
+        if not adresse:
+            return None
+        return OpenAICompatible(
+            model or "",
+            # Manche lokalen Server verlangen gar keinen Schlüssel und stören
+            # sich auch nicht an einem beliebigen. Leer ginge oft schief.
+            api_key=os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY") or "kein-schluessel",
+            base_url=adresse,
+        )
 
     if choice == "ollama":
         return OpenAICompatible(
@@ -288,4 +351,5 @@ __all__ = [
     "Reply",
     "ToolCall",
     "from_env",
+    "verfuegbare_modelle",
 ]

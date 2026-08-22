@@ -394,3 +394,74 @@ def test_ein_falsch_benannter_parameter_wird_erklaert() -> None:
     # Ein Werkzeug ohne Pflichtfelder verlangt nichts.
     werkzeug.parameters = {"type": "object", "properties": {}}
     assert _fehlende_pflichtfelder(werkzeug, {}) == []
+
+
+# -- Kein Antrag für einen Aufruf, der gar nicht laufen kann -----------------
+
+
+def test_unvollstaendiger_aufruf_wird_nie_zur_freigabe(store, audit) -> None:
+    """Ein Trockenlauf mit „An: None“ darf niemandem vorgelegt werden.
+
+    Kleine Modelle benennen Parameter regelmäßig falsch — `empfaenger` statt
+    `to`. Vorher entstand daraus ein vollwertiger Freigabeantrag: strenge
+    Bestätigung, Bestätigungsphrase aus dem falsch benannten Feld, und ein
+    Trockenlauf, in dem Empfänger, Betreff und Text alle `None` waren. Wer die
+    Phrase tippt, gibt damit etwas frei, das er nie gesehen hat — genau die
+    Zusage, die der Trockenlauf tragen soll.
+    """
+    gesendet: list[tuple] = []
+    agent = make_agent(
+        store,
+        audit,
+        Reply(tool_calls=[ToolCall(
+            id="r1",
+            name="mail_senden",
+            # Falsch benannt: das Werkzeug erwartet to/subject/body.
+            arguments={"empfaenger": "becker@example.com", "betreff": "Hallo", "text": "…"},
+        )]),
+        sink=lambda *a: gesendet.append(a),
+    )
+
+    turn = agent.send("Schick eine Mail")
+
+    assert turn.approvals == [], "Kein Antrag für einen unvollständigen Aufruf"
+    assert gesendet == [], "Und erst recht nichts gesendet"
+
+
+def test_das_modell_erfaehrt_wie_die_felder_heissen(store, audit) -> None:
+    """Damit es den Aufruf reparieren kann, statt blind zu wiederholen."""
+    agent = make_agent(
+        store,
+        audit,
+        Reply(tool_calls=[ToolCall(id="r1", name="mail_senden", arguments={"empfaenger": "x@y.z"})]),
+        Reply(text="Verstanden."),
+        sink=lambda *a: None,
+    )
+
+    agent.send("Schick eine Mail")
+
+    # Die zweite Runde muss die Rückmeldung mit den echten Feldnamen enthalten.
+    letzte = agent._provider.seen[-1]
+    rueckmeldung = " ".join(str(n.get("content") or "") for n in letzte)
+    assert "to" in rueckmeldung and "subject" in rueckmeldung and "body" in rueckmeldung
+
+
+def test_ein_vollstaendiger_aufruf_kommt_weiterhin_als_antrag(store, audit) -> None:
+    """Die Gegenprobe: richtig benannt, und die Freigabe steht wie immer."""
+    agent = make_agent(
+        store,
+        audit,
+        Reply(tool_calls=[ToolCall(id="r1", name="mail_senden", arguments={
+            "to": "becker@example.com", "subject": "Hallo", "body": "Text",
+        })]),
+        sink=lambda *a: None,
+    )
+
+    turn = agent.send("Schick eine Mail")
+
+    assert len(turn.approvals) == 1
+    antrag = turn.approvals[0]
+    assert antrag.decision.level is ApprovalLevel.CONFIRM_STRICT
+    # Und der Trockenlauf trägt den echten Inhalt, nicht None.
+    assert "becker@example.com" in antrag.dry_run
+    assert "None" not in antrag.dry_run

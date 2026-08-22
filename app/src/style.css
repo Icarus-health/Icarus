@@ -197,6 +197,13 @@ nav strong { font: var(--t-kopf); font-weight: 650; letter-spacing: -0.015em; ma
 }
 
 .tab:hover { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
+
+/* Ein Knopf mit Symbol **und** Wort: ohne Abstand kleben sie aneinander. */
+.suche-knopf, #mehr-knopf {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--a2);
+}
 .tab:active:not(:disabled) { box-shadow: none; transform: none; }
 .tab.active { color: var(--schrift); background: var(--akzent-schwach); }
 

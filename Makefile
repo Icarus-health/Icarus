@@ -16,7 +16,7 @@ COMPOSE  := docker compose --env-file $(ENVDATEI)
 ADRESSE  := http://127.0.0.1:8765
 
 .DEFAULT_GOAL := help
-.PHONY: help start stop logs url \
+.PHONY: help start stop logs url lokal \
         venv sidecar-dev sidecar-run mcp-config container \
         test validate-schema check \
         app-dev app-build sidecar-binary icon clean
@@ -142,8 +142,46 @@ sidecar-dev: venv ## Sidecar samt Entwicklungsabhängigkeiten installieren (ohne
 sidecar-full: venv ## Sidecar mit cognee installieren (zieht ~950 MB nach)
 	$(BIN)/pip install -e "sidecar[cognee,dev]"
 
-sidecar-run: ## Sidecar lokal starten (127.0.0.1:8765)
+sidecar-run: ## Sidecar roh starten, ohne Token (nur für Entwicklung)
 	ICARUS_DATA_DIR=$${ICARUS_DATA_DIR:-./.icarus-data} $(BIN)/icarus-sidecar
+
+# -- Der zweite Weg: ohne Docker --------------------------------------------
+#
+# `make start` braucht einen laufenden Docker-Daemon. Das ist ein halbes
+# Gigabyte Fremdsoftware, die man erst installieren, starten und warten muss —
+# für jemanden, der Icarus nur benutzen will, eine hohe Hürde.
+#
+# `make lokal` tut dasselbe ohne Docker: Python-Umgebung anlegen, Sidecar
+# installieren, Token erzeugen (dasselbe wie oben, nicht schwächer), Ordner
+# freigeben, starten. Ein Befehl.
+#
+# Der Unterschied zum Container: keine Prozessgrenze zwischen Icarus und dem
+# übrigen Rechner. Wer das braucht, nimmt `make start`.
+lokal: export NOTIZEN := $(NOTIZEN)
+lokal: $(ENVDATEI) ## Ohne Docker starten. Ordner freigeben: make lokal NOTIZEN=~/Notizen
+	@set -e; \
+	test -d $(VENV) || { echo "Lege die Python-Umgebung an …"; $(PY) -m venv $(VENV); }; \
+	$(BIN)/python -c "import icarus_memory" 2>/dev/null || { \
+	  echo "Installiere den Sidecar (einmalig, dauert einen Moment) …"; \
+	  $(BIN)/pip install --quiet --upgrade pip; \
+	  $(BIN)/pip install --quiet -e "sidecar"; \
+	}; \
+	pfad="$$NOTIZEN"; \
+	case "$$pfad" in "~"|"~/"*) pfad="$$HOME$${pfad#\~}";; esac; \
+	if [ -n "$$pfad" ]; then \
+	  aufgeloest=$$(cd "$$pfad" 2>/dev/null && pwd) || { \
+	    echo "Den Ordner gibt es nicht: $$pfad"; exit 1; }; \
+	  echo "Lese aus: $$aufgeloest"; \
+	else \
+	  aufgeloest=""; \
+	  echo "Kein Ordner freigegeben — Icarus liest keine Dateien."; \
+	  echo "Nachreichen mit:  make lokal NOTIZEN=~/Notizen"; \
+	fi; \
+	echo; \
+	set -a; . ./$(ENVDATEI); set +a; \
+	ICARUS_DATA_DIR="$${ICARUS_DATA_DIR:-$$PWD/.icarus-data}" \
+	ICARUS_FILE_ROOTS="$$aufgeloest" \
+	exec $(BIN)/icarus-sidecar
 
 container: ## Container-Bild lokal bauen
 	docker build -t icarus:local .

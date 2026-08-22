@@ -177,19 +177,27 @@ Details: [`docs/05-sicherheit.md`](docs/05-sicherheit.md)
 
 ## Getting started
 
-### Container
+```bash
+make lokal NOTIZEN=~/Documents/Obsidian
+```
+
+That is the whole thing. It creates a Python environment on first run,
+generates and reuses a local access token, mounts nothing, and prints a URL
+with that token. The notes folder is optional; without it Icarus reads no
+files and says so. Stop with Ctrl-C.
+
+### In a container instead
+
+Requires a running Docker daemon. It buys a process boundary between Icarus
+and the rest of the machine; everything else is the same.
 
 ```bash
 make start NOTIZEN=~/Documents/Obsidian
-```
-
-The notes folder is optional and mounted read-only. The command creates and
-reuses the required local token and encryption passphrase, starts the sidecar
-and prints the local URL.
-
-```bash
 make stop
 ```
+
+The notes folder is mounted read-only. Both commands create and reuse the same
+local token and encryption passphrase.
 
 Full guide: [`docs/15-loslegen.md`](docs/15-loslegen.md)
 

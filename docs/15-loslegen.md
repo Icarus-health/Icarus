@@ -1,63 +1,82 @@
 # Loslegen
 
-Für Sören, am Mac, beim ersten Mal. Stand 2026-08-02.
+Für Sören, am Mac, beim ersten Mal. Stand 2026-08-22.
 
-Das hier ist kein Optionsvergleich, sondern der eine Weg, der funktioniert.
-Warum es den Containerweg überhaupt gibt und wo seine Grenzen liegen, steht in
-[`adr/0007-docker-als-zweiter-weg.md`](adr/0007-docker-als-zweiter-weg.md).
+Zwei Wege, und der erste ist der kurze: er braucht nichts außer Python und ist
+in Sekunden da. Der zweite ist der Container — mehr Trennung, mehr Aufwand.
+Wenn du nicht weißt, welchen du willst, nimm den ersten.
 
-## Einmal vorher
-
-Docker Desktop muss laufen. Das Wal-Symbol oben in der Menüleiste muss da sein —
-wenn nicht, Docker Desktop öffnen und warten, bis es aufhört zu blinken. Sonst
-sagt der nächste Schritt nur, er finde keinen Docker-Daemon.
-
-## Was du tippst
+## Der kurze Weg
 
 Im Terminal, im Ordner mit dem Projekt:
+
+```bash
+make lokal NOTIZEN=~/Documents/Obsidian
+```
+
+Den Pfad hinter `NOTIZEN=` durch deinen Notizordner ersetzen. Wenn du gar
+keinen freigeben willst, reicht `make lokal` — dann läuft Icarus, kann aber
+keine Dateien lesen, und sagt das auch.
+
+Beim allerersten Mal legt der Befehl eine Python-Umgebung an und installiert
+den Sidecar. Das dauert einen Moment. Jeder weitere Start ist eine Sache von
+Sekunden. Am Ende steht:
+
+```
+Icarus läuft:  http://127.0.0.1:8765/?token=9f3c…
+```
+
+Diese Adresse anklicken. Der Zeichensalat am Ende ist der Schlüssel zu deinem
+Gedächtnis — ohne ihn antwortet Icarus nicht. Er wird einmal erzeugt und bleibt
+danach gleich; ein Lesezeichen lohnt sich. Falls du ihn verlierst, steht er in
+`.icarus.env` neben dem Projekt.
+
+Beenden: Strg-C im selben Fenster.
+
+## Der andere Weg: im Container
+
+`make lokal` startet Icarus direkt auf dem Rechner. Das ist der kürzeste Weg
+und braucht nichts außer Python. Was ihm fehlt, ist eine Prozessgrenze zwischen
+Icarus und dem übrigen System.
+
+Wer die will, nimmt den Container. Dafür muss **Docker Desktop laufen** — das
+Wal-Symbol oben in der Menüleiste muss da sein. Dann:
 
 ```bash
 make start NOTIZEN=~/Documents/Obsidian
 ```
 
-Den Pfad hinter `NOTIZEN=` durch deinen Notizordner ersetzen. Wenn du gar keinen
-freigeben willst, reicht:
+Beim ersten Mal baut Docker das Bild: ein paar Minuten, etwa ein halbes
+Gigabyte, einmal. Danach dasselbe Bild: eine Adresse mit Token. Anhalten mit
+`make stop`, Adresse nachschlagen mit `make url`, mitlesen mit `make logs`.
 
-```bash
-make start
-```
+Warum es beide Wege gibt, steht in
+[`adr/0007-docker-als-zweiter-weg.md`](adr/0007-docker-als-zweiter-weg.md).
 
-Dann läuft Icarus, kann aber keine Dateien lesen — und sagt das auch. Der Ordner
-lässt sich jederzeit nachreichen: `make stop`, dann `make start NOTIZEN=…`.
+## Ein Modell anschließen
 
-## Was dann passiert
+Ohne Modell funktioniert das Gedächtnis vollständig: Notizen einlesen,
+Aussagen speichern, ansehen, widerrufen, exportieren. Nur Gespräche gehen
+nicht.
 
-Beim allerersten Mal baut Docker das Bild. Das dauert ein paar Minuten und zieht
-etwa ein halbes Gigabyte — einmal. Jeder weitere Start ist eine Sache von
-Sekunden.
+Hinter dem Zahnrad oben rechts, Abschnitt „Modell". Vier Möglichkeiten:
 
-Danach steht am Ende so etwas:
+- **OpenAI** oder **Anthropic** — Schlüssel eintragen, fertig.
+- **Ollama** — läuft auf deinem Rechner, nichts geht nach draußen. Kein
+  Schlüssel nötig.
+- **Anderer Anbieter (OpenAI-kompatibel)** — für OpenRouter, Groq, Together,
+  DeepSeek, Mistral, LM Studio, llama.cpp oder einen eigenen Server. Die
+  Adresse steht als Vorschlag in der Liste.
 
-```
-Icarus läuft. Diese Adresse im Browser öffnen:
-
-  http://127.0.0.1:8765/?token=9f3c…
-```
-
-Diese Adresse anklicken oder kopieren. Das lange Zeichensalat am Ende ist der
-Schlüssel zu deinem Gedächtnis — ohne ihn antwortet Icarus nicht. Er wird beim
-ersten `make start` erzeugt und bleibt danach gleich, du musst ihn dir also nicht
-merken. Lesezeichen setzen lohnt sich; falls du es doch verlierst:
-
-```bash
-make url
-```
+Bei allen außer Anthropic holt „Modelle laden" die Liste beim Anbieter ab —
+du musst keinen Modellnamen auswendig können. „Verbindung prüfen" schickt
+wirklich eine Frage hin und zeigt die echte Antwort, nicht ein „gespeichert".
 
 ## Die Reihenfolge beim Einrichten
 
 Beim ersten Öffnen läuft ein Assistent in fünf Schritten. **Jeder ist
 überspringbar**, und Icarus funktioniert auch, wenn du alle überspringst. Wenn du
-ihn wegklickst oder später etwas ändern willst: Reiter „Einrichtung“.
+ihn wegklickst oder später etwas ändern willst: oben rechts das Zahnrad.
 
 Die Reihenfolge, die sich lohnt:
 
@@ -67,18 +86,18 @@ du noch keinen Schlüssel zur Hand hast, überspring den Schritt und hol ihn
 später nach; Icarus wird davon nicht kaputt. Der Knopf „Verbindung prüfen“
 probiert es wirklich aus und zeigt den echten Fehler, nicht ein „gespeichert“.
 
-**2. Ordner.** Hier steht `/notizen` schon drin, wenn du oben `NOTIZEN=` gesetzt
-hast — nichts abzutippen. Wichtig zu wissen: Im Container heißt dein Ordner
-`/notizen`, nicht `/Users/soeren/Documents/Obsidian`. Er ist **nur lesbar**
-eingebunden, Icarus kann dort nichts ändern oder löschen.
+**2. Ordner.** Steht schon drin, wenn du oben `NOTIZEN=` gesetzt hast — nichts
+abzutippen. Beim Containerweg heißt dein Ordner dort `/notizen`, nicht
+`/Users/soeren/Documents/Obsidian`; er ist **nur lesbar** eingebunden, Icarus
+kann dort nichts ändern oder löschen.
 
-Danach im Reiter „Rohmaterial“ einmal einlesen. `/notizen` steht in der
-Auswahlliste. Das dauert bei einem gewachsenen Vault eine Weile.
+Danach in der **Ablage** unter „Eingelesenes“ einmal einlesen. Der Ordner steht
+in der Auswahlliste. Das dauert bei einem gewachsenen Vault eine Weile.
 
 **3. Mail und Kalender.** Kann warten. Der Assistent weist nur darauf hin, dass
-es das gibt; eingerichtet wird es unter „Einrichtung“, wenn du es brauchst.
+es das gibt; eingerichtet wird es hinter dem Zahnrad, wenn du es brauchst.
 
-**4. Zeitplan.** Unter „Einrichtung“, Abschnitt „Mitlaufen“. Standardmäßig aus,
+**4. Zeitplan.** Hinter dem Zahnrad, Abschnitt „Mitlaufen“. Standardmäßig aus,
 und das ist Absicht. Schalte ihn erst ein, **nachdem** du einmal etwas eingelesen
 und die erste Runde Vorschläge angesehen hast — sonst hast du eine volle
 Vorschlagsschlange, bevor du weißt, ob dir die Vorschläge gefallen. Vier Stunden
@@ -93,7 +112,7 @@ Geld kostet. Mehr dazu: [`11-zeitplan.md`](11-zeitplan.md).
 - **Das Gedächtnis ist leer.** Es gibt kein Konto, aus dem etwas geladen würde.
   Der Bestand entsteht aus dem, was du einliest und annimmst.
 - **Icarus schreibt nichts von selbst in den Bestand.** Was aus deinen Notizen
-  entsteht, landet unter „Vorschläge“ und wartet dort auf dich. Das ist die
+  entsteht, landet in der Ablage unter „Zu klären“ und wartet dort auf dich. Das ist die
   Grundregel und keine Einstellung, die man umlegen kann.
 - **Die semantische Suche fehlt.** Das Container-Bild kommt bewusst ohne
   `cognee` (rund 950 MB). Gesucht wird solange über Teilzeichenketten. Für den
@@ -128,7 +147,7 @@ Willst du wirklich alles loswerden, inklusive Gedächtnis:
 docker compose --env-file .icarus.env down -v
 ```
 
-Das `-v` löscht das Volume. Es gibt kein Zurück, also vorher unter „Gedächtnis“
+Das `-v` löscht das Volume. Es gibt kein Zurück, also vorher unter „Was ich weiß“
 exportieren.
 
 ## Wenn etwas klemmt

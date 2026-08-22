@@ -1672,19 +1672,29 @@ $("#consolidate-btn").addEventListener("click", async () => {
 
 let setupState = null;
 
-const PROVIDER_LABELS = {
+// Nur als Notnagel, falls ein älterer Sidecar den Katalog nicht mitschickt.
+// Die gültige Liste kommt aus `/setup` — zwei Listen laufen auseinander.
+const PROVIDER_LABELS_FALLBACK = {
   "": "Kein Modell (Gedächtnis funktioniert trotzdem)",
   openai: "OpenAI",
   anthropic: "Anthropic",
   ollama: "Ollama (läuft lokal, nichts verlässt den Rechner)",
 };
 
+function providerLabels() {
+  return setupState?.provider_labels ?? PROVIDER_LABELS_FALLBACK;
+}
+
+function brauchtAdresse(anbieter) {
+  return (setupState?.provider_braucht_adresse ?? []).includes(anbieter);
+}
+
 async function saveSetup(patch) {
   setupState = await api("/setup", { method: "PUT", body: JSON.stringify(patch) });
   return setupState;
 }
 
-function field(label, id, { type = "text", value = "", placeholder = "", hint = "" } = {}) {
+function field(label, id, { type = "text", value = "", placeholder = "", hint = "", list = "" } = {}) {
   const wrap = document.createElement("label");
   wrap.className = "field";
   wrap.textContent = label;
@@ -1694,6 +1704,9 @@ function field(label, id, { type = "text", value = "", placeholder = "", hint = 
   input.value = value ?? "";
   input.placeholder = placeholder;
   input.autocomplete = "off";
+  // Eine Auswahlliste, die trotzdem freies Tippen erlaubt: wer einen Namen
+  // kennt, den die Liste nicht hat, wird nicht ausgesperrt.
+  if (list) input.setAttribute("list", list);
   wrap.append(input);
   if (hint) {
     const p = document.createElement("p");
@@ -1710,7 +1723,7 @@ function providerSelect(id, current) {
   wrap.textContent = "Anbieter";
   const select = document.createElement("select");
   select.id = id;
-  for (const [value, label] of Object.entries(PROVIDER_LABELS)) {
+  for (const [value, label] of Object.entries(providerLabels())) {
     const o = document.createElement("option");
     o.value = value;
     o.textContent = label;
@@ -1775,18 +1788,84 @@ async function loadSetup() {
     ? "Ein Schlüssel ist hinterlegt. Leer lassen heißt: unverändert."
     : "Ohne Modell funktioniert das Gedächtnis weiterhin.";
   const psel = providerSelect("setup-provider", s.provider);
+
+  // Modell: eine Liste, wenn der Anbieter eine hergibt, sonst ein Tippfeld.
+  // Den genauen Namen eines Modells kann fast niemand auswendig, und ein
+  // Tippfehler fällt sonst erst im ersten Gespräch auf.
   const mmodel = field("Modell", "setup-model", {
     value: s.model,
     placeholder: setupState.default_models[s.provider] ?? "",
+    list: "modell-liste",
   });
+  const mliste = document.createElement("datalist");
+  mliste.id = "modell-liste";
+  mmodel.append(mliste);
+
+  const mfinden = document.createElement("button");
+  mfinden.type = "button";
+  mfinden.className = "small";
+  mfinden.textContent = "Modelle laden";
+  const mfund = document.createElement("p");
+  mfund.className = "meta";
+
+  mfinden.addEventListener("click", async () => {
+    mfinden.disabled = true;
+    mfund.textContent = "Frage nach …";
+    try {
+      const frage = new URLSearchParams({
+        anbieter: $("#setup-provider").value,
+        adresse: $("#setup-endpoint").value.trim(),
+      });
+      const { modelle, detail } = await api(`/setup/models?${frage}`);
+      mliste.replaceChildren();
+      for (const name of modelle ?? []) {
+        const o = document.createElement("option");
+        o.value = name;
+        mliste.append(o);
+      }
+      // Jede Aktion antwortet — mit Ergebnis oder mit Grund.
+      mfund.textContent = detail ?? "";
+    } catch (err) {
+      mfund.textContent = err.message;
+    } finally {
+      mfinden.disabled = false;
+    }
+  });
+
   const mkey = field("API-Schlüssel", "setup-key", {
     type: "password",
     placeholder: "unverändert lassen",
   });
-  const mend = field("Eigene Adresse", "setup-endpoint", {
+
+  // Die Adresse: bei den bekannten Anbietern steht sie fest und wird nicht
+  // gefragt. Beim freien Anschluss ist sie Pflicht — und die geläufigen
+  // liegen als Vorschlag bei, damit niemand sie nachschlagen muss.
+  const mend = field("Adresse des Anbieters", "setup-endpoint", {
     value: s.endpoint,
-    hint: "Nur nötig für Ollama an anderem Port oder einen Proxy.",
+    list: "adress-liste",
+    hint: "Zum Beispiel OpenRouter, Groq, DeepSeek oder ein Server bei dir.",
   });
+  const aliste = document.createElement("datalist");
+  aliste.id = "adress-liste";
+  for (const [name, adresse] of Object.entries(setupState.bekannte_adressen ?? {})) {
+    const o = document.createElement("option");
+    o.value = adresse;
+    o.label = name;
+    aliste.append(o);
+  }
+  mend.append(aliste);
+
+  // Sichtbar nur, wo sie gebraucht wird — und sofort, nicht erst nach dem
+  // Speichern.
+  const adresseZeigen = () => {
+    const gewaehlt = $("#setup-provider").value;
+    mend.hidden = !brauchtAdresse(gewaehlt) && gewaehlt !== "ollama";
+  };
+  psel.querySelector("select").addEventListener("change", () => {
+    adresseZeigen();
+    mfund.textContent = "";
+  });
+  setTimeout(adresseZeigen, 0);
   const mresult = document.createElement("p");
   mresult.className = "meta";
   const msave = document.createElement("button");
@@ -1810,7 +1889,7 @@ async function loadSetup() {
   const mrow = document.createElement("div");
   mrow.className = "row";
   mrow.append(msave, testButton("modell", "Verbindung prüfen", mresult));
-  modell.append(mh, mnote, psel, mmodel, mkey, mend, mrow, mresult);
+  modell.append(mh, mnote, psel, mend, mkey, mmodel, mfinden, mfund, mrow, mresult);
   panel.append(modell);
 
   // -- Ordner
@@ -2730,7 +2809,7 @@ async function refreshStatus() {
   // Lieber ehrlich sagen, was fehlt, als einen kaputten Chat anbieten.
   $("#chat-input").placeholder = health.chat
     ? "Schreib etwas…"
-    : "Kein Modell eingerichtet — siehe Einrichtung";
+    : "Kein Modell eingerichtet — oben unter „Mehr“";
   return health;
 }
 

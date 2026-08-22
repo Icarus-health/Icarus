@@ -48,7 +48,33 @@ DATEINAME = "einstellungen.json"
 
 #: Anbieter, die die Oberfläche anbieten darf. `""` heißt: kein Modell, und das
 #: ist eine gültige Wahl — der Gedächtniskern läuft ohne.
-PROVIDERS = ("", "openai", "anthropic", "ollama")
+PROVIDERS = ("", "openai", "anthropic", "ollama", "kompatibel")
+
+#: Klartext für die Auswahl. „kompatibel“ ist der Schlüssel zu allem anderen:
+#: OpenRouter, Groq, Together, DeepSeek, Mistral, LM Studio, llama.cpp, vLLM —
+#: sie alle sprechen dieselbe Schnittstelle. Ein Eintrag statt zwanzig.
+PROVIDER_LABELS = {
+    "": "Kein Modell (Gedächtnis funktioniert trotzdem)",
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "ollama": "Ollama (auf diesem Rechner)",
+    "kompatibel": "Anderer Anbieter (OpenAI-kompatibel)",
+}
+
+#: Wofür der Anbieter eine eigene Adresse braucht. Bei den anderen steht sie
+#: fest und wird nicht gefragt.
+PROVIDER_BRAUCHT_ADRESSE = ("kompatibel",)
+
+#: Bekannte Adressen als Starthilfe. Wer eine andere hat, trägt sie ein.
+BEKANNTE_ADRESSEN = {
+    "OpenRouter": "https://openrouter.ai/api/v1",
+    "Groq": "https://api.groq.com/openai/v1",
+    "Together": "https://api.together.xyz/v1",
+    "DeepSeek": "https://api.deepseek.com/v1",
+    "Mistral": "https://api.mistral.ai/v1",
+    "LM Studio (lokal)": "http://localhost:1234/v1",
+    "llama.cpp (lokal)": "http://localhost:8080/v1",
+}
 
 #: Voreingestellte Modelle je Anbieter. Nur Vorschläge; wer ein anderes will,
 #: trägt es ein.
@@ -56,12 +82,16 @@ DEFAULT_MODELS = {
     "openai": "gpt-4.1-mini",
     "anthropic": "claude-sonnet-5",
     "ollama": "llama3.1",
+    "kompatibel": "",
 }
 
 #: Welcher Schlüsselbund-Eintrag zu welchem Anbieter gehört.
 PROVIDER_SECRET = {
     "openai": "OPENAI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
+    # Derselbe Eintrag wie OpenAI: es ist dieselbe Schnittstelle, und zwei
+    # Schlüssel für einen Anschluss wären eine Frage zu viel.
+    "kompatibel": "OPENAI_API_KEY",
 }
 
 #: Geheimnisse, die über die Einrichtung gesetzt werden können. Der Wert ist
@@ -316,8 +346,11 @@ def secret_status(keychain: Keychain) -> dict[str, bool]:
 
 __all__ = [
     "DATEINAME",
+    "BEKANNTE_ADRESSEN",
     "DEFAULT_MODELS",
     "PROVIDERS",
+    "PROVIDER_BRAUCHT_ADRESSE",
+    "PROVIDER_LABELS",
     "PROVIDER_SECRET",
     "CalendarSettings",
     "MailSettings",

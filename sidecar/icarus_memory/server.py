@@ -34,7 +34,7 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import briefing, config, suche
+from . import briefing, config, providers, suche
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .scheduler import (
@@ -530,6 +530,11 @@ def create_app(
             # diese Sitzung. Das muss die Oberfläche sagen dürfen.
             "keychain_available": keychain.available,
             "providers": [p for p in config.PROVIDERS],
+            # Die Beschriftungen kommen mit. Sie standen bisher zusätzlich im
+            # Client — und zwei Listen laufen früher oder später auseinander.
+            "provider_labels": config.PROVIDER_LABELS,
+            "provider_braucht_adresse": list(config.PROVIDER_BRAUCHT_ADRESSE),
+            "bekannte_adressen": config.BEKANNTE_ADRESSEN,
             "default_models": config.DEFAULT_MODELS,
             "adapters": sorted(ADAPTERS),
             # Damit niemand einen IMAP-Hostnamen kennen muss. Siehe
@@ -602,6 +607,44 @@ def create_app(
         """
         treffer = guess_mail_provider(address)
         return {"provider": treffer.to_dict() if treffer else None}
+
+    @app.get("/setup/models", dependencies=guard)
+    def modelle(anbieter: str = "", adresse: str = "") -> dict[str, Any]:
+        """Welche Modelle der eingerichtete Anbieter kennt.
+
+        Zeigen statt tippen: Wer den genauen Namen eines Modells nicht
+        auswendig kann — und das kann fast niemand — soll ihn nicht raten
+        müssen. Anthropic hat keinen solchen Weg; dort bleibt es ein Tippfeld,
+        und die Antwort sagt das auch.
+        """
+        anbieter = (anbieter or os.environ.get("ICARUS_PROVIDER", "")).strip().lower()
+
+        if anbieter == "anthropic":
+            return {
+                "modelle": [],
+                "detail": "Anthropic führt keine Liste. Modellnamen von Hand eintragen.",
+            }
+
+        ziel = (adresse or os.environ.get("ICARUS_BASE_URL", "")).strip()
+        if not ziel:
+            ziel = {
+                "openai": "https://api.openai.com/v1",
+                "ollama": "http://localhost:11434/v1",
+            }.get(anbieter, "")
+        if not ziel:
+            return {"modelle": [], "detail": "Keine Adresse — erst Anbieter wählen."}
+
+        # Gegen den Endpunkt, nicht gegen eine gepflegte Liste im Code: eine
+        # solche Liste ist am Tag ihrer Veröffentlichung veraltet.
+        namen = providers.verfuegbare_modelle(
+            ziel, os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY")
+        )
+        if not namen:
+            return {
+                "modelle": [],
+                "detail": f"{ziel} hat keine Liste geliefert. Namen von Hand eintragen.",
+            }
+        return {"modelle": namen, "detail": f"{len(namen)} Modelle gefunden."}
 
     @app.put("/setup", dependencies=guard)
     def put_setup(body: SetupIn) -> dict[str, Any]:
@@ -700,9 +743,15 @@ def create_app(
                 reply = provider.complete(
                     [{"role": "user", "content": "Antworte mit dem Wort: bereit"}], []
                 )
+                # Nicht `provider.name` — der heißt bei jedem OpenAI-kompatiblen
+                # Dienst „openai“, und wer OpenRouter eingerichtet hat, liest
+                # dann „openai antwortet“ und zweifelt zu Recht. Die Adresse
+                # sagt die Wahrheit.
+                wo = getattr(provider, "base_url", "") or provider.name
+                host = wo.split("//")[-1].split("/")[0] if "//" in wo else wo
                 return {
                     "ok": True,
-                    "detail": f"{provider.name} ({provider.model}) antwortet.",
+                    "detail": f"{host} antwortet — Modell {provider.model}.",
                     "sample": reply.text[:200],
                 }
 

@@ -57,7 +57,7 @@ make url
 
 Beim ersten Öffnen läuft ein Assistent in fünf Schritten. **Jeder ist
 überspringbar**, und Icarus funktioniert auch, wenn du alle überspringst. Wenn du
-ihn wegklickst oder später etwas ändern willst: Reiter „Einrichtung“.
+ihn wegklickst oder später etwas ändern willst: oben rechts das Zahnrad.
 
 Die Reihenfolge, die sich lohnt:
 
@@ -72,13 +72,13 @@ hast — nichts abzutippen. Wichtig zu wissen: Im Container heißt dein Ordner
 `/notizen`, nicht `/Users/soeren/Documents/Obsidian`. Er ist **nur lesbar**
 eingebunden, Icarus kann dort nichts ändern oder löschen.
 
-Danach im Reiter „Rohmaterial“ einmal einlesen. `/notizen` steht in der
-Auswahlliste. Das dauert bei einem gewachsenen Vault eine Weile.
+Danach in der **Ablage** unter „Eingelesenes“ einmal einlesen. `/notizen`
+steht in der Auswahlliste. Das dauert bei einem gewachsenen Vault eine Weile.
 
 **3. Mail und Kalender.** Kann warten. Der Assistent weist nur darauf hin, dass
-es das gibt; eingerichtet wird es unter „Einrichtung“, wenn du es brauchst.
+es das gibt; eingerichtet wird es hinter dem Zahnrad, wenn du es brauchst.
 
-**4. Zeitplan.** Unter „Einrichtung“, Abschnitt „Mitlaufen“. Standardmäßig aus,
+**4. Zeitplan.** Hinter dem Zahnrad, Abschnitt „Mitlaufen“. Standardmäßig aus,
 und das ist Absicht. Schalte ihn erst ein, **nachdem** du einmal etwas eingelesen
 und die erste Runde Vorschläge angesehen hast — sonst hast du eine volle
 Vorschlagsschlange, bevor du weißt, ob dir die Vorschläge gefallen. Vier Stunden
@@ -93,7 +93,7 @@ Geld kostet. Mehr dazu: [`11-zeitplan.md`](11-zeitplan.md).
 - **Das Gedächtnis ist leer.** Es gibt kein Konto, aus dem etwas geladen würde.
   Der Bestand entsteht aus dem, was du einliest und annimmst.
 - **Icarus schreibt nichts von selbst in den Bestand.** Was aus deinen Notizen
-  entsteht, landet unter „Vorschläge“ und wartet dort auf dich. Das ist die
+  entsteht, landet in der Ablage unter „Zu klären“ und wartet dort auf dich. Das ist die
   Grundregel und keine Einstellung, die man umlegen kann.
 - **Die semantische Suche fehlt.** Das Container-Bild kommt bewusst ohne
   `cognee` (rund 950 MB). Gesucht wird solange über Teilzeichenketten. Für den
@@ -128,7 +128,7 @@ Willst du wirklich alles loswerden, inklusive Gedächtnis:
 docker compose --env-file .icarus.env down -v
 ```
 
-Das `-v` löscht das Volume. Es gibt kein Zurück, also vorher unter „Gedächtnis“
+Das `-v` löscht das Volume. Es gibt kein Zurück, also vorher unter „Was ich weiß“
 exportieren.
 
 ## Wenn etwas klemmt

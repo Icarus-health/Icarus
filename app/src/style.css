@@ -1013,3 +1013,23 @@ button.rund { width: 34px; min-height: 34px; padding: 0; border-radius: var(--r-
 /* Überfälliges färbt nicht den Satz, sondern seine Angabe. */
 .overdue .statement { color: var(--schrift); }
 .overdue .meta { color: var(--gefahr); }
+
+/* -- Dauerregeln ------------------------------------------------------------ */
+
+/* Das Angebot, aus einer Freigabe eine Regel zu machen. Steht unter den
+   Knöpfen, nicht daneben: es ist die Folge der Entscheidung, nicht eine
+   dritte gleichrangige Möglichkeit. */
+.kuenftig {
+  display: flex;
+  align-items: center;
+  gap: var(--a2);
+  margin-top: var(--a3);
+  font: var(--t-unter);
+  color: var(--schrift-2);
+  cursor: pointer;
+}
+
+.kuenftig input { flex: 0 0 auto; min-height: 0; }
+
+/* Eine Vollmacht ohne Einschränkung sieht anders aus als eine enge Regel. */
+.meta.warnung { color: var(--warn); }

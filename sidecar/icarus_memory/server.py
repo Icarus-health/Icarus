@@ -37,6 +37,7 @@ from .backup import (
 from . import briefing, config, providers, suche
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
+from .regeln import ERLAUBTE_STUFEN, RegelFehler, RegelStore
 from .scheduler import (
     Scheduler,
     backup_job,
@@ -133,6 +134,13 @@ class RecordIn(BaseModel):
     derived_from: list[str] = Field(default_factory=list)
     sensitivity: Sensitivity = Sensitivity.NORMAL
     tags: list[str] = Field(default_factory=list)
+
+
+class RegelIn(BaseModel):
+    name: str = Field(min_length=1)
+    tool: str = Field(min_length=1)
+    stufe: str = "notify"
+    passt_auf: dict[str, str] = Field(default_factory=dict)
 
 
 class RedactIn(BaseModel):
@@ -333,6 +341,7 @@ def _build_agent(app: FastAPI) -> Agent:
         store=app.state.store,
         policy=Policy(),
         audit=app.state.audit,
+        regeln=getattr(app.state, "regeln", None),
         tools=build_registry(
             app.state.store,
             outward_sink=_mail_sink(app),
@@ -429,6 +438,8 @@ def create_app(
     if proposals is None:
         proposals = ProposalStore(_data_dir() / "proposals.sqlite3")
     app.state.proposals = proposals
+
+    app.state.regeln = RegelStore(_data_dir() / "regeln.sqlite3")
 
     if agent is None:
         # Schlüssel aus dem Schlüsselbund holen, bevor Anbieter und Konnektoren
@@ -806,6 +817,60 @@ def create_app(
             ).to_dict()
         except PolicyError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # -- Dauerregeln -------------------------------------------------------
+    #
+    # Was Icarus künftig ohne Rückfrage tun darf. Die Sicherheitszusagen
+    # bleiben: eine Regel greift nie in einer kontaminierten Runde, sie schlägt
+    # keine gesetzte Grenze, und sie hebt keine Stufe an. Siehe `regeln.py`.
+
+    @app.get("/rules", dependencies=guard)
+    def regeln_liste(alle: bool = False) -> dict[str, Any]:
+        bank = getattr(app.state, "regeln", None)
+        if bank is None:
+            return {"items": [], "stufen": list(ERLAUBTE_STUFEN)}
+        return {
+            "items": [r.to_dict() for r in bank.alle(nur_aktive=not alle)],
+            "stufen": list(ERLAUBTE_STUFEN),
+        }
+
+    @app.post("/rules", dependencies=guard, status_code=201)
+    def regel_anlegen(body: RegelIn) -> dict[str, Any]:
+        bank = getattr(app.state, "regeln", None)
+        if bank is None:
+            raise HTTPException(status_code=503, detail="Keine Regelbank.")
+        if body.tool not in app.state.agent.tool_names:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unbekanntes Werkzeug: {body.tool}.",
+            )
+        try:
+            regel = bank.anlegen(body.name, body.tool, body.stufe, body.passt_auf)
+        except RegelFehler as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        # Eine Dauerfreigabe ist selbst eine folgenreiche Entscheidung. Sie
+        # gehört ins Protokoll wie jede andere.
+        app.state.audit.record(
+            "regel_anlegen", "write_local", "notify", "executed",
+            {"tool": regel.tool, "stufe": regel.stufe, "passt_auf": regel.passt_auf},
+            detail=regel.name,
+        )
+        return regel.to_dict()
+
+    @app.post("/rules/{regel_id}/revoke", dependencies=guard)
+    def regel_widerrufen(regel_id: str) -> dict[str, Any]:
+        bank = getattr(app.state, "regeln", None)
+        if bank is None:
+            raise HTTPException(status_code=503, detail="Keine Regelbank.")
+        try:
+            regel = bank.widerrufen(regel_id)
+        except RegelFehler as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        app.state.audit.record(
+            "regel_widerrufen", "write_local", "notify", "executed",
+            {"id": regel_id}, detail=regel.name,
+        )
+        return regel.to_dict()
 
     # -- Posteingang -------------------------------------------------------
     #

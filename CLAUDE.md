@@ -50,6 +50,13 @@ dann ist die Aufgabe, den kontrollierten Weg *einfacher zu machen*, nicht ihn
 aufzugeben. Eine Rückfrage, die sein muss, soll in einem Satz verständlich sein
 und mit einem Klick beantwortbar.
 
+## Gestaltung
+
+Wie die Oberfläche aussieht und warum, steht in
+[`docs/16-gestaltung.md`](docs/16-gestaltung.md). Kurzform: kühles Leinen statt
+warmem Pergament, ein gedeckter Akzent, Material statt Farbe, eine Schrift.
+Zurückhaltung ist das Zeichen von Wert.
+
 ## Sprache
 
 Code und Kommentare auf Deutsch, wie im Bestand. Bezeichner im Code englisch,

@@ -382,20 +382,65 @@ function renderTasks(block) {
 
 function renderEvents(block) {
   const list = $("#event-list");
+  if (!list) return;
   list.replaceChildren();
   $("#event-note").textContent = block.error ?? (block.items.length ? "" : "Nichts geplant.");
 
+  // Ein Tag hat eine Form: Uhrzeiten links, untereinander, der nächste
+  // hervorgehoben. Eine Liste aus „Do 21.08., 14:00 · Klinikum · mit …“
+  // liest sich wie ein Export, nicht wie ein Tag.
+  const jetzt = new Date();
+  const heute = jetzt.toDateString();
+  let naechsterGefunden = false;
+
   for (const e of block.items ?? []) {
     const start = e.start ? new Date(e.start) : null;
-    const when = start
-      ? (e.all_day
-          ? start.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) + " ganztags"
-          : start.toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }))
-      : "?";
-    const bits = [when];
-    if (e.location) bits.push(e.location);
-    if (e.attendees?.length) bits.push(`mit ${e.attendees.join(", ")}`);
-    list.append(li(e.summary, bits.join(" · ")));
+    const zeile = document.createElement("li");
+    zeile.className = "termin";
+
+    const wann = document.createElement("span");
+    wann.className = "uhr";
+    if (!start) {
+      wann.textContent = "—";
+    } else if (e.all_day) {
+      wann.textContent = "ganztags";
+      wann.classList.add("ganztags");
+    } else {
+      wann.textContent = start.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    }
+    zeile.append(wann);
+
+    const rechts = document.createElement("div");
+    const titel = document.createElement("p");
+    titel.className = "statement";
+    titel.textContent = e.summary || "Ohne Titel";
+    rechts.append(titel);
+
+    // Was an einem Termin wirklich zählt: mit wem, und wo. Das Datum nur,
+    // wenn er nicht heute ist — sonst weiß man es ohnehin.
+    const teile = [];
+    if (start && start.toDateString() !== heute) {
+      teile.push(start.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" }));
+    }
+    if (e.attendees?.length) teile.push(`mit ${e.attendees.join(", ")}`);
+    if (e.location) teile.push(e.location);
+    if (teile.length) {
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      meta.textContent = teile.join(" · ");
+      rechts.append(meta);
+    }
+    zeile.append(rechts);
+
+    // Der nächste, der noch bevorsteht — genau einer, nicht alle künftigen.
+    if (!naechsterGefunden && start && start > jetzt) {
+      zeile.classList.add("naechster");
+      naechsterGefunden = true;
+    } else if (start && start < jetzt) {
+      zeile.classList.add("vorbei");
+    }
+
+    list.append(zeile);
   }
 }
 

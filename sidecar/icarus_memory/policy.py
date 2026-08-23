@@ -103,6 +103,17 @@ class PolicyError(Exception):
     """Eine Aktion wurde abgelehnt oder eine Freigabe war ungültig."""
 
 
+#: Rangfolge der Stufen. Nur damit „senken" überhaupt definiert ist — eine
+#: Dauerregel darf eine Stufe herunterziehen, nie hinauf.
+_RANG = {
+    ApprovalLevel.AUTO: 0,
+    ApprovalLevel.NOTIFY: 1,
+    ApprovalLevel.CONFIRM: 2,
+    ApprovalLevel.CONFIRM_STRICT: 3,
+    ApprovalLevel.DENY: 4,
+}
+
+
 class Policy:
     """Entscheidet, ob und wie eine Aktion ausgeführt werden darf.
 
@@ -141,6 +152,7 @@ class Policy:
         arguments: dict[str, Any],
         constraints: list[str] | None = None,
         tainted: bool = False,
+        regel: Any = None,
     ) -> Decision:
         reasons: list[str] = []
         level = self._overrides.get(tool, self._levels[action_class])
@@ -148,7 +160,8 @@ class Policy:
             reasons.append(f"Für '{tool}' ist die Stufe ausdrücklich auf {level.value} gesetzt.")
 
         # Constraints aus dem Selbstmodell schlagen alles andere. Sie sind die
-        # Grenzen, die der Nutzer selbst gezogen hat.
+        # Grenzen, die der Nutzer selbst gezogen hat. **Vor** der Dauerregel
+        # geprüft: eine Freigabe darf eine Grenze nie aushebeln.
         for constraint in constraints or []:
             if self._violates(constraint, tool, arguments):
                 return Decision(
@@ -156,6 +169,21 @@ class Policy:
                     action_class,
                     [f"Verstößt gegen eine gesetzte Grenze: {constraint!r}"],
                 )
+
+        # Eine benannte Dauerregel senkt die Stufe — aber nur in einer sauberen
+        # Runde. Steht fremder Text im Kontext, ist nicht feststellbar, ob die
+        # Absicht vom Nutzer kommt; dann wäre die Regel der bequemste Weg, die
+        # Eskalation auszuhebeln. Also gilt sie genau dann nicht.
+        if regel is not None and not tainted:
+            gesenkt = ApprovalLevel(regel.stufe)
+            if _RANG[gesenkt] < _RANG[level]:
+                reasons.append(f"Deine Regel: {regel.name}")
+                level = gesenkt
+        elif regel is not None and tainted:
+            reasons.append(
+                f"Deine Regel „{regel.name}“ greift hier nicht: zuvor wurden "
+                "fremde Inhalte gelesen."
+            )
 
         # Nach fremdem Inhalt ist nicht mehr feststellbar, ob eine Absicht vom
         # Nutzer stammt oder aus dem gelesenen Text. Reines Lesen bleibt frei —

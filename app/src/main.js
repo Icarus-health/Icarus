@@ -857,16 +857,91 @@ function addMessage(role, text) {
   el.scrollIntoView({ block: "end" });
 }
 
-function addNotice(text) {
+function addNotice(text, praefix = "Ausgeführt: ") {
   const el = document.createElement("div");
   el.className = "notice";
   // Was ohne Rückfrage getan wurde, erfährt der Nutzer hinterher —
-  // stillschweigend passiert nichts.
-  el.textContent = `Ausgeführt: ${text}`;
+  // stillschweigend passiert nichts. Nicht jede Meldung ist eine ausgeführte
+  // Handlung; wer schon einen ganzen Satz mitbringt, gibt den Präfix leer an.
+  el.textContent = `${praefix}${text}`;
   $("#messages").append(el);
 }
 
 /** Zeigt eine wartende Aktion mit vollständigem Trockenlauf. */
+// Woran man eine Freigabe künftig wiedererkennt. Dasselbe Feld, das auch die
+// Bestätigungsphrase trägt — der Empfänger, die Adresse, der Pfad. Gibt es
+// keines, bliebe nur eine Blankovollmacht; die wird hier nicht angeboten.
+const REGEL_KERN = ["to", "recipient", "empfaenger", "url", "path", "pfad"];
+
+function kernFuerRegel(approval) {
+  const args = approval.arguments ?? {};
+  for (const feld of REGEL_KERN) {
+    if (args[feld]) {
+      return {
+        passt_auf: { [feld]: String(args[feld]) },
+        satz: `Das darfst du künftig ohne Rückfrage — für ${args[feld]}`,
+      };
+    }
+  }
+  return {
+    passt_auf: {},
+    satz: `„${approval.tool}“ darfst du künftig ohne Rückfrage`,
+  };
+}
+
+async function loadRegeln(liste, leer) {
+  let items = [];
+  try {
+    ({ items } = await api("/rules"));
+  } catch (err) {
+    leer.textContent = err.message;
+    return;
+  }
+
+  liste.replaceChildren();
+  leer.hidden = items.length > 0;
+
+  for (const regel of items) {
+    const li = document.createElement("li");
+
+    const satz = document.createElement("p");
+    satz.className = "statement";
+    satz.textContent = regel.name;
+    li.append(satz);
+
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    const woran = Object.entries(regel.passt_auf)
+      .map(([k, v]) => `${k} = ${v}`)
+      .join(", ");
+    // Eine Blankovollmacht wird als solche benannt. Sie ist erlaubt, aber sie
+    // soll nicht aussehen wie eine enge Regel.
+    meta.textContent = regel.blanko
+      ? `${regel.tool} — für jeden Aufruf`
+      : `${regel.tool} — ${woran}`;
+    if (regel.blanko) meta.classList.add("warnung");
+    li.append(meta);
+
+    const weg = document.createElement("button");
+    weg.type = "button";
+    weg.className = "ghost small gefahr";
+    weg.textContent = "Widerrufen";
+    weg.addEventListener("click", async () => {
+      weg.disabled = true;
+      try {
+        await api(`/rules/${regel.id}/revoke`, { method: "POST" });
+        await loadRegeln(liste, leer);
+      } catch (err) {
+        weg.disabled = false;
+        meta.textContent = err.message;
+      }
+    });
+    li.append(weg);
+
+    liste.append(li);
+  }
+}
+
 function renderApproval(approval) {
   const card = document.createElement("form");
   card.className = "approval";
@@ -909,6 +984,7 @@ function renderApproval(approval) {
 
   const ok = document.createElement("button");
   ok.type = "submit";
+  ok.className = "primary";
   ok.textContent = "Ausführen";
 
   const no = document.createElement("button");
@@ -918,6 +994,32 @@ function renderApproval(approval) {
 
   actions.append(ok, no);
   card.append(actions);
+
+  // Aus dieser einen Freigabe eine Dauerregel machen. Der richtige Ort dafür
+  // ist genau hier: Wer zum dritten Mal dieselbe Rückfrage bekommt, will sie
+  // in dem Moment loswerden, nicht später in den Einstellungen suchen.
+  //
+  // Angeboten wird sie **eng**, auf den Kern des Aufrufs beschränkt — „Mails
+  // an diese Adresse", nicht „Mails". Eine Blankovollmacht muss man in den
+  // Einstellungen ausdrücklich anlegen.
+  const kern = kernFuerRegel(approval);
+  const kuenftig = document.createElement("label");
+  kuenftig.className = "kuenftig";
+  const haken = document.createElement("input");
+  haken.type = "checkbox";
+  const beschriftung = document.createElement("span");
+  beschriftung.textContent = kern.satz;
+  kuenftig.append(haken, beschriftung);
+  card.append(kuenftig);
+
+  const hinweis = document.createElement("p");
+  hinweis.className = "meta";
+  hinweis.textContent =
+    "Gilt nicht, wenn zuvor fremde Inhalte gelesen wurden — dann frage ich " +
+    "wieder. Jederzeit widerrufbar.";
+  hinweis.hidden = true;
+  card.append(hinweis);
+  haken.addEventListener("change", () => { hinweis.hidden = !haken.checked; });
 
   const resolve = async (granted) => {
     ok.disabled = no.disabled = true;
@@ -929,6 +1031,24 @@ function renderApproval(approval) {
           confirmation: confirmInput ? confirmInput.value : null,
         }),
       });
+      // Erst ausführen, dann die Regel — eine Dauerfreigabe für etwas, das
+      // gerade fehlgeschlagen ist, wäre die falsche Reihenfolge.
+      if (granted && haken.checked) {
+        try {
+          await api("/rules", {
+            method: "POST",
+            body: JSON.stringify({
+              name: kern.satz,
+              tool: approval.tool,
+              stufe: "notify",
+              passt_auf: kern.passt_auf,
+            }),
+          });
+          addNotice(`Gemerkt: ${kern.satz}`, "");
+        } catch (err) {
+          addNotice(`Die Regel konnte ich nicht anlegen: ${err.message}`, "");
+        }
+      }
       card.remove();
       if (turn.reply) addMessage("assistant", turn.reply);
       (turn.notices ?? []).forEach(addNotice);
@@ -1891,6 +2011,28 @@ async function loadSetup() {
   mrow.append(msave, testButton("modell", "Verbindung prüfen", mresult));
   modell.append(mh, mnote, psel, mend, mkey, mmodel, mfinden, mfund, mrow, mresult);
   panel.append(modell);
+
+  // -- Was Icarus ohne Rückfrage tun darf
+  //
+  // Steht sichtbar in den Einstellungen, nicht versteckt: eine Dauerfreigabe,
+  // die man nicht wiederfindet, ist eine, die man nicht widerrufen kann.
+  const regeln = document.createElement("section");
+  regeln.className = "setup-block";
+  const rh = document.createElement("h3");
+  rh.textContent = "Ohne Rückfrage";
+  const rnote = document.createElement("p");
+  rnote.className = "muted";
+  rnote.textContent =
+    "Was du einmal erlaubt hast. Nichts davon gilt, wenn zuvor fremde Inhalte " +
+    "gelesen wurden — dann frage ich wieder. Angelegt wird eine Regel dort, wo " +
+    "die Rückfrage kam.";
+  const rlist = document.createElement("ul");
+  const rempty = document.createElement("p");
+  rempty.className = "muted";
+  rempty.textContent = "Noch nichts. Ich frage bei allem nach.";
+  regeln.append(rh, rnote, rlist, rempty);
+  panel.append(regeln);
+  loadRegeln(rlist, rempty);
 
   // -- Ordner
   // -- Ordnerzugriff

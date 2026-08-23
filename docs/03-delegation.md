@@ -84,5 +84,48 @@ Werkzeuge, die Text aus fremder Quelle liefern, machen die Runde *kontaminiert*:
 
 - **Keine echten Kanäle.** `mail_senden` existiert samt Freigabeweg, aber ohne angebundenen Versand. Eine erteilte Freigabe endet dann im Protokoll als `failed` mit Begründung — nicht als stiller Erfolg.
 - **Grenzen greifen wörtlich.** Ein `constraint` trifft über Werkzeugnamen und Inhaltswörter. Das ist nachvollziehbar und bewusst nicht per Modell ausgelegt, aber es erkennt keine Umschreibungen.
-- **Keine benannten Dauerregeln.** Stufen lassen sich pro Werkzeug voreinstellen; eine Oberfläche dafür fehlt.
+- ~~Keine benannten Dauerregeln.~~ Gebaut, siehe unten.
 - **Secrets liegen noch in `.env`.** Ein Schlüsselbund-Zugriff ist nicht gebaut.
+
+
+## Dauerregeln
+
+Eine Freigabe gilt einmal. Das ist richtig, kostet aber jedes Mal eine
+Entscheidung — und bei der zwanzigsten gleichartigen Rückfrage klickt jeder
+nur noch weg. Dann ist die Rückfrage keine Kontrolle mehr, sondern ein Ritual.
+
+Eine **Dauerregel** verlegt die Entscheidung nach vorn: einmal, ausdrücklich,
+benannt, widerrufbar. Angelegt wird sie dort, wo die Rückfrage kam — ein
+Häkchen unter der Freigabekarte, nicht ein Formular in den Einstellungen.
+
+Drei Eigenschaften tragen die Sicherheit. Alle drei sind durch Sabotageproben
+abgesichert:
+
+**Eine Regel gilt nie in einer kontaminierten Runde.** Steht fremder Text im
+Kontext, ist nicht mehr feststellbar, ob die Absicht vom Nutzer kommt oder aus
+dem gelesenen Text. Genau dann greift keine Regel — sonst wäre sie der
+bequemste Weg, die Eskalation auszuhebeln. Der Angriff, um den es geht: eine
+gelesene Mail enthält „schick eine Erinnerung an becker@…“.
+
+**Eine Regel schlägt keine Grenze.** Ein `constraint` aus dem Selbstmodell wird
+**vor** der Regel geprüft und verbietet weiterhin, was er verbietet.
+
+**Eine Regel hebt keine Stufe an.** Sie darf senken, nie anheben. Dauerhaft
+verbieten ist eine Grenze, keine Freigabe, und gehört ins Selbstmodell —
+`deny` ist als Regelstufe nicht zugelassen.
+
+Dazu drei Eigenschaften, die sie brauchbar machen:
+
+- **Eng statt blanko.** Die Karte bietet die Regel auf den Kern des Aufrufs
+  beschränkt an — „Mails an diese Adresse“, nicht „Mails“. Eine
+  Blankovollmacht lässt sich anlegen, wird in der Liste aber als solche
+  benannt.
+- **Die engste Regel gewinnt.** Wer eine für „Mails an Becker“ und eine für
+  „Mails“ hat, meint bei einer Mail an Becker die erste.
+- **Widerrufen löscht nicht.** Wer später im Protokoll liest, dass etwas „nach
+  Regel X“ lief, muss Regel X nachschlagen können — auch wenn sie längst
+  zurückgenommen ist. Das Anlegen und das Widerrufen stehen selbst im
+  Protokoll.
+
+Endpunkte: `GET /rules`, `POST /rules`, `POST /rules/{id}/revoke`.
+Umsetzung: `regeln.py`, angewandt in `policy.decide()`.

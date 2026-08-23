@@ -107,12 +107,15 @@ class Agent:
         provider: Provider | None = None,
         max_sensitivity: Sensitivity = Sensitivity.SENSITIVE,
         max_rounds: int = 4,
+        regeln: Any = None,
     ) -> None:
         self._store = store
         self._policy = policy
         self._audit = audit
         self._tools = tools
         self._provider = provider
+        self._regeln = regeln
+        """Benannte Dauerregeln, oder None. Ohne sie fragt Icarus wie bisher."""
         self._max_sensitivity = max_sensitivity
         self._max_rounds = max_rounds
         self._history: list[dict[str, Any]] = []
@@ -339,6 +342,16 @@ class Agent:
 
     # -- Direkter Werkzeugaufruf ------------------------------------------
 
+    @property
+    def tool_names(self) -> list[str]:
+        """Welche Werkzeuge es gerade gibt.
+
+        Eine Dauerregel muss ein echtes Werkzeug nennen. Täte sie es nicht,
+        würde sie still nie greifen — und der Nutzer glaubte, er habe etwas
+        freigegeben, das dann doch jedes Mal nachfragt.
+        """
+        return sorted(self._tools)
+
     def tool_schemas(self) -> list[dict[str, Any]]:
         return [t.schema() for t in self._tools.values()]
 
@@ -410,6 +423,15 @@ class Agent:
 
         # Manche Werkzeuge werden erst durch ihre Argumente außenwirksam.
         action_class = tool.classify(call.arguments)
+        # Die engste Regel, die auf genau diesen Aufruf passt. Ob sie greift,
+        # entscheidet die Policy — in einer kontaminierten Runde tut sie es nicht.
+        regel = None
+        if self._regeln is not None:
+            try:
+                regel = self._regeln.passende(tool.name, call.arguments)
+            except Exception:  # noqa: BLE001 - eine kaputte Regelbank darf nichts freigeben
+                regel = None
+
         decision = self._policy.decide(
             tool.name,
             action_class,
@@ -418,6 +440,7 @@ class Agent:
             # Sobald fremder Text im Kontext steht, ist jede folgende Absicht
             # womöglich von dort diktiert. Die Policy hebt dann die Stufe an.
             tainted=self._tainted,
+            regel=regel,
         )
 
         if decision.denied:

@@ -34,7 +34,7 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import briefing, config, personen, providers, suche
+from . import briefing, config, entscheidungen, personen, providers, suche
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .regeln import ERLAUBTE_STUFEN, RegelFehler, RegelStore
@@ -199,6 +199,12 @@ class TaskIn(BaseModel):
     notes: str | None = None
     tags: list[str] = Field(default_factory=list)
     project_id: str | None = None
+
+
+class EntscheidungIn(BaseModel):
+    statement: str = Field(min_length=1)
+    derived_from: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class WartetIn(BaseModel):
@@ -1042,6 +1048,21 @@ def create_app(
         except ConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    @app.post("/assertions/{assertion_id}/retract", dependencies=guard)
+    def retract(assertion_id: str) -> dict[str, Any]:
+        """Die Aussage war inhaltlich falsch.
+
+        Der Unterschied zu `redact` ist wichtig genug für einen eigenen Weg:
+        Bei `redact` war der Inhalt womöglich richtig, soll aber weg — und
+        dann muss alles Abgeleitete mit. Hier stimmte er nie. Der Satz bleibt
+        lesbar, damit nachvollziehbar ist, was einmal geglaubt wurde, und
+        alles, was darauf stand, bleibt stehen — erschüttert, nicht gelöscht.
+        """
+        try:
+            return app.state.store.retract(assertion_id).to_dict()
+        except ConflictError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.post("/assertions/{assertion_id}/redact", dependencies=guard)
     def redact(assertion_id: str, body: RedactIn) -> list[dict[str, Any]]:
         try:
@@ -1090,6 +1111,15 @@ def create_app(
             ]
         except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
             result["tasks"]["error"] = str(exc)
+
+        try:
+            wanken = entscheidungen.erschuettert(app.state.store)
+            result["decisions"] = {
+                "erschuettert": [e.to_dict() for e in wanken],
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
+            result["decisions"] = {"erschuettert": [], "error": str(exc)}
 
         calendar = getattr(app.state, "calendar", None)
         if calendar is None:
@@ -1224,6 +1254,44 @@ def create_app(
             return app.state.tasks.zurueckholen(task_id).to_dict()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # -- Entscheidungen ----------------------------------------------------
+
+    @app.get("/decisions", dependencies=guard)
+    def list_decisions() -> dict[str, Any]:
+        """Alle Entscheidungen mit dem Stand ihrer Grundlage.
+
+        Auch widerrufene: Dass eine Entscheidung einmal getroffen wurde,
+        bleibt wahr. Ein Gedächtnis, das nichts löscht, muss das zeigen.
+        """
+        alle = entscheidungen.alle(app.state.store)
+        return {
+            "items": [e.to_dict() for e in alle],
+            "erschuettert": sum(1 for e in alle if e.erschuettert),
+        }
+
+    @app.post("/decisions", dependencies=guard, status_code=201)
+    def add_decision(body: EntscheidungIn) -> dict[str, Any]:
+        """Eine Entscheidung festhalten — und worauf sie stand.
+
+        Die Grundlage ist optional, aber ohne sie kann Icarus später nicht
+        merken, wenn sie wegfällt. Das sagt die Oberfläche auch.
+        """
+        try:
+            aussage = app.state.store.record(
+                body.statement,
+                Kind.DECISION,
+                Provenance(source_type=SourceType.USER_STATED,
+                           captured_at=datetime.now().astimezone()),
+                derived_from=body.derived_from,
+                tags=body.tags,
+            )
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        for eine in entscheidungen.alle(app.state.store):
+            if eine.id == aussage.id:
+                return eine.to_dict()
+        return {"id": aussage.id, "satz": aussage.statement}
 
     # -- Projekte ----------------------------------------------------------
 

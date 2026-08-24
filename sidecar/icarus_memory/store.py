@@ -251,6 +251,19 @@ class SelfModelStore:
 
     # -- Lesen -------------------------------------------------------------
 
+    def alles(self) -> list[Assertion]:
+        """Der ganze Bestand, auch Ersetztes und Widerrufenes.
+
+        Bewusst getrennt von `usable()` und `recall()`, und bewusst mit einem
+        Namen, der nach „alles“ klingt: Wer das hier ruft, bekommt auch, was
+        nicht mehr gilt, und muss selbst wissen, warum er das will.
+
+        Der eine legitime Grund ist die Rückschau. Dass eine Entscheidung
+        einmal getroffen wurde, bleibt wahr, auch wenn sie widerrufen ist —
+        und ein Gedächtnis, das nichts löscht, muss das zeigen können.
+        """
+        return list(self._backend.all())
+
     def usable(self, at: datetime | None = None) -> list[Assertion]:
         """Alle Aussagen, die gerade ungeprüft verwendet werden dürfen.
 

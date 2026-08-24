@@ -66,6 +66,10 @@ _HORIZONS: dict[Kind, Horizon] = {
     Kind.STATE: Horizon(7 * DAY, 365 * DAY),
     # Vergangenes bleibt wahr.
     Kind.EPISODE: Horizon(90 * DAY, None),
+    # Eine Entscheidung wurde getroffen — das bleibt wahr, egal wie alt sie
+    # ist. Sie veraltet nicht mit der Zeit, sondern **wenn ihre Grundlage
+    # fällt**, und das prüft `entscheidungen.py`, nicht die Uhr.
+    Kind.DECISION: Horizon(365 * DAY, None),
 }
 
 _FALLBACK = Horizon(30 * DAY, 365 * DAY)

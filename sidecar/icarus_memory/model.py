@@ -60,6 +60,20 @@ class Kind(str, Enum):
     SKILL = "skill"
     CONSTRAINT = "constraint"
 
+    DECISION = "decision"
+    """Eine getroffene Entscheidung — und über `derived_from`, worauf sie stand.
+
+    Der Unterschied zu allen anderen Arten ist die Blickrichtung. Eine Aussage
+    beschreibt, was gilt. Eine Entscheidung beschreibt, was daraufhin
+    beschlossen wurde — und sie bleibt richtig oder falsch **je nachdem, ob
+    ihre Grundlage noch steht.**
+
+    Eine Entscheidung wird deshalb nie „überholt“, wenn sich die Welt ändert.
+    Sie wird *erschüttert*: sie gilt weiter, aber jemand sollte sie noch
+    einmal ansehen. Das ist der Unterschied zwischen einem Archiv und einem
+    Ratgeber.
+    """
+
 
 class Status(str, Enum):
     ACTIVE = "active"

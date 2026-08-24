@@ -49,7 +49,8 @@ class Punkt:
     """Höher heißt weiter oben. Nur zum Sortieren, nie angezeigt."""
 
     quelle: str
-    """`aufgabe`, `termin`, `bestaetigung`, `widerspruch`, `vorschlag`, `mail`."""
+    """`aufgabe`, `wartet`, `entscheidung`, `termin`, `bestaetigung`,
+    `widerspruch`, `vorschlag`, `mail`."""
 
     ref: str | None = None
     """Kennung des Gegenstands, damit die Oberfläche handeln kann."""
@@ -222,7 +223,29 @@ def erstelle(
             aktion="Erledigt",
         ))
 
-    # 2. Was bei anderen liegt und dort zu lange liegt. Ein Stabschef fasst
+    # 2. Eine Entscheidung, unter der eine Annahme weggerutscht ist. Selten,
+    # und wenn, dann das Wertvollste, was Icarus sagen kann: Es ist der eine
+    # Satz, den ein Archiv nicht kennt.
+    for wanken in (daten.get("decisions", {}).get("erschuettert", []) or [])[:1]:
+        wackler = (wanken.get("wackler") or [{}])[0]
+        gefallen = wackler.get("annahme") or ""
+        ersatz = wackler.get("ersetzt_durch")
+        nachsatz = (
+            f" Jetzt gilt: „{_kurz(ersatz)}“." if ersatz
+            else " Das gilt nicht mehr."
+        )
+        kandidaten.append(Punkt(
+            text=(
+                f"„{_kurz(wanken.get('satz', ''))}“ stand darauf, dass "
+                f"„{_kurz(gefallen)}“.{nachsatz}"
+            ),
+            gewicht=98,
+            quelle="entscheidung",
+            ref=wanken.get("id"),
+            aktion="Ansehen",
+        ))
+
+    # 3. Was bei anderen liegt und dort zu lange liegt. Ein Stabschef fasst
     # nach; er wartet nicht darauf, dass die andere Seite von selbst einfällt.
     wartend = _lange_wartend(aufgaben, jetzt)
     if wartend:
@@ -240,7 +263,7 @@ def erstelle(
             aktion="Zurückholen",
         ))
 
-    # 3. Der nächste Termin. Er hat eine Uhrzeit — er wartet nicht.
+    # 4. Der nächste Termin. Er hat eine Uhrzeit — er wartet nicht.
     naechster = _naechster_termin(daten.get("calendar", {}).get("items", []) or [], jetzt)
     if naechster is not None:
         beginn, termin = naechster
@@ -255,7 +278,7 @@ def erstelle(
             aktion="Vorbereiten",
         ))
 
-    # 4. Wissen, das sein Verfallsdatum überschritten hat. Ein Fakt aus dem
+    # 5. Wissen, das sein Verfallsdatum überschritten hat. Ein Fakt aus dem
     #    Mai darf nicht stillschweigend als Gegenwart gelten.
     bestaetigungen = [v for v in vorschlaege if v.get("kind") == "confirmation"]
     if bestaetigungen:
@@ -277,7 +300,7 @@ def erstelle(
             aktion="Gilt noch",
         ))
 
-    # 5. Widersprüche. Zwei Sätze, die nicht beide stimmen können.
+    # 6. Widersprüche. Zwei Sätze, die nicht beide stimmen können.
     widersprueche = [v for v in vorschlaege if v.get("kind") == "conflict"]
     if widersprueche:
         kandidaten.append(Punkt(
@@ -291,7 +314,7 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 6. Was heute fällig ist, aber noch nicht überfällig.
+    # 7. Was heute fällig ist, aber noch nicht überfällig.
     heute = _heute_faellig(aufgaben, jetzt)
     if heute:
         if len(heute) == 1:
@@ -306,7 +329,7 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 7. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
+    # 8. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
     ungelesen = daten.get("mail", {}).get("unread", 0) or 0
     if ungelesen:
         kandidaten.append(Punkt(

@@ -32,6 +32,11 @@ MONATE = (
 
 ZAHLWORT = {1: "Eine Sache", 2: "Zwei Dinge", 3: "Drei Dinge"}
 
+# Ab wann eine abgegebene Sache es wert ist, den Morgen zu belegen. Wer
+# gestern etwas weitergegeben hat, will nicht heute daran erinnert werden —
+# das wäre kein Stabschef, sondern ein Wecker.
+WARTEFRIST_TAGE = 14
+
 
 @dataclass
 class Punkt:
@@ -117,6 +122,16 @@ def _ueberfaellige(aufgaben: list[dict], jetzt: datetime) -> list[tuple[datetime
     return treffer
 
 
+def _lange_wartend(aufgaben: list[dict], jetzt: datetime) -> list[dict]:
+    """Was bei anderen liegt, und zwar lange genug. Am längsten zuerst."""
+    treffer = [
+        a for a in aufgaben
+        if a.get("wartet_auf") and (a.get("wartet_tage") or 0) >= WARTEFRIST_TAGE
+    ]
+    treffer.sort(key=lambda a: a.get("wartet_tage") or 0, reverse=True)
+    return treffer
+
+
 def _naechster_termin(termine: list[dict], jetzt: datetime) -> tuple[datetime, dict] | None:
     """Der nächste Termin von heute, der noch bevorsteht."""
     kommend: list[tuple[datetime, dict]] = []
@@ -197,7 +212,25 @@ def erstelle(
             aktion="Erledigt",
         ))
 
-    # 2. Der nächste Termin. Er hat eine Uhrzeit — er wartet nicht.
+    # 2. Was bei anderen liegt und dort zu lange liegt. Ein Stabschef fasst
+    # nach; er wartet nicht darauf, dass die andere Seite von selbst einfällt.
+    wartend = _lange_wartend(aufgaben, jetzt)
+    if wartend:
+        aufgabe = wartend[0]
+        seit = _tag(aufgabe.get("wartet_seit"))
+        wann = f"Seit dem {_datum(seit)}" if seit else "Seit Längerem"
+        kandidaten.append(Punkt(
+            text=(
+                f"{wann} liegt „{_kurz(aufgabe.get('title', ''))}“ "
+                f"bei {aufgabe.get('wartet_auf')}."
+            ),
+            gewicht=95,
+            quelle="wartet",
+            ref=aufgabe.get("id"),
+            aktion="Zurückholen",
+        ))
+
+    # 3. Der nächste Termin. Er hat eine Uhrzeit — er wartet nicht.
     naechster = _naechster_termin(daten.get("calendar", {}).get("items", []) or [], jetzt)
     if naechster is not None:
         beginn, termin = naechster
@@ -212,7 +245,7 @@ def erstelle(
             aktion="Vorbereiten",
         ))
 
-    # 3. Wissen, das sein Verfallsdatum überschritten hat. Ein Fakt aus dem
+    # 4. Wissen, das sein Verfallsdatum überschritten hat. Ein Fakt aus dem
     #    Mai darf nicht stillschweigend als Gegenwart gelten.
     bestaetigungen = [v for v in vorschlaege if v.get("kind") == "confirmation"]
     if bestaetigungen:
@@ -234,7 +267,7 @@ def erstelle(
             aktion="Gilt noch",
         ))
 
-    # 4. Widersprüche. Zwei Sätze, die nicht beide stimmen können.
+    # 5. Widersprüche. Zwei Sätze, die nicht beide stimmen können.
     widersprueche = [v for v in vorschlaege if v.get("kind") == "conflict"]
     if widersprueche:
         kandidaten.append(Punkt(
@@ -248,7 +281,7 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 5. Was heute fällig ist, aber noch nicht überfällig.
+    # 6. Was heute fällig ist, aber noch nicht überfällig.
     heute = _heute_faellig(aufgaben, jetzt)
     if heute:
         if len(heute) == 1:
@@ -263,7 +296,7 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 6. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
+    # 7. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
     ungelesen = daten.get("mail", {}).get("unread", 0) or 0
     if ungelesen:
         kandidaten.append(Punkt(

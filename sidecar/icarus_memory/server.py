@@ -201,6 +201,10 @@ class TaskIn(BaseModel):
     project_id: str | None = None
 
 
+class WartetIn(BaseModel):
+    name: str = Field(min_length=1)
+
+
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1)
     area: str | None = None
@@ -1067,6 +1071,9 @@ def create_app(
             offen = app.state.tasks.open_tasks(limit=50)
             result["tasks"]["items"] = [t.to_dict() for t in offen]
             result["tasks"]["overdue"] = sum(1 for t in offen if t.is_overdue())
+            result["tasks"]["wartend"] = [
+                t.to_dict() for t in offen if t.wartet_auf is not None
+            ]
         except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
             result["tasks"]["error"] = str(exc)
 
@@ -1179,6 +1186,28 @@ def create_app(
         """
         try:
             return app.state.tasks.drop(task_id).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/tasks/{task_id}/warten", dependencies=guard)
+    def wait_task(task_id: str, body: WartetIn) -> dict[str, Any]:
+        """Abgeben, nicht abhaken.
+
+        Die Aufgabe bleibt offen, zählt aber nicht mehr gegen dich. Was bei
+        jemand anderem liegt, ist kein Versäumnis, sondern eine Wartezeit —
+        und die will nachgefasst, nicht angemahnt werden.
+        """
+        try:
+            return app.state.tasks.warten_auf(task_id, body.name).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/tasks/{task_id}/zurueckholen", dependencies=guard)
+    def unwait_task(task_id: str) -> dict[str, Any]:
+        try:
+            return app.state.tasks.zurueckholen(task_id).to_dict()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

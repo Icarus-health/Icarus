@@ -650,6 +650,9 @@ const BRIEFING_TATEN = {
 
 // Punkte ohne eigene Handlung führen dorthin, wo man sie erledigt.
 const BRIEFING_ZIELE = {
+  // Dort steht die Entscheidung neben der Aussage, die ihre Annahme ersetzt
+  // hat — beides an einem Ort, statt eines Knopfes, der etwas tut.
+  entscheidung: "memory",
   widerspruch: "proposals",
   vorschlag: "proposals",
   mail: "chat",

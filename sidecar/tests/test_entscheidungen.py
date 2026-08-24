@@ -281,7 +281,8 @@ def test_das_dashboard_traegt_die_erschuetterung(tuer) -> None:
     assert [e["satz"] for e in wanken] == ["Wir stellen jemanden ein."]
 
     satz = stand["briefing"]["punkte"][0]["text"]
-    assert "Wir stellen jemanden ein." in satz
+    # Ohne Schlusspunkt: das Zitat steht mitten im Satz.
+    assert "„Wir stellen jemanden ein“" in satz
     assert "Die Förderung läuft bis Jahresende." in satz
     assert "Das gilt nicht mehr." in satz
 
@@ -306,6 +307,8 @@ def test_das_briefing_nennt_was_an_die_stelle_getreten_ist(tuer) -> None:
     satz = tuer.get("/dashboard").json()["briefing"]["punkte"][0]["text"]
 
     assert "Jetzt gilt: „Die Frist beträgt drei Monate.“" in satz
+    # Kein doppeltes Satzzeichen — „…“. liest sich wie ein Stolpern.
+    assert "“." not in satz
 
 
 # -- Widerruf gegen Löschung ------------------------------------------------

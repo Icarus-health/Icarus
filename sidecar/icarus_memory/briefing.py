@@ -231,13 +231,13 @@ def erstelle(
         gefallen = wackler.get("annahme") or ""
         ersatz = wackler.get("ersetzt_durch")
         nachsatz = (
-            f" Jetzt gilt: „{_kurz(ersatz)}“." if ersatz
+            f" Jetzt gilt: „{_kurz(ersatz)}“" if ersatz
             else " Das gilt nicht mehr."
         )
         kandidaten.append(Punkt(
             text=(
-                f"„{_kurz(wanken.get('satz', ''))}“ stand darauf, dass "
-                f"„{_kurz(gefallen)}“.{nachsatz}"
+                f"„{_zitat(wanken.get('satz', ''))}“ stand auf der Annahme: "
+                f"„{_kurz(gefallen)}“{nachsatz}"
             ),
             gewicht=98,
             quelle="entscheidung",

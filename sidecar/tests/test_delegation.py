@@ -234,3 +234,25 @@ def test_dashboard_zaehlt_abgegebenes_nicht_als_ueberfaellig(tuer) -> None:
     stand = tuer.get("/dashboard").json()["tasks"]
     assert stand["overdue"] == 0
     assert [t["wartet_auf"] for t in stand["wartend"]] == ["Frau Becker"]
+
+
+# -- Deutsch ----------------------------------------------------------------
+
+
+def test_die_anrede_wird_gebeugt() -> None:
+    """„bei Herr Ohlsen“ liest jeden Morgen falsch."""
+    b = briefing.erstelle(
+        stand([wartende_aufgabe("Zuarbeit zum Vertrag", "Herr Ohlsen", 20)]),
+        jetzt=JETZT,
+    )
+
+    assert "bei Herrn Ohlsen." in b.punkte[0].text
+
+
+def test_der_name_selbst_bleibt_unangetastet() -> None:
+    """Bei fremden Namen ist jede Beugungsregel eine Wette."""
+    for name in ("Frau Becker", "Martina", "Dr. Brandt", "das Klinikum"):
+        b = briefing.erstelle(
+            stand([wartende_aufgabe("Zuarbeit", name, 20)]), jetzt=JETZT
+        )
+        assert f"bei {name}." in b.punkte[0].text

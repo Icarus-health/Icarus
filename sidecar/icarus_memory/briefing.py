@@ -122,6 +122,16 @@ def _ueberfaellige(aufgaben: list[dict], jetzt: datetime) -> list[tuple[datetime
     return treffer
 
 
+def _bei(name: str) -> str:
+    """„bei Herrn Ohlsen“, nicht „bei Herr Ohlsen“.
+
+    Nur die Anrede wird gebeugt, nie der Name selbst — bei fremden Namen ist
+    jede Regel eine Wette, und ein falsch gebeugter Name liest sich schlimmer
+    als ein ungebeugter.
+    """
+    return f"Herrn {name[5:]}" if name.startswith("Herr ") else name
+
+
 def _lange_wartend(aufgaben: list[dict], jetzt: datetime) -> list[dict]:
     """Was bei anderen liegt, und zwar lange genug. Am längsten zuerst."""
     treffer = [
@@ -222,7 +232,7 @@ def erstelle(
         kandidaten.append(Punkt(
             text=(
                 f"{wann} liegt „{_kurz(aufgabe.get('title', ''))}“ "
-                f"bei {aufgabe.get('wartet_auf')}."
+                f"bei {_bei(aufgabe.get('wartet_auf') or '')}."
             ),
             gewicht=95,
             quelle="wartet",

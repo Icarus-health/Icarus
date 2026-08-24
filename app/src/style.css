@@ -441,6 +441,54 @@ li {
 
 li > button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
 
+/* Zwei Handlungen an einer Zeile — abgeben und abhaken stehen nebeneinander,
+   nicht untereinander: sonst wächst die Zeile und die Liste verliert ihren
+   Takt. */
+li > .taten {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  display: flex;
+  gap: 0.5rem;
+}
+li > .taten > button { grid-row: auto; grid-column: auto; }
+
+/* Was bei jemand anderem liegt, ist nicht rot und nicht grau: es ist offen,
+   aber nicht deine Schuld. Ocker sagt genau das. */
+.wartet .meta { color: var(--warn); }
+
+/* Das Abgabefeld erscheint in der Zeile, über beide Spalten — es soll die
+   Zeile nicht seitlich sprengen. */
+li > .abgabe {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+li > .abgabe input { flex: 1 1 12rem; min-width: 0; }
+li > .abgabe > button { grid-row: auto; grid-column: auto; }
+/* Bekannte Namen sind eine Wahl, kein Hinweis. Ohne sichtbaren Rand liest
+   man sie als Fußnote und tippt daneben, was schon dasteht. */
+li > .abgabe .namen {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--a2);
+}
+li > .abgabe .namen > span { font: var(--t-fuss); color: var(--schrift-2); }
+li > .abgabe .name {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--fuellung);
+  color: var(--schrift);
+  padding: 0 var(--a3);
+}
+li > .abgabe .name:hover:not(:disabled) { border-color: var(--akzent); color: var(--akzent); }
+
 /* -- Protokoll ----------------------------------------------------------- */
 
 .audit { border-left: 3px solid var(--line); padding-left: 0.7rem; }

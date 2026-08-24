@@ -335,6 +335,22 @@ function greeting() {
   return "Guten Abend";
 }
 
+const MONATE = [
+  "Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
+];
+
+// „bei Herrn Ohlsen“, nicht „bei Herr Ohlsen“. Nur die Anrede wird gebeugt,
+// nie der Name selbst — bei fremden Namen ist jede Regel eine Wette.
+function bei(name) {
+  return name.startsWith("Herr ") ? `Herrn ${name.slice(5)}` : name;
+}
+
+function alsTag(iso) {
+  const d = new Date(iso);
+  return `${d.getDate()}. ${MONATE[d.getMonth()]}`;
+}
+
 function li(main, meta, action) {
   const el = document.createElement("li");
   const p = document.createElement("p");
@@ -351,31 +367,143 @@ function li(main, meta, action) {
   return el;
 }
 
+// Kein Systemdialog. Erstens gibt es `prompt` in der Tauri-Hülle nicht
+// verlässlich, zweitens reißt ein Kasten vor dem Fenster den Blick aus der
+// Zeile heraus, um die es geht. Das Feld erscheint dort, wo geklickt wurde,
+// und die Namen, die Icarus schon kennt, stehen als Knöpfe daneben — tippen
+// muss nur, wer jemand Neues meint.
+function fragWemn(row, t) {
+  if (row.querySelector(".abgabe")) return;
+
+  const kasten = document.createElement("form");
+  kasten.className = "abgabe";
+
+  const feld = document.createElement("input");
+  feld.type = "text";
+  feld.placeholder = "Bei wem liegt es?";
+  feld.setAttribute("aria-label", `Bei wem liegt „${t.title}“?`);
+  kasten.append(feld);
+
+  const senden = document.createElement("button");
+  senden.className = "small";
+  senden.type = "submit";
+  senden.textContent = "Abgeben";
+  kasten.append(senden);
+
+  const zurueck = document.createElement("button");
+  zurueck.className = "ghost small";
+  zurueck.type = "button";
+  zurueck.textContent = "Abbrechen";
+  zurueck.addEventListener("click", () => kasten.remove());
+  kasten.append(zurueck);
+
+  const namen = bekannteNamen();
+  if (namen.length) {
+    const reihe = document.createElement("div");
+    reihe.className = "namen";
+    const lead = document.createElement("span");
+    lead.textContent = "Zuletzt:";
+    reihe.append(lead);
+    for (const name of namen) {
+      const vorschlag = document.createElement("button");
+      vorschlag.className = "small name";
+      vorschlag.type = "button";
+      vorschlag.textContent = name;
+      vorschlag.addEventListener("click", () => {
+        feld.value = name;
+        kasten.requestSubmit();
+      });
+      reihe.append(vorschlag);
+    }
+    kasten.append(reihe);
+  }
+
+  kasten.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = feld.value.trim();
+    if (!name) {
+      feld.focus();
+      return;
+    }
+    await api(`/tasks/${t.id}/warten`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    await loadDashboard();
+  });
+
+  row.append(kasten);
+  feld.focus();
+}
+
+// Wen kennen wir schon? Wer heute etwas hält, hält wahrscheinlich auch das
+// Nächste. Mehr Quellen kommen mit der Personenebene dazu.
+let LETZTE_NAMEN = [];
+
+function bekannteNamen() {
+  return LETZTE_NAMEN.slice(0, 4);
+}
+
 function renderTasks(block) {
   const list = $("#task-list");
   const items = block.items ?? [];
   list.replaceChildren();
   $("#task-empty").hidden = items.length > 0;
 
+  LETZTE_NAMEN = [...new Set((block.wartend ?? []).map((t) => t.wartet_auf))];
+
   const badge = $("#task-badge");
   badge.hidden = !block.overdue;
   badge.textContent = `${block.overdue} überfällig`;
 
   for (const t of items) {
+    let row;
+    const taten = document.createElement("div");
+    taten.className = "taten";
+
+    // Abgeben oder zurückholen — je nachdem, wo die Sache gerade liegt.
+    const weiter = document.createElement("button");
+    weiter.className = "ghost small";
+    weiter.type = "button";
+    if (t.wartet_auf) {
+      weiter.textContent = "Zurückholen";
+      weiter.addEventListener("click", async () => {
+        await api(`/tasks/${t.id}/zurueckholen`, { method: "POST" });
+        await loadDashboard();
+      });
+    } else {
+      weiter.textContent = "Abgeben";
+      weiter.addEventListener("click", () => fragWemn(row, t));
+    }
+    taten.append(weiter);
+
     const done = document.createElement("button");
     done.className = "ghost small";
+    done.type = "button";
     done.textContent = "Erledigt";
     done.addEventListener("click", async () => {
       await api(`/tasks/${t.id}/done`, { method: "POST" });
       await loadDashboard();
     });
+    taten.append(done);
 
     const bits = [];
-    if (t.due) bits.push(`fällig ${new Date(t.due).toLocaleDateString("de-DE")}`);
+    if (t.wartet_auf) {
+      // Wo etwas liegt, ist wichtiger als wann es fällig war — die
+      // Fälligkeit gehört jetzt jemand anderem.
+      bits.push(
+        t.wartet_seit
+          ? `Liegt seit dem ${alsTag(t.wartet_seit)} bei ${bei(t.wartet_auf)}`
+          : `Liegt bei ${bei(t.wartet_auf)}`,
+      );
+    } else if (t.due) {
+      bits.push(`fällig ${new Date(t.due).toLocaleDateString("de-DE")}`);
+    }
     bits.push(SOURCE_LABELS[t.provenance.source_type] ?? t.provenance.source_type);
 
-    const row = li(t.title, bits.join(" · "), done);
-    if (t.overdue) row.classList.add("overdue");
+    row = li(t.title, bits.join(" · "), taten);
+    if (t.wartet_auf) row.classList.add("wartet");
+    else if (t.overdue) row.classList.add("overdue");
     list.append(row);
   }
 }
@@ -510,6 +638,7 @@ function renderProjectTeaser(block) {
 const BRIEFING_TATEN = {
   aufgabe: (ref) => api(`/tasks/${ref}/done`, { method: "POST" }),
   bestaetigung: (ref) => api(`/proposals/${ref}/accept`, { method: "POST" }),
+  wartet: (ref) => api(`/tasks/${ref}/zurueckholen`, { method: "POST" }),
 };
 
 // Punkte ohne eigene Handlung führen dorthin, wo man sie erledigt.

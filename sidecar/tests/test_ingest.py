@@ -390,3 +390,65 @@ def test_die_antwort_traegt_keine_kennungen(tmp_path) -> None:
     assert report.episode_ids
     assert "episode_ids" not in report.to_dict()
     assert report.to_dict()["skipped_reasons"] == []
+
+
+# -- Wer dabei war ----------------------------------------------------------
+#
+# Ohne Beteiligte aus dem Rohmaterial bleibt die Personenebene leer — sie
+# leitet ab, sie legt nichts an. Bisher las nur der Obsidian-Adapter Namen,
+# und auch der nur aus `[[Verweisen]]`.
+
+
+def test_beteiligte_kommen_aus_dem_kopf() -> None:
+    from icarus_memory.ingest import beteiligte_aus
+
+    assert beteiligte_aus({"participants": "Martina Lehmann, Dr. Brandt"}) == [
+        "Martina Lehmann",
+        "Dr. Brandt",
+    ]
+    # Klammern schreibt jeder Vault anders.
+    assert beteiligte_aus({"participants": "[Frau Becker, Herr Ohlsen]"}) == [
+        "Frau Becker",
+        "Herr Ohlsen",
+    ]
+    assert beteiligte_aus({"teilnehmer": "Nur Einer"}) == ["Nur Einer"]
+    assert beteiligte_aus({}) == []
+
+
+def test_namen_werden_nicht_aus_dem_fliesstext_geraten() -> None:
+    """Geratene Menschen sind schlimmer als gar keine: sie stehen in einer
+    Liste, die aussieht, als wäre sie belegt."""
+    from icarus_memory.ingest import beteiligte_aus
+
+    assert beteiligte_aus({"title": "Besprechung mit Dr. Brandt"}) == []
+
+
+def test_textdateien_liefern_beteiligte(tmp_path) -> None:
+    from icarus_memory.ingest import read_text_files
+
+    (tmp_path / "notiz.md").write_text(
+        "---\nparticipants: Frau Becker, Herr Ohlsen\n---\nVertrag besprochen.\n",
+        encoding="utf-8",
+    )
+
+    treffer = [d for d in read_text_files(tmp_path) if not isinstance(d, str)]
+
+    assert len(treffer) == 1
+    assert treffer[0].participants == ["Frau Becker", "Herr Ohlsen"]
+    # Der Rumpf bleibt unangetastet — sonst änderte sich der Digest und alles
+    # schon Aufgenommene gälte wieder als neu.
+    assert "participants:" in treffer[0].body
+
+
+def test_obsidian_nimmt_kopf_und_verweise_ohne_doppelte(tmp_path) -> None:
+    from icarus_memory.ingest import read_markdown_vault
+
+    (tmp_path / "jour-fixe.md").write_text(
+        "---\nparticipants: Frau Becker\n---\n"
+        "Mit [[Frau Becker]] und [[Herr Ohlsen]] besprochen.\n",
+        encoding="utf-8",
+    )
+
+    treffer = [d for d in read_markdown_vault(tmp_path) if not isinstance(d, str)]
+
+    assert treffer[0].participants == ["Frau Becker", "Herr Ohlsen"]

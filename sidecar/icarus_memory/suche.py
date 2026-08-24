@@ -16,20 +16,32 @@ ergänzt das; sie ersetzt es nicht.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
+
+from . import personen
 
 # Was ein fremder Text ist, entscheidet die Herkunft — nicht der Ort, an dem
 # er liegt. Eine Datei vom eigenen Rechner ist genauso fremd wie eine Mail:
 # jemand anderes hat sie geschrieben.
-FREMDE_HERKUNFT = {"email", "calendar", "document", "web", "tool_output"}
+#
+# Die Liste selbst steht in `model.py`, weil die Personenansicht dieselbe
+# Antwort geben muss. Hier bleibt der Name stehen, damit der Begriff dort
+# auffindbar ist, wo er benutzt wird.
+from .model import FREMDE_HERKUNFT
 
 # Reihenfolge der Gruppen in der Anzeige. Was zu tun ist, steht vor dem, was
 # man weiß; Rohmaterial steht zuletzt, weil es noch kein Wissen ist.
-GRUPPEN = ("aufgabe", "projekt", "aussage", "notiz", "episode")
+#
+# Menschen stehen zwischen Projekten und Wissen: Ein Name ist meistens ein
+# Arbeitszusammenhang („mit wem hatte ich das?“) und erst danach ein
+# Wissensgegenstand.
+GRUPPEN = ("aufgabe", "projekt", "person", "aussage", "notiz", "episode")
 
 BESCHRIFTUNG = {
     "aufgabe": "Aufgaben",
     "projekt": "Projekte",
+    "person": "Menschen",
     "aussage": "Was ich weiß",
     "notiz": "Notizen",
     "episode": "Rohmaterial",
@@ -40,6 +52,7 @@ BESCHRIFTUNG = {
 ZIEL = {
     "aufgabe": "dashboard",
     "projekt": "projects",
+    "person": "people",
     "aussage": "memory",
     "notiz": "projects",
     "episode": "ingest",
@@ -92,6 +105,7 @@ def suche(
     workspace: Any,
     episodes: Any,
     limit: int = 6,
+    jetzt: datetime | None = None,
 ) -> dict[str, Any]:
     """Sucht in allen Schichten und gibt gruppierte Treffer zurück.
 
@@ -99,6 +113,7 @@ def suche(
     die Suche liefert trotzdem, was die anderen gefunden haben. Eine Suche,
     die ganz ausfällt, weil eine Tabelle klemmt, ist nutzlos.
     """
+    jetzt = jetzt or datetime.now().astimezone()
     frage = frage.strip()
     if len(frage) < 2:
         # Ein einzelner Buchstabe trifft alles und hilft niemandem.
@@ -128,6 +143,31 @@ def suche(
                     zeile=_kurz(projekt.description) or projekt.status.value,
                     ref=projekt.id,
                 ))
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        # Menschen werden abgeleitet, nicht gespeichert — deshalb steht hier
+        # eine Berechnung und keine Abfrage. Ohne Bestand und ohne Aufgaben:
+        # Für einen Treffer in der Liste zählen Name, letzter Kontakt und
+        # Thema. Alles Weitere holt die Einzelansicht.
+        for mensch in personen.alle(episodes=episodes, jetzt=jetzt,
+                                    workspace=workspace):
+            if not _passt(mensch.name, klein):
+                continue
+            # „zuletzt heute“ statt „heute“: Ohne das Wort davor liest sich
+            # die Zeile wie eine Verabredung für heute.
+            wann = f"zuletzt {mensch.kontakt_text}" if mensch.kontakt_text else ""
+            bits = [t for t in (wann, ", ".join(mensch.themen)) if t]
+            treffer["person"].append(Treffer(
+                art="person",
+                titel=mensch.name,
+                zeile=" · ".join(bits) or None,
+                ref=mensch.name,
+                # Ein Mensch, den nur eine fremde Datei kennt, ist eine fremde
+                # Behauptung — auch als Name in einer Trefferliste.
+                fremd=mensch.nur_von_aussen(),
+            ))
     except Exception:  # noqa: BLE001
         pass
 

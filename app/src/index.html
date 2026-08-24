@@ -70,6 +70,7 @@
          dort ist — im Briefing und im Gespräch hat sie nichts verloren. -->
     <div id="ablage-leiste" hidden>
       <button type="button" data-view="projects" class="fach">Projekte</button>
+      <button type="button" data-view="people" class="fach">Menschen</button>
       <button type="button" data-view="memory" class="fach">Was ich weiß</button>
       <button type="button" data-view="proposals" class="fach">Zu klären <span id="proposals-badge" class="badge" hidden></span></button>
       <button type="button" data-view="ingest" class="fach">Eingelesenes <span id="pending-badge" class="badge" hidden></span></button>
@@ -166,6 +167,36 @@
         </div>
 
         <p id="project-empty" class="muted">Noch keine Projekte.</p>
+      </section>
+
+      <!-- Menschen: abgeleitet, nicht angelegt.
+           Wer in einer aufgenommenen Notiz oder Nachricht vorkommt, steht
+           hier. Es gibt bewusst kein Formular — eine zweite Ablage neben dem
+           Bestand müsste gepflegt werden, und das ist Arbeit, die dem Nutzer
+           abgenommen werden soll. -->
+      <section id="view-people" class="view" hidden>
+        <p id="people-intro" class="muted">
+          Niemand wird hier angelegt. Wer in deinen Aufzeichnungen vorkommt,
+          steht in dieser Liste.
+        </p>
+
+        <div id="people-split" class="split">
+          <ul id="people-list"></ul>
+
+          <div id="person-detail">
+            <p class="muted">Wähle links einen Menschen.</p>
+          </div>
+        </div>
+
+        <!-- Solange niemand da ist, steht **nur** dieser Satz hier: Ein
+             leerer Kasten mit „Wähle links einen Menschen“ neben einer leeren
+             Liste ist eine Aufforderung, die niemand befolgen kann. -->
+        <p id="people-empty" class="muted">
+          Noch niemand. Menschen entstehen von selbst: Sobald in einer
+          aufgenommenen Notiz oder einer Nachricht steht, mit wem du zu tun
+          hattest, taucht die Person hier auf — mit dem letzten Kontakt, den
+          gemeinsamen Themen und dem, was noch offen ist.
+        </p>
       </section>
 
       <!-- Gespräch -->

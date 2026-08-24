@@ -226,6 +226,32 @@ nav strong { font: var(--t-kopf); font-weight: 650; letter-spacing: -0.015em; ma
 
 .tab:hover { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
 
+/* Fremder Text bleibt als fremder Text erkennbar — in der Suche, in der
+   Personenansicht, überall. Herkunft ist nicht Vertrauenswürdigkeit.
+
+   Die Regel hängt bewusst **nicht** an einer Ansicht: dieselbe Marke sitzt auf
+   einem Suchtreffer und auf einer Aussage bei einem Menschen, und zwei Regeln
+   für dieselbe Zusage wären zwei Gelegenheiten, sie auseinanderlaufen zu
+   lassen.
+
+   Sie fehlte eine Zeitlang ganz: die Neugestaltung hat die Regel entfernt,
+   während der Code die Klasse weiter vergab — die Marke stand da, sah aber
+   aus wie gewöhnlicher Text. Eine Warnung, die nicht warnt, ist schlimmer
+   als keine. */
+.fremd {
+  display: inline-block;
+  font: var(--t-fuss);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 999px;
+  padding: 0 var(--a2);
+  margin-right: var(--a2);
+  vertical-align: 0.05em;
+}
+
 /* Ein Knopf mit Symbol **und** Wort: ohne Abstand kleben sie aneinander. */
 .suche-knopf, #mehr-knopf {
   display: inline-flex;
@@ -624,6 +650,39 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 
 #project-form { margin-bottom: 1rem; }
 #project-form input[type="text"] { flex: 1 1 10rem; }
+
+/* -- Menschen -------------------------------------------------------------- */
+
+/* Dieselbe Bauform wie die Projektliste: links wählen, rechts der Stand. Das
+   ist Absicht — eine eigene Optik für Menschen wäre die Behauptung, sie seien
+   etwas anderes als der übrige Arbeitsstand. Kein Bild, kein Kärtchen: Was
+   hier zählt, ist wann und worum, nicht wie jemand aussieht. */
+#people-list { margin: 0; }
+
+.person {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.person:hover { background: var(--panel); }
+
+.person.selected {
+  background: var(--panel);
+  border-left: 2px solid var(--accent, currentColor);
+}
+
+#person-detail {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+#person-detail h3 { margin: 0 0 0.3rem; }
+#person-detail h4 { margin: 1.2rem 0 0.4rem; font-size: 0.9rem; }
+#person-detail ul { margin: 0; }
+#person-detail > p.muted { margin: 0.4rem 0 0; }
 
 /* -- Rohmaterial ----------------------------------------------------------- */
 

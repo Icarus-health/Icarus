@@ -221,6 +221,32 @@ def clean_title(stem: str, occurred_at: datetime | None) -> str:
     return stripped or stem
 
 
+def beteiligte_aus(meta: dict[str, str]) -> list[str]:
+    """Wer laut Kopfzeilen dabei war.
+
+    Bewusst **nur** aus dem Kopf, nie aus dem Fließtext. Namen aus Prosa zu
+    lesen hieße raten, und geratene Menschen sind schlimmer als gar keine: Sie
+    tauchen in einer Liste auf, die aussieht, als wäre sie belegt.
+
+    Was hier steht, hat jemand hingeschrieben — das ist eine Angabe, keine
+    Vermutung.
+    """
+    roh = (
+        meta.get("participants")
+        or meta.get("teilnehmer")
+        or meta.get("anwesend")
+        or ""
+    )
+    # Auch `participants: [A, B]` — die Klammern schreibt jeder Vault anders.
+    roh = roh.strip().strip("[]")
+    namen: list[str] = []
+    for teil in roh.replace(";", ",").split(","):
+        name = teil.strip().strip("\"'").strip()
+        if name and name not in namen:
+            namen.append(name)
+    return namen
+
+
 def wikilinks(text: str) -> list[str]:
     """`[[Verweise]]` als Rohmaterial für Verknüpfungen.
 
@@ -274,7 +300,9 @@ def read_markdown_vault(root: Path) -> Iterator[RawDocument | str]:
             body=body.strip(),
             source_ref=f"vault:{relative.as_posix()}",
             occurred_at=occurred,
-            participants=wikilinks(body),
+            participants=beteiligte_aus(meta) + [
+                w for w in wikilinks(body) if w not in beteiligte_aus(meta)
+            ],
             # Der Ordnername ist eine Ablesung: In fast jedem Vault trägt die
             # Ordnerstruktur Bedeutung, und sie zu verwerfen wäre Verlust.
             tags=tags_from(meta) + [p for p in relative.parts[:-1]],
@@ -334,6 +362,7 @@ def read_notion_export(root: Path) -> Iterator[RawDocument | str]:
             body=body,
             source_ref=f"notion:{relative.as_posix()}",
             occurred_at=date_from(meta, stem),
+            participants=beteiligte_aus(meta),
             tags=tags_from(meta) + [_NOTION_SUFFIX.sub("", p).strip()
                                     for p in relative.parts[:-1]],
         )
@@ -385,12 +414,17 @@ def read_text_files(root: Path) -> Iterator[RawDocument | str]:
         if not body:
             yield f"{path.name}: leer"
             continue
-        occurred = date_from({}, path.stem)
+        kopf, _ = parse_frontmatter(body)
+        occurred = date_from(kopf, path.stem)
         yield RawDocument(
             title=clean_title(path.stem, occurred),
+            # Der Rumpf bleibt, wie er ist. Den Kopf herauszuschneiden wäre
+            # sauberer und würde den Digest ändern — dann gälte alles schon
+            # Aufgenommene wieder als neu.
             body=body,
             source_ref=f"datei:{path.relative_to(root).as_posix()}",
             occurred_at=occurred,
+            participants=beteiligte_aus(kopf),
         )
 
 

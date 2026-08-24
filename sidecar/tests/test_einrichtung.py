@@ -350,3 +350,52 @@ def test_die_oberflaeche_kann_ihre_eigenen_werte_weiter_aendern(
 
     client.put("/setup", json={"mail": {"imap_host": "imap.dann.de", "user": "a@b.de"}})
     assert os.environ["ICARUS_IMAP_HOST"] == "imap.dann.de"
+
+
+# -- Der geltende Stand -----------------------------------------------------
+#
+# Der Startbefehl kann Ordner freigeben (`make lokal NOTIZEN=…`), und eine
+# gesetzte Umgebungsvariable gewinnt gegen die Einstellungsdatei. Die
+# Oberfläche muss deshalb den **geltenden** Stand kennen, nicht den
+# gespeicherten. Eine Oberfläche, die weniger Zugriff behauptet, als tatsächlich
+# besteht, ist der gefährlichste Fehler, den sie machen kann.
+
+
+def test_status_zeigt_was_der_startbefehl_freigegeben_hat(
+    tmp_path, monkeypatch
+) -> None:
+    ordner = tmp_path / "Notizen"
+    ordner.mkdir()
+    monkeypatch.setenv("ICARUS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ICARUS_FILE_ROOTS", str(ordner))
+    app = create_app(SelfModelStore(MemoryBackend(), subject_id="test"))
+
+    stand = TestClient(app).get("/setup").json()
+
+    # Gespeichert ist nichts — es kam ja von außen.
+    assert stand["settings"]["file_roots"] == []
+    # Es gilt trotzdem, und der Status sagt es.
+    assert stand["status"]["file_roots"] == [str(ordner)]
+    assert stand["status"]["file_roots_vom_start"] == [str(ordner)]
+
+
+def test_gespeicherte_ordner_gelten_nicht_als_vom_start(tmp_path, monkeypatch) -> None:
+    """Sonst verlöre der Nutzer den Entfernen-Knopf für seine eigenen Ordner."""
+    ordner = tmp_path / "Notizen"
+    ordner.mkdir()
+    monkeypatch.setenv("ICARUS_DATA_DIR", str(tmp_path))
+    config.save(tmp_path, config.Settings(file_roots=[str(ordner)]))
+    monkeypatch.setenv("ICARUS_FILE_ROOTS", str(ordner))
+    app = create_app(SelfModelStore(MemoryBackend(), subject_id="test"))
+
+    stand = TestClient(app).get("/setup").json()
+
+    assert stand["status"]["file_roots"] == [str(ordner)]
+    assert stand["status"]["file_roots_vom_start"] == []
+
+
+def test_ohne_freigabe_bleibt_beides_leer(client: TestClient) -> None:
+    stand = client.get("/setup").json()
+
+    assert stand["status"]["file_roots"] == []
+    assert stand["status"]["file_roots_vom_start"] == []

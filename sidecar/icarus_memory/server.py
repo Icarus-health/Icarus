@@ -561,8 +561,22 @@ def create_app(
                 "model": getattr(provider, "model", None),
                 "mail": getattr(app.state, "mail", None) is not None,
                 "calendar": getattr(app.state, "calendar", None) is not None,
+                # Was **tatsächlich** gilt, nicht was in der Datei steht.
+                # Eine gesetzte Umgebungsvariable gewinnt (siehe
+                # config.apply_to_env), und die Oberfläche muss den geltenden
+                # Stand zeigen — sonst sagt sie „kein Ordner freigegeben“,
+                # während einer freigegeben ist.
                 "file_roots": [
                     str(p) for p in file_roots_from_env(os.environ.get(ROOTS_ENV))
+                ],
+                # Welche davon vom Startbefehl kommen und nicht aus den
+                # Einstellungen. Sie lassen sich hier nicht entfernen — die
+                # Umgebung gewinnt —, und ein Knopf, der nichts bewirkt, ist
+                # schlimmer als keiner.
+                "file_roots_vom_start": [
+                    str(p)
+                    for p in file_roots_from_env(os.environ.get(ROOTS_ENV))
+                    if str(p) not in set(settings.file_roots)
                 ],
                 "semantic_search": not getattr(backend, "degraded", False),
             },

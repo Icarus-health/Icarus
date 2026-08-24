@@ -2236,24 +2236,41 @@ async function loadSetup() {
     await loadSetup();
   }
 
-  for (const pfad of s.file_roots) {
+  // Der **geltende** Stand, nicht der gespeicherte. Wer mit
+  // `make lokal NOTIZEN=…` startet, gibt damit einen Ordner frei — und diese
+  // Liste sagte trotzdem „Noch kein Ordner freigegeben“. Eine Oberfläche, die
+  // weniger Zugriff behauptet, als tatsächlich besteht, ist der gefährlichste
+  // Fehler, den sie machen kann.
+  const geltend = setupState.status.file_roots ?? [];
+  const vomStart = new Set(setupState.status.file_roots_vom_start ?? []);
+
+  for (const pfad of geltend) {
     const zeile = document.createElement("li");
     const name = document.createElement("p");
     name.className = "statement";
     name.textContent = pfad;
+    zeile.append(name);
 
-    const weg = document.createElement("button");
-    weg.className = "ghost small";
-    weg.textContent = "Entfernen";
-    weg.addEventListener("click", async () => {
-      weg.disabled = true;
-      await speichereOrdner(s.file_roots.filter((x) => x !== pfad));
-    });
-
-    zeile.append(name, weg);
+    if (vomStart.has(pfad)) {
+      // Die Umgebung gewinnt. Ein Entfernen-Knopf würde hier nichts bewirken,
+      // und ein Knopf, der nichts bewirkt, ist schlimmer als keiner.
+      const woher = document.createElement("p");
+      woher.className = "meta";
+      woher.textContent = "Kommt vom Startbefehl — endet, wenn Icarus neu startet.";
+      zeile.append(woher);
+    } else {
+      const weg = document.createElement("button");
+      weg.className = "ghost small";
+      weg.textContent = "Entfernen";
+      weg.addEventListener("click", async () => {
+        weg.disabled = true;
+        await speichereOrdner(s.file_roots.filter((x) => x !== pfad));
+      });
+      zeile.append(weg);
+    }
     oliste.append(zeile);
   }
-  if (!s.file_roots.length) {
+  if (!geltend.length) {
     const leer = document.createElement("p");
     leer.className = "meta";
     leer.textContent = "Noch kein Ordner freigegeben — Icarus liest keine Dateien.";
@@ -2865,19 +2882,46 @@ const WIZARD_STEPS = [
     },
   },
   {
+    // Vorher ein Feld mit Doppelpunkt-Syntax — und es zeigte den *gespeicherten*
+    // Stand, nicht den geltenden. Wer mit `make lokal NOTIZEN=…` gestartet
+    // hatte, wurde hier nach etwas gefragt, das längst freigegeben war.
     title: "Ordnerzugriff",
     text:
       "Aus welchen Ordnern darf gelesen werden? Leer lassen heißt: gar kein " +
       "Dateizugriff. Es gibt bewusst keine Voreinstellung.",
-    build: (s) =>
-      field("Ordner, durch Doppelpunkt getrennt", "wiz-roots", {
-        value: s.settings.file_roots.join(":"),
-        placeholder: "/Users/du/Dokumente/Notizen",
-      }),
-    apply: async () => {
-      const roots = $("#wiz-roots").value.split(":").map((p) => p.trim()).filter(Boolean);
-      await saveSetup({ file_roots: roots });
-      return roots.length ? `${roots.length} Ordner freigegeben.` : "Kein Dateizugriff.";
+    build: (s) => {
+      const frag = document.createDocumentFragment();
+      const gelten = s.status.file_roots ?? [];
+      if (gelten.length) {
+        const schon = document.createElement("p");
+        schon.className = "meta";
+        schon.textContent =
+          gelten.length === 1
+            ? `Schon freigegeben: ${gelten[0]}`
+            : `Schon freigegeben: ${gelten.join(", ")}`;
+        frag.append(schon);
+      }
+      frag.append(
+        field(gelten.length ? "Noch einen Ordner" : "Ordner", "wiz-roots", {
+          placeholder: "/Users/du/Dokumente/Notizen",
+        }),
+      );
+      return frag;
+    },
+    apply: async (s) => {
+      const pfad = $("#wiz-roots").value.trim();
+      const gelten = s.status.file_roots ?? [];
+      if (!pfad) {
+        return gelten.length
+          ? `Bleibt bei ${gelten.length === 1 ? "einem Ordner" : `${gelten.length} Ordnern`}.`
+          : "Kein Dateizugriff.";
+      }
+      // Erst nachsehen, dann freigeben — ein Ordner, den es nicht gibt, ist
+      // fast immer ein Tippfehler, und den zeigt man sofort.
+      const pruef = await api(`/setup/folder?path=${encodeURIComponent(pfad)}`);
+      if (!pruef.ok) throw new Error(pruef.detail);
+      await saveSetup({ file_roots: [...s.settings.file_roots, pruef.path] });
+      return pruef.detail;
     },
   },
   {
@@ -2909,8 +2953,8 @@ const WIZARD_STEPS = [
         sel,
         field("Ordner", "wiz-ingest", {
           placeholder: "muss oben freigegeben sein",
-          hint: s.settings.file_roots.length
-            ? `Freigegeben: ${s.settings.file_roots.join(", ")}`
+          hint: (s.status.file_roots ?? []).length
+            ? `Freigegeben: ${s.status.file_roots.join(", ")}`
             : "Noch kein Ordner freigegeben — dann diesen Schritt überspringen.",
         })
       );
@@ -2958,7 +3002,7 @@ async function advanceWizard(apply) {
 
   if (apply) {
     try {
-      const message = await WIZARD_STEPS[wizardStep].apply();
+      const message = await WIZARD_STEPS[wizardStep].apply(setupState);
       if (message) {
         $("#wizard-result").textContent = message;
         $("#wizard-result").classList.remove("error");

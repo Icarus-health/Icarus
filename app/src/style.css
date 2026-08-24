@@ -353,6 +353,39 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 #project-form { margin-bottom: 1rem; }
 #project-form input[type="text"] { flex: 1 1 10rem; }
 
+/* -- Menschen -------------------------------------------------------------- */
+
+/* Dieselbe Bauform wie die Projektliste: links wählen, rechts der Stand. Das
+   ist Absicht — eine eigene Optik für Menschen wäre die Behauptung, sie seien
+   etwas anderes als der übrige Arbeitsstand. Kein Bild, kein Kärtchen: Was
+   hier zählt, ist wann und worum, nicht wie jemand aussieht. */
+#people-list { margin: 0; }
+
+.person {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.person:hover { background: var(--panel); }
+
+.person.selected {
+  background: var(--panel);
+  border-left: 2px solid var(--accent, currentColor);
+}
+
+#person-detail {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+#person-detail h3 { margin: 0 0 0.3rem; }
+#person-detail h4 { margin: 1.2rem 0 0.4rem; font-size: 0.9rem; }
+#person-detail ul { margin: 0; }
+#person-detail > p.muted { margin: 0.4rem 0 0; }
+
 /* -- Rohmaterial ----------------------------------------------------------- */
 
 .episode { padding: 0.7rem 0; }
@@ -671,8 +704,12 @@ summary { cursor: pointer; font-size: 0.875rem; color: var(--muted); }
 }
 
 /* Fremder Text bleibt als fremder Text erkennbar, auch in einer Trefferliste.
-   Herkunft ist nicht Vertrauenswürdigkeit — das gilt hier genauso. */
-.suche-treffer .fremd {
+   Herkunft ist nicht Vertrauenswürdigkeit — das gilt hier genauso.
+
+   Die Regel steht bewusst **nicht** an `.suche-treffer` gebunden: Dieselbe
+   Marke sitzt auf einer Aussage in der Personenansicht, und zwei Rahmen für
+   dieselbe Zusage wären zwei Gelegenheiten, sie auseinanderlaufen zu lassen. */
+.fremd {
   display: inline-block;
   font-size: 0.6875rem;
   font-weight: 600;

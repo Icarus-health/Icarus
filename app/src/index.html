@@ -11,6 +11,7 @@
       <strong>Icarus</strong>
       <button data-view="dashboard" class="tab active">Heute</button>
       <button data-view="projects" class="tab">Projekte</button>
+      <button data-view="people" class="tab">Menschen</button>
       <button data-view="chat" class="tab">Gespräch</button>
       <button data-view="ingest" class="tab">Rohmaterial <span id="pending-badge" class="badge" hidden></span></button>
       <button data-view="proposals" class="tab">Vorschläge <span id="proposals-badge" class="badge" hidden></span></button>
@@ -139,6 +140,36 @@
         </div>
 
         <p id="project-empty" class="muted">Noch keine Projekte.</p>
+      </section>
+
+      <!-- Menschen: abgeleitet, nicht angelegt.
+           Wer in einer aufgenommenen Notiz oder Nachricht vorkommt, steht
+           hier. Es gibt bewusst kein Formular — eine zweite Ablage neben dem
+           Bestand müsste gepflegt werden, und das ist Arbeit, die dem Nutzer
+           abgenommen werden soll. -->
+      <section id="view-people" class="view" hidden>
+        <p id="people-intro" class="muted">
+          Niemand wird hier angelegt. Wer in deinen Aufzeichnungen vorkommt,
+          steht in dieser Liste.
+        </p>
+
+        <div id="people-split" class="split">
+          <ul id="people-list"></ul>
+
+          <div id="person-detail">
+            <p class="muted">Wähle links einen Menschen.</p>
+          </div>
+        </div>
+
+        <!-- Solange niemand da ist, steht **nur** dieser Satz hier: Ein
+             leerer Kasten mit „Wähle links einen Menschen“ neben einer leeren
+             Liste ist eine Aufforderung, die niemand befolgen kann. -->
+        <p id="people-empty" class="muted">
+          Noch niemand. Menschen entstehen von selbst: Sobald in einer
+          aufgenommenen Notiz oder einer Nachricht steht, mit wem du zu tun
+          hattest, taucht die Person hier auf — mit dem letzten Kontakt, den
+          gemeinsamen Themen und dem, was noch offen ist.
+        </p>
       </section>
 
       <!-- Gespräch -->

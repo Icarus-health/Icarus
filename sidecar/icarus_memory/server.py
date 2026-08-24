@@ -34,7 +34,7 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import briefing, config, suche
+from . import briefing, config, personen, suche
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .scheduler import (
@@ -1208,6 +1208,43 @@ def create_app(
             return app.state.episodes.ignore(episode_id).to_dict()
         except EpisodeError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # -- Menschen ----------------------------------------------------------
+    #
+    # Abgeleitet, nicht gespeichert: Es gibt keine Personentabelle und keinen
+    # Weg, hier etwas anzulegen. Wer in einer Episode vorkommt, ist da. Siehe
+    # personen.py.
+
+    @app.get("/people", dependencies=guard)
+    def list_people() -> list[dict[str, Any]]:
+        return [
+            p.to_dict() for p in personen.alle(
+                episodes=app.state.episodes,
+                tasks=app.state.tasks,
+                store=app.state.store,
+                workspace=app.state.workspace,
+                jetzt=datetime.now().astimezone(),
+            )
+        ]
+
+    @app.get("/people/{name}", dependencies=guard)
+    def person_detail(name: str) -> dict[str, Any]:
+        mensch = personen.eine(
+            name,
+            episodes=app.state.episodes,
+            tasks=app.state.tasks,
+            store=app.state.store,
+            workspace=app.state.workspace,
+            jetzt=datetime.now().astimezone(),
+        )
+        if mensch is None:
+            # 404 und keine leere Person: Eine leere Seite über jemanden sähe
+            # aus wie eine Auskunft, und wäre keine.
+            raise HTTPException(
+                status_code=404,
+                detail=f"In deinen Aufzeichnungen kommt „{name}“ nicht vor.",
+            )
+        return mensch.to_dict()
 
     # -- Aufnahme ----------------------------------------------------------
 

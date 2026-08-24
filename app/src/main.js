@@ -85,6 +85,7 @@ const SOURCE_LABELS = {
 const REFRESH = {
   dashboard: loadDashboard,
   projects: loadProjects,
+  people: loadPeople,
   ingest: loadEpisodes,
   proposals: loadProposals,
   setup: loadSetup,
@@ -134,7 +135,12 @@ function sucheOeffneTreffer(treffer) {
   sucheSchliessen();
   // Kein Ziel heißt: dafür gibt es noch keine Ansicht. Dann passiert nichts,
   // statt irgendwohin zu springen.
-  if (treffer?.ziel) openTab(treffer.ziel);
+  if (!treffer?.ziel) return;
+  // Wer einen Namen sucht, will den Menschen sehen und nicht eine Liste, in
+  // der er ihn ein zweites Mal suchen muss. Die Auswahl steht **vor** dem
+  // Wechsel: die Ansicht lädt beim Öffnen und liest sie dabei.
+  if (treffer.art === "person") gewaehlterMensch = treffer.ref;
+  openTab(treffer.ziel);
 }
 
 function sucheZeichnen(ergebnis) {
@@ -687,6 +693,171 @@ $("#project-form").addEventListener("submit", async (event) => {
   selectedProject = created.id;
   await loadProjects();
 });
+
+// -- Menschen ---------------------------------------------------------------
+//
+// Abgeleitet, nicht angelegt. Diese Ansicht hat bewusst kein Formular: Wer im
+// Rohmaterial vorkommt, steht hier; wer nirgends mehr vorkommt, ist weg. Die
+// Herleitung liegt in sidecar/icarus_memory/personen.py.
+
+let gewaehlterMensch = null;
+
+/** Die Kennzeichnung für fremden Text — dieselbe wie in der Suche.
+ *
+ *  Herkunft ist nicht Vertrauenswürdigkeit: Ein Satz, der aus einer Mail
+ *  stammt, darf nicht ungerahmt neben etwas stehen, das der Nutzer selbst
+ *  gesagt hat. */
+function fremdMarke() {
+  const marke = document.createElement("span");
+  marke.className = "fremd";
+  marke.textContent = "von außen";
+  return marke;
+}
+
+/** „ein gemeinsamer Eintrag“ statt „1 gemeinsame Einträge“. */
+function gemeinsameEintraege(anzahl) {
+  return anzahl === 1 ? "ein gemeinsamer Eintrag" : `${anzahl} gemeinsame Einträge`;
+}
+
+function menschZeile(mensch) {
+  const bits = [];
+  // Nie eine nackte Zahl: Der Sidecar liefert den Satzteil bereits fertig.
+  if (mensch.kontakt_text) bits.push(`Zuletzt ${mensch.kontakt_text}`);
+  if (mensch.themen.length) bits.push(mensch.themen.join(", "));
+  return bits.join(" · ");
+}
+
+async function loadPeople() {
+  const menschen = await api("/people");
+  const liste = $("#people-list");
+  liste.replaceChildren();
+
+  // Ist niemand da, bleibt genau ein Satz stehen. Eine leere Liste neben
+  // einem Kasten mit „Wähle links einen Menschen“ fordert zu etwas auf, das
+  // gar nicht geht — im Bildschirmfoto sofort zu sehen, im Code nicht.
+  const leer = menschen.length === 0;
+  $("#people-intro").hidden = leer;
+  $("#people-split").hidden = leer;
+  $("#people-empty").hidden = !leer;
+
+  for (const mensch of menschen) {
+    const el = document.createElement("li");
+    el.className = "person";
+    if (mensch.name === gewaehlterMensch) el.classList.add("selected");
+
+    const name = document.createElement("p");
+    name.className = "statement";
+    if (mensch.nur_von_aussen) name.append(fremdMarke());
+    name.append(document.createTextNode(mensch.name));
+
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    meta.textContent = menschZeile(mensch);
+
+    el.append(name, meta);
+    el.addEventListener("click", () => showPerson(mensch.name));
+    liste.append(el);
+  }
+
+  if (gewaehlterMensch) await showPerson(gewaehlterMensch);
+}
+
+async function showPerson(name) {
+  gewaehlterMensch = name;
+  for (const el of document.querySelectorAll("#people-list .person")) {
+    el.classList.toggle("selected", el.querySelector(".statement")?.textContent
+      .endsWith(name));
+  }
+
+  const box = $("#person-detail");
+  let mensch;
+  try {
+    mensch = await api(`/people/${encodeURIComponent(name)}`);
+  } catch (err) {
+    // Jede Aktion antwortet — mit Ergebnis oder mit Grund.
+    box.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "meta error";
+    p.textContent = err.message;
+    box.append(p);
+    return;
+  }
+
+  box.replaceChildren();
+
+  const kopf = document.createElement("h3");
+  if (mensch.nur_von_aussen) kopf.append(fremdMarke());
+  kopf.append(document.createTextNode(mensch.name));
+  box.append(kopf);
+
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  const bits = [];
+  if (mensch.kontakt_text) bits.push(`Zuletzt ${mensch.kontakt_text}`);
+  bits.push(gemeinsameEintraege(mensch.episoden_anzahl));
+  if (mensch.themen.length) bits.push(mensch.themen.join(", "));
+  meta.textContent = bits.join(" · ");
+  box.append(meta);
+
+  // Was zu tun ist, steht vor dem, was man weiß — wie in der Suche.
+  const aufgabenKopf = document.createElement("h4");
+  aufgabenKopf.textContent = `Offene Aufgaben (${mensch.offene_aufgaben.length})`;
+  box.append(aufgabenKopf);
+
+  if (mensch.offene_aufgaben.length) {
+    const aufgaben = document.createElement("ul");
+    for (const t of mensch.offene_aufgaben) {
+      const done = document.createElement("button");
+      done.className = "ghost small";
+      done.textContent = "Erledigt";
+      done.addEventListener("click", async () => {
+        await api(`/tasks/${t.id}/done`, { method: "POST" });
+        await showPerson(name);
+      });
+      const when = t.due ? `fällig ${new Date(t.due).toLocaleDateString("de-DE")}` : "";
+      const row = li(t.title, when, done);
+      if (t.overdue) row.classList.add("overdue");
+      aufgaben.append(row);
+    }
+    box.append(aufgaben);
+  } else {
+    const leer = document.createElement("p");
+    leer.className = "muted";
+    leer.textContent = "Nichts offen.";
+    box.append(leer);
+  }
+
+  const wissenKopf = document.createElement("h4");
+  wissenKopf.textContent = `Was ich weiß (${mensch.aussagen.length})`;
+  box.append(wissenKopf);
+
+  if (mensch.aussagen.length) {
+    const aussagen = document.createElement("ul");
+    for (const a of mensch.aussagen) {
+      const el = document.createElement("li");
+      const satz = document.createElement("p");
+      satz.className = "statement";
+      if (a.fremd) satz.append(fremdMarke());
+      satz.append(document.createTextNode(a.statement));
+      const herkunft = document.createElement("p");
+      herkunft.className = "meta";
+      herkunft.textContent =
+        SOURCE_LABELS[a.provenance.source_type] ?? a.provenance.source_type;
+      el.append(satz, herkunft);
+      aussagen.append(el);
+    }
+    box.append(aussagen);
+  } else {
+    const leer = document.createElement("p");
+    leer.className = "muted";
+    // Kein „keine Daten“: Der Satz sagt, was fehlt und woher es käme.
+    leer.textContent =
+      "Über diesen Menschen steht noch nichts im Gedächtnis. " +
+      "Was du mir erzählst oder was aus dem Rohmaterial verdichtet wird, " +
+      "steht danach hier.";
+    box.append(leer);
+  }
+}
 
 // -- Gespräch ---------------------------------------------------------------
 

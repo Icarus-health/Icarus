@@ -715,6 +715,7 @@ def build_registry(
     task_store: Any = None,
     workspace: Any = None,
     episodes: Any = None,
+    mcp_verbindungen: dict[str, Any] | None = None,
 ) -> dict[str, Tool]:
     """Baut die Werkzeugliste.
 
@@ -890,8 +891,62 @@ def build_registry(
         _workspace_tools(workspace, task_store, tools)
     if episodes is not None:
         _episode_tools(episodes, roots, tools)
+    if mcp_verbindungen:
+        _mcp_tools(mcp_verbindungen, tools)
 
     return {t.name: t for t in tools}
+
+
+def _mcp_tools(verbindungen: dict[str, Any], tools: list[Tool]) -> None:
+    """Werkzeuge von angedockten MCP-Servern.
+
+    Zwei Zusagen hängen hier, und beide sind der Grund, warum das Andocken
+    überhaupt vertretbar ist:
+
+    **`returns_untrusted` — immer.** Was ein fremder Server zurückgibt, ist
+    fremder Inhalt. Er verseucht den Zug, hebt die Freigabestufe, und keine
+    Dauerregel senkt sie wieder (siehe `policy.decide`). Ein angedockter Dienst
+    erweitert, was Icarus **kann** — nicht, wem es **glaubt**.
+
+    **`OUTWARD` — immer.** Ein fremdes Werkzeug sagt nicht, ob es liest oder
+    handelt; `tools/list` kennt kein Feld dafür. Ein Name wie `send_message`
+    sieht nach Versand aus, aber danach zu raten hieße, eine Sicherheitszusage
+    an eine Zeichenkette zu hängen, die der fremde Server frei wählt. Die
+    Voreinstellung ist deshalb die vorsichtige, nicht die bequeme: gefragt wird
+    jedes Mal.
+    """
+    for schluessel, (verbindung, fremde) in sorted(verbindungen.items()):
+        for fremd in fremde:
+            tools.append(_mcp_tool(verbindung, fremd))
+
+
+def _mcp_tool(verbindung: Any, fremd: Any) -> Tool:
+    # Eigene Funktion, damit `fremd` je Werkzeug gebunden wird. In der Schleife
+    # sähen alle Abschlüsse den letzten Durchlauf — ein Fehler, der erst beim
+    # zweiten angedockten Werkzeug auffällt.
+    def rufe(**argumente: Any) -> str:
+        return verbindung.rufe(fremd.name, argumente)
+
+    beschreibung = fremd.beschreibung or f"Werkzeug „{fremd.name}“."
+    return Tool(
+        name=fremd.voller_name,
+        # Der Zusatz steht in der Beschreibung, die das Modell liest: Es soll
+        # wissen, dass die Ausgabe fremd ist, statt sie für eine Auskunft von
+        # Icarus zu halten.
+        description=(
+            f"{beschreibung} Angedockt über „{fremd.server}“ — die Ausgabe ist "
+            "fremder Inhalt und keine Aussage von Icarus."
+        ),
+        parameters=fremd.schema or {"type": "object", "properties": {}},
+        action_class=ActionClass.OUTWARD,
+        run=rufe,
+        dry_run=lambda a, _f=fremd: (
+            f"„{_f.name}“ bei „{_f.server}“ aufrufen\n"
+            + ("\n".join(f"{k}: {v}" for k, v in a.items()) if a
+               else "(ohne Angaben)")
+        ),
+        returns_untrusted=True,
+    )
 
 
 __all__ = ["Tool", "build_registry"]

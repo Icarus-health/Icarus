@@ -807,8 +807,11 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 .wizard-card h2 { margin: 0 0 0.5rem; }
 .wizard-card > p.muted { margin: 0 0 1.25rem; }
 
-.wizard-actions { margin-top: 1.25rem; justify-content: flex-end; }
-.wizard-steps { margin: 0.75rem 0 0; text-align: right; font: var(--t-bild); }
+/* Schritt links, Handlungen rechts. Der Schritt schiebt sie mit `auto` nach
+   rechts, statt dass jedes Element sein eigenes `margin-left: auto` bekommt —
+   das erste frisst sonst den ganzen Platz. */
+.wizard-actions { margin-top: 1.25rem; align-items: center; }
+.wizard-steps { margin: 0; margin-right: auto; font: var(--t-bild); }
 
 #wizard-result:not(:empty) { margin-top: 0.9rem; }
 #wizard-result.error { color: var(--danger); }

@@ -59,10 +59,14 @@
         <div id="wizard-body"></div>
         <p id="wizard-result" class="muted"></p>
         <div class="row wizard-actions">
+          <!-- Der Schritt steht **vor** den Knöpfen, nicht darunter: Wo man
+               ist, gehört vor die Frage, wohin es weitergeht. -->
+          <p class="muted wizard-steps"><span id="wizard-progress"></span></p>
           <button id="wizard-skip" type="button" class="ghost">Überspringen</button>
-          <button id="wizard-next" type="button">Weiter</button>
+          <!-- `primary`, weil fast jeder weitergeht. Was voreingestellt ist,
+               ist die Entscheidung für fast alle — und muss auch so aussehen. -->
+          <button id="wizard-next" type="button" class="primary">Weiter</button>
         </div>
-        <p class="muted wizard-steps"><span id="wizard-progress"></span></p>
       </div>
     </div>
 

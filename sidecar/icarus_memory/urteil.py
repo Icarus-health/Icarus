@@ -81,9 +81,19 @@ class Vorhaben:
         return len(self.marken) >= MIN_MARKEN
 
     def tage_still(self, jetzt: datetime) -> int | None:
+        """Wie lange schon nichts mehr geschah.
+
+        Gezählt wird ab dem **späteren** von beidem: der letzten Regung und
+        dem Zeitpunkt, an dem das Ziel gefasst wurde. Nichts kann still
+        gestanden haben, bevor es das Vorhaben gab — sonst hieße ein heute
+        gefasstes Ziel „seit drei Monaten passiert nichts“, nur weil eine alte
+        eingelesene Notiz zufällig dieselbe Marke trägt.
+        """
         if not self.beurteilbar:
             return None
-        seit = self.letzte_regung or self.ziel.recorded_at
+        seit = self.ziel.recorded_at
+        if self.letzte_regung is not None and self.letzte_regung > seit:
+            seit = self.letzte_regung
         return max(0, (jetzt - seit).days)
 
     def schlaeft(self, jetzt: datetime) -> bool:

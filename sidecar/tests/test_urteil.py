@@ -334,3 +334,25 @@ def test_ein_frisches_ziel_belegt_den_morgen_nicht(tmp_path) -> None:
     assert stand["goals"]["eingeschlafen"] == []
     assert stand["briefing"]["punkte"] == []
     assert tuer.get("/goals").json()["eingeschlafen"] == 0
+
+
+def test_ein_heute_gefasstes_ziel_ist_nie_seit_langem_still(store, episodes) -> None:
+    """Nichts kann still gestanden haben, bevor es das Vorhaben gab.
+
+    Sonst hieße ein heute gefasstes Ziel „seit drei Monaten passiert nichts“,
+    nur weil eine alte eingelesene Notiz zufällig dieselbe Marke trägt.
+    """
+    ziel(store, "Die Praxisumstellung abschließen.", ["umstellung"], vor_tagen=0)
+    notiz(episodes, ["umstellung"], vor_tagen=90)
+
+    eins = hole(store, episodes=episodes)[0]
+
+    assert eins.tage_still(JETZT) == 0
+    assert eins.schlaeft(JETZT) is False
+
+
+def test_eine_regung_nach_dem_ziel_zaehlt_normal(store, episodes) -> None:
+    ziel(store, "Die Praxisumstellung abschließen.", ["umstellung"], vor_tagen=120)
+    notiz(episodes, ["umstellung"], vor_tagen=90)
+
+    assert hole(store, episodes=episodes)[0].tage_still(JETZT) == 90

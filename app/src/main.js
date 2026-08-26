@@ -653,6 +653,7 @@ const BRIEFING_ZIELE = {
   // Dort steht die Entscheidung neben der Aussage, die ihre Annahme ersetzt
   // hat — beides an einem Ort, statt eines Knopfes, der etwas tut.
   entscheidung: "memory",
+  vorhaben: "memory",
   widerspruch: "proposals",
   vorschlag: "proposals",
   mail: "chat",

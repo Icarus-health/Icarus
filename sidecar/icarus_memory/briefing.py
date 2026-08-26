@@ -32,6 +32,11 @@ MONATE = (
 
 ZAHLWORT = {1: "Eine Sache", 2: "Zwei Dinge", 3: "Drei Dinge"}
 
+_ZAHL = {
+    2: "zwei", 3: "drei", 4: "vier", 5: "fünf", 6: "sechs",
+    7: "sieben", 8: "acht", 9: "neun", 10: "zehn", 11: "elf",
+}
+
 # Ab wann eine abgegebene Sache es wert ist, den Morgen zu belegen. Wer
 # gestern etwas weitergegeben hat, will nicht heute daran erinnert werden —
 # das wäre kein Stabschef, sondern ein Wecker.
@@ -50,7 +55,7 @@ class Punkt:
 
     quelle: str
     """`aufgabe`, `wartet`, `entscheidung`, `termin`, `bestaetigung`,
-    `widerspruch`, `vorschlag`, `mail`."""
+    `widerspruch`, `vorhaben`, `vorschlag`, `mail`."""
 
     ref: str | None = None
     """Kennung des Gegenstands, damit die Oberfläche handeln kann."""
@@ -167,6 +172,26 @@ def _heute_faellig(aufgaben: list[dict], jetzt: datetime) -> list[dict]:
         if faellig is not None and _gleicher_tag(faellig, jetzt):
             treffer.append(aufgabe)
     return treffer
+
+
+def _wochen(tage: int) -> str:
+    """„sechs Wochen“, nicht „42 Tagen“.
+
+    Bei einem halben Jahr Stillstand interessiert niemanden der einzelne Tag.
+    Eine genaue Zahl täuscht hier eine Genauigkeit vor, die die Sache nicht
+    hat.
+    """
+    wochen = tage // 7
+    if wochen < 2:
+        return "über einer Woche"
+    if wochen < 9:
+        return f"{_ZAHL.get(wochen, str(wochen))} Wochen"
+    monate = tage // 30
+    if monate < 2:
+        return "über einem Monat"
+    if monate < 12:
+        return f"{_ZAHL.get(monate, str(monate))} Monaten"
+    return "über einem Jahr"
 
 
 def _kurz(satz: str, laenge: int = 74) -> str:
@@ -329,7 +354,26 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 8. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
+    # 8. Ein Vorhaben, an dem zu lange nichts geschah. Bewusst leises Gewicht:
+    # wichtig, aber nicht dringend. An einem vollen Tag kommt es nicht vor —
+    # wer drei brennende Dinge hat, soll nicht zusätzlich an das
+    # Halbjahresvorhaben erinnert werden. An einem ruhigen Tag ist es das
+    # Wertvollste, was dasteht.
+    for schlafend in (daten.get("goals", {}).get("eingeschlafen", []) or [])[:1]:
+        woran = schlafend.get("woran")
+        seither = f" Zuletzt in {woran}." if woran else ""
+        kandidaten.append(Punkt(
+            text=(
+                f"Seit {_wochen(schlafend.get('tage_still') or 0)} ist nichts an "
+                f"„{_zitat(schlafend.get('satz', ''))}“ passiert.{seither}"
+            ),
+            gewicht=45,
+            quelle="vorhaben",
+            ref=schlafend.get("id"),
+            aktion="Ansehen",
+        ))
+
+    # 9. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
     ungelesen = daten.get("mail", {}).get("unread", 0) or 0
     if ungelesen:
         kandidaten.append(Punkt(

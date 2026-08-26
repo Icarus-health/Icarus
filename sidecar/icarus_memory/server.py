@@ -34,7 +34,7 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import briefing, config, entscheidungen, personen, providers, suche
+from . import briefing, config, entscheidungen, personen, providers, suche, urteil
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .regeln import ERLAUBTE_STUFEN, RegelFehler, RegelStore
@@ -1121,6 +1121,20 @@ def create_app(
         except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
             result["decisions"] = {"erschuettert": [], "error": str(exc)}
 
+        try:
+            schlafend = urteil.eingeschlafen(
+                store=app.state.store,
+                episodes=getattr(app.state, "episodes", None),
+                tasks=getattr(app.state, "tasks", None),
+                workspace=getattr(app.state, "workspace", None),
+            )
+            result["goals"] = {
+                "eingeschlafen": [v.to_dict() for v in schlafend],
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
+            result["goals"] = {"eingeschlafen": [], "error": str(exc)}
+
         calendar = getattr(app.state, "calendar", None)
         if calendar is None:
             # Kein Variablenname für den Nutzer: `ICARUS_CALDAV_URL` ist Wissen,
@@ -1254,6 +1268,21 @@ def create_app(
             return app.state.tasks.zurueckholen(task_id).to_dict()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/goals", dependencies=guard)
+    def list_goals() -> dict[str, Any]:
+        """Alle Vorhaben mit ihrer letzten Regung, das stillste zuerst."""
+        alle = urteil.vorhaben(
+            store=app.state.store,
+            episodes=getattr(app.state, "episodes", None),
+            tasks=getattr(app.state, "tasks", None),
+            workspace=getattr(app.state, "workspace", None),
+        )
+        jetzt = datetime.now().astimezone()
+        return {
+            "items": [v.to_dict(jetzt) for v in alle],
+            "eingeschlafen": sum(1 for v in alle if v.schlaeft(jetzt)),
+        }
 
     # -- Entscheidungen ----------------------------------------------------
 

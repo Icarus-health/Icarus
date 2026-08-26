@@ -761,12 +761,27 @@ function renderKacheln(data) {
   if (!feld) return;
   feld.replaceChildren();
 
-  const termin = (data.calendar?.items ?? [])[0];
+  // Der nächste Termin, der noch **bevorsteht** — nicht schlicht der erste im
+  // Fenster. Sonst stand um zwölf noch „Um 9:00 Uhr … Vorbereiten“ da, für
+  // eine Besprechung, die längst vorbei war. Die Terminliste daneben grante
+  // denselben Termin gleichzeitig als vergangen aus: zwei Anzeigen, die sich
+  // widersprachen, und die falsche war die auffälligere.
+  const jetzt = new Date();
+  const termin = (data.calendar?.items ?? []).find(
+    (e) => e.start && new Date(e.start) > jetzt,
+  );
   if (termin) {
     const beginn = new Date(termin.start);
+    const heute = beginn.toDateString() === jetzt.toDateString();
+    const uhrzeit = `${beginn.getHours()}:${String(beginn.getMinutes()).padStart(2, "0")} Uhr`;
     feld.append(kachel({
-      marke: `Um ${beginn.getHours()}:${String(beginn.getMinutes()).padStart(2, "0")} Uhr`,
-      jetzt: true,
+      // „Morgen um 11:00 Uhr“ statt „Um 11:00 Uhr“, wenn es nicht heute ist —
+      // eine nackte Uhrzeit liest jeder als heute.
+      marke: heute
+        ? `Um ${uhrzeit}`
+        : `${beginn.toLocaleDateString("de-DE", { weekday: "long" })} um ${uhrzeit}`,
+      // Hervorgehoben nur, was heute noch kommt.
+      jetzt: heute,
       titel: termin.summary || "Termin",
       zeile: termin.location || "Nichts weiter notiert",
       knopf: "Vorbereiten",

@@ -62,7 +62,7 @@ man wartet.
 
 Siehe `sidecar/icarus_memory/tasks.py`.
 
-### 3. Menschen — abgeleitet, nicht angelegt
+### 3. Menschen — abgeleitet, nicht angelegt ✓
 
 Ein Stabschef kennt die Menschen um den Chef herum. Icarus weiß aus den
 Episoden längst, mit wem etwas zu tun hatte — es macht bisher nichts daraus.
@@ -74,7 +74,7 @@ auftaucht, ist eine Person; was über ihn im Bestand steht, steht bei ihm.
 Namen werden zusammengeführt, ohne zu raten. Gleicher Name ist dieselbe Person,
 mehr nicht — falsch zusammengelegte Menschen sind schlimmer als zwei Einträge.
 
-### 4. Entscheidungen und ihre Annahmen
+### 4. Entscheidungen und ihre Annahmen ✓
 
 Der eigentliche Wert eines Gedächtnisses zeigt sich, wenn eine Annahme kippt.
 
@@ -86,17 +86,34 @@ sondern als Verweis auf die Aussagen, auf denen sie stand.
 Das ist die Etappe, die aus einem Archiv einen Ratgeber macht. Und die einzige,
 die eine echte Erweiterung des Datenmodells braucht.
 
-### 5. Das Urteil — dringend gegen wichtig
+### 5. Das Urteil — dringend gegen wichtig ✓
 
 Bis hierher ordnet Icarus nach Regeln: Fristen, Alter, Anzahl. Das reicht für
 *dringend*. Es reicht nicht für *wichtig*.
 
-Was wichtig ist, hängt an Zielen, und Ziele stehen im Bestand — als Aussagen
-vom Typ `goal`. Diese Etappe braucht ein Modell, und sie ist deshalb die
-letzte: alles davor muss ohne Modell nützlich sein.
+**Hier ist der Plan beim Bauen umgefallen.** Vorgesehen war ein Modell, das
+gewichtet, was auf welches Ziel einzahlt. Beim Bauen zeigte sich, dass die
+Lücke eine andere und viel einfachere ist:
 
-Auch hier gilt die Grenze. Das Modell darf gewichten und formulieren. Es darf
-nicht entscheiden, und es darf nichts anlegen.
+> Ziele erzeugten bisher **keinen einzigen** Briefingpunkt.
+
+Was wichtig ist, mahnt niemand an. Eine überfällige Aufgabe meldet sich von
+selbst — sie hat ein Datum. Ein Vorhaben, an dem seit sechs Wochen nichts
+passiert ist, meldet sich nie. Es fehlt nicht, es steht still, und Stille
+erzeugt keinen Eintrag.
+
+Die Frage dahinter ist ablesbar, nicht zu erraten: *Wann ist zuletzt etwas
+passiert, das dieses Ziel betraf?* Episoden, Aufgaben und Aussagen mit
+denselben Marken geben die Antwort. Ein Modell würde hier raten, wo gezählt
+werden kann, und wäre dabei weder schneller noch nachprüfbarer.
+
+Das Gewicht ist bewusst leise: wichtig, aber nicht dringend. An einem vollen
+Tag kommt das Vorhaben nicht vor — wer drei brennende Dinge hat, soll nicht
+zusätzlich an das Halbjahresvorhaben erinnert werden. An einem ruhigen Tag ist
+es das Wertvollste, was dasteht.
+
+Damit läuft **jede** Etappe ohne Modell. Wer keinen Anbieter anschließt,
+verliert das Gespräch — nicht das Urteil.
 
 ## Wie angedockt wird
 
@@ -123,5 +140,6 @@ nie auf „ungefragt“.
 gebündelt nach Namen. Sie legt nichts über Menschen an, was nicht jemand gesagt
 oder angenommen hat.
 
-**Kein Zwang zum Modell.** Jede Etappe außer der fünften läuft ohne Anbieter.
-Wer keinen anschließt, verliert Formulierung — nicht Funktion.
+**Kein Zwang zum Modell.** Jede Etappe läuft ohne Anbieter — auch die fünfte,
+für die ursprünglich eines vorgesehen war. Wer keinen anschließt, verliert das
+Gespräch, nicht das Urteil.

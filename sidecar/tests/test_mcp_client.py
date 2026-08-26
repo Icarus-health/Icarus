@@ -269,3 +269,116 @@ def test_die_umgebung_geht_nur_mit_schluesselnamen_nach_aussen() -> None:
 
     assert d["umgebung"] == ["API_KEY", "REGION"]
     assert "geheim-123" not in json.dumps(d)
+
+
+# -- Über die Tür -----------------------------------------------------------
+
+
+@pytest.fixture()
+def tuer(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from icarus_memory import MemoryBackend, SelfModelStore
+    from icarus_memory.server import create_app
+
+    monkeypatch.setenv("ICARUS_DATA_DIR", str(tmp_path))
+    app = create_app(SelfModelStore(MemoryBackend(), subject_id="t"))
+    klient = TestClient(app)
+    klient.app_ref = app  # type: ignore[attr-defined]
+    yield klient
+    app.state.scheduler.stop()
+
+
+def befehl_fuer(tmp_path: Path, werkzeuge: list[dict] | None = None) -> str:
+    werkzeuge = werkzeuge if werkzeuge is not None else [
+        {"name": "wetter", "description": "Wetter.", "inputSchema": {}},
+    ]
+    return f"{sys.executable} {schreibe_server(tmp_path, werkzeuge)}"
+
+
+def test_verbinden_und_nachsehen_sagt_was_dabei_herauskam(tuer, tmp_path) -> None:
+    """Jede Aktion antwortet — mit Ergebnis oder mit Grund."""
+    antwort = tuer.post("/mcp/pruefen", json={
+        "name": "Probe", "befehl": befehl_fuer(tmp_path),
+    }).json()
+
+    assert antwort["ok"] is True
+    assert antwort["werkzeuge"] == ["Probe.wetter"]
+    assert "ein Werkzeug gefunden" in antwort["detail"]
+
+
+def test_nachsehen_bei_einem_dienst_der_nicht_startet(tuer) -> None:
+    antwort = tuer.post("/mcp/pruefen", json={
+        "name": "Kaputt", "befehl": "gibtsdiesenbefehlnicht",
+    }).json()
+
+    assert antwort["ok"] is False
+    assert "gibt es auf diesem Rechner nicht" in antwort["detail"]
+    # Kein Stapelabzug in der Oberfläche.
+    assert "Traceback" not in antwort["detail"]
+
+
+def test_andocken_abdocken_und_dazwischen_die_werkzeuge(tuer, tmp_path) -> None:
+    angelegt = tuer.post("/mcp/server", json={
+        "name": "Probe", "befehl": befehl_fuer(tmp_path),
+    })
+    assert angelegt.status_code == 201
+    assert angelegt.json()["werkzeuge"] == ["Probe.wetter"]
+
+    liste = tuer.get("/mcp/server").json()["items"]
+    assert [e["name"] for e in liste] == ["Probe"]
+    assert liste[0]["verbunden"] is True
+    assert liste[0]["werkzeuge"] == ["Probe.wetter"]
+
+    # Und der Agent kennt das Werkzeug wirklich.
+    assert "Probe.wetter" in tuer.app_ref.state.agent.tool_names
+
+    weg = tuer.delete("/mcp/server/Probe")
+    assert weg.status_code == 200
+    assert tuer.get("/mcp/server").json()["items"] == []
+    assert "Probe.wetter" not in tuer.app_ref.state.agent.tool_names
+
+
+def test_ein_dienst_der_nicht_startet_wird_nicht_eingetragen(tuer) -> None:
+    """Sonst sammeln sich Einträge, von denen niemand weiß, ob sie je
+    funktioniert haben."""
+    antwort = tuer.post("/mcp/server", json={
+        "name": "Kaputt", "befehl": "gibtsdiesenbefehlnicht",
+    })
+
+    assert antwort.status_code == 400
+    assert tuer.get("/mcp/server").json()["items"] == []
+
+
+def test_derselbe_name_zweimal_ist_ein_fehler_mit_grund(tuer, tmp_path) -> None:
+    tuer.post("/mcp/server", json={"name": "Probe", "befehl": befehl_fuer(tmp_path)})
+
+    zweitens = tuer.post("/mcp/server", json={
+        "name": "Probe", "befehl": befehl_fuer(tmp_path),
+    })
+
+    assert zweitens.status_code == 409
+    assert "schon eingetragen" in zweitens.json()["detail"]
+
+
+def test_ein_unlesbarer_befehl_sagt_das(tuer) -> None:
+    antwort = tuer.post("/mcp/server", json={"name": "Schief", "befehl": 'x "unbeendet'})
+
+    assert antwort.status_code == 400
+    assert "nicht lesbar" in antwort.json()["detail"]
+
+
+def test_der_befehl_laeuft_nicht_durch_eine_shell(tuer, tmp_path) -> None:
+    """Der Befehl kommt aus einer Einstellungsdatei. Eine Shell würde daraus
+    eine Befehlszeile machen, die mehr kann als starten."""
+    beweis = tmp_path / "beweis.txt"
+    antwort = tuer.post("/mcp/pruefen", json={
+        "name": "Böse", "befehl": f"echo egal; touch {beweis}",
+    }).json()
+
+    assert antwort["ok"] is False
+    assert not beweis.exists()
+
+
+def test_abdocken_eines_unbekannten_dienstes_gibt_404(tuer) -> None:
+    assert tuer.delete("/mcp/server/GibtsNicht").status_code == 404

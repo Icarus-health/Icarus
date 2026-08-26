@@ -1071,7 +1071,7 @@ async function loadPeople() {
   liste.replaceChildren();
 
   // Ist niemand da, bleibt genau ein Satz stehen. Eine leere Liste neben
-  // einem Kasten mit „Wähle links einen Menschen“ fordert zu etwas auf, das
+  // einem Kasten mit einer Aufforderung fordert zu etwas auf, das
   // gar nicht geht — im Bildschirmfoto sofort zu sehen, im Code nicht.
   const leer = menschen.length === 0;
   $("#people-intro").hidden = leer;

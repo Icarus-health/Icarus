@@ -162,7 +162,11 @@
           <!-- Rechts der Stand des gewählten Projekts: Beschreibung, offene
                Aufgaben, Notizen. Ein Aufruf, nicht drei. -->
           <div id="project-detail">
-            <p class="muted">Wähle links ein Projekt.</p>
+            <!-- Kein „links“: im schmalen Fenster stapeln sich die Spalten,
+                 und dann steht die Liste **oben**. Eine Richtungsangabe, die
+                 in einer von zwei Anordnungen falsch ist, ist eine falsche
+                 Angabe. -->
+            <p class="muted">Öffne ein Projekt, um zu sehen, was dort ansteht.</p>
           </div>
         </div>
 
@@ -184,12 +188,12 @@
           <ul id="people-list"></ul>
 
           <div id="person-detail">
-            <p class="muted">Wähle links einen Menschen.</p>
+            <p class="muted">Öffne einen Menschen, um zu sehen, was über ihn bekannt ist.</p>
           </div>
         </div>
 
         <!-- Solange niemand da ist, steht **nur** dieser Satz hier: Ein
-             leerer Kasten mit „Wähle links einen Menschen“ neben einer leeren
+             leerer Kasten mit einer Aufforderung neben einer leeren
              Liste ist eine Aufforderung, die niemand befolgen kann. -->
         <p id="people-empty" class="muted">
           Noch niemand. Menschen entstehen von selbst: Sobald in einer

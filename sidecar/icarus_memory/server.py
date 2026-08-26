@@ -918,7 +918,28 @@ def create_app(
 
     @app.get("/mail", dependencies=guard)
     def mail_inbox(limit: int = 15, unread_only: bool = False) -> dict[str, Any]:
-        mail = _mail_or_404()
+        """Der Posteingang — und ein leerer, wenn keiner eingerichtet ist.
+
+        Bewusst **kein** Fehler in diesem Fall. Nichts eingerichtet zu haben
+        ist der Normalzustand am ersten Tag, kein Störfall. Ein 409 färbte den
+        Hinweis rot und schrieb bei jedem Öffnen des Gesprächs einen Fehler in
+        die Konsole des Browsers — und eine Konsole voller normaler Zustände
+        ist der beste Weg, einen echten Fehler zu übersehen.
+
+        Die Abrufe einzelner Nachrichten bleiben beim 409: Wer eine bestimmte
+        Mail verlangt, hat sich nicht verlaufen, sondern etwas verlangt, das
+        es ohne Zugang nicht geben kann.
+        """
+        mail = getattr(app.state, "mail", None)
+        if mail is None:
+            return {
+                "items": [],
+                "unread": 0,
+                "can_send": False,
+                "eingerichtet": False,
+                "detail": f"Noch keine Post verbunden. {WEGWEISER} deine "
+                          "Adresse eintragen — den Rest sucht Icarus.",
+            }
         try:
             nachrichten = mail.inbox(limit=limit, unread_only=unread_only)
         except Exception as exc:  # noqa: BLE001 - Netzwerk, Anmeldung, Serverlaune

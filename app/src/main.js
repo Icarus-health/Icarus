@@ -1453,9 +1453,15 @@ async function loadMailbox() {
   }
 
   setMailboxBadge(mailboxState.unread);
-  note.textContent = mailboxState.items.length
-    ? (mailboxState.can_send ? "" : "Kein SMTP eingerichtet — Lesen geht, Senden nicht.")
-    : "Nichts im Posteingang.";
+  // Der Hinweis „noch nichts verbunden“ kommt jetzt als gewöhnliche Antwort
+  // und nicht als Fehler — er darf deshalb auch nicht rot sein.
+  if (mailboxState.detail) {
+    note.textContent = mailboxState.detail;
+  } else {
+    note.textContent = mailboxState.items.length
+      ? (mailboxState.can_send ? "" : "Kein SMTP eingerichtet — Lesen geht, Senden nicht.")
+      : "Nichts im Posteingang.";
+  }
 
   liste.replaceChildren(...mailboxState.items.map(renderMailItem));
 }

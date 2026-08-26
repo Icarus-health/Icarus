@@ -284,6 +284,12 @@ input, select, textarea {
   border-radius: var(--r-klein);
   padding: 0 var(--a3);
   min-height: 34px;
+  /* Ein Auswahlfeld wächst von selbst auf seine längste Zeile. Steht dort ein
+     Dateipfad, sprengt es im schmalen Fenster die Seite — und dann scrollt der
+     ganze Inhalt seitwärts, nicht nur das Feld. Das war nur bei 520 Pixeln zu
+     sehen. */
+  max-width: 100%;
+  min-width: 0;
   background: var(--mulde);
   color: inherit;
   box-shadow:

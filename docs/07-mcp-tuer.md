@@ -134,6 +134,71 @@ Umgebungsvariablen die Datei:
 ICARUS_SIDECAR_URL=http://127.0.0.1:8765 ICARUS_SIDECAR_TOKEN=… icarus-mcp
 ```
 
+## Die andere Richtung: Icarus dockt an
+
+Die eine Richtung — fremde Assistenten dockt an Icarus an — ist oben
+beschrieben. Icarus kann seit `sidecar/icarus_memory/mcp_client.py` auch
+umgekehrt: an einen fremden MCP-Server andocken und dessen Werkzeuge benutzen.
+
+Das ist die Antwort auf die Frage „was brauchen wir noch, um einen digitalen
+Chief of Staff zu haben?“, ohne für jeden Dienst einen eigenen Konnektor zu
+schreiben. Jeder Dienst, für den irgendwer einen MCP-Server geschrieben hat,
+dockt an — ohne dass hier eine Zeile dafür entsteht.
+
+```mermaid
+flowchart LR
+    S[Sidecar] -->|"MCP über stdio,<br/>Icarus ist Client"| F["Fremder Server<br/>(Wetter, Kalender, …)"]
+    S --> R[Registry]
+    R -->|"jedes Werkzeug:<br/>OUTWARD, untrusted"| P[Policy]
+    P --> A{{"Freigabe<br/>in der App"}}
+
+    classDef built fill:#dff5e1,stroke:#3b7a4b,color:#14311d
+    classDef gate fill:#f7ecd5,stroke:#a8621f,color:#3a2a12
+    classDef foreign fill:#fbe4e1,stroke:#a83b2f,color:#3a1610
+    class S,R,P built
+    class A gate
+    class F foreign
+```
+
+### Was dabei nicht verhandelbar ist
+
+**Jedes angedockte Werkzeug ist `returns_untrusted`.** Seine Ausgabe ist
+fremder Inhalt — sie verseucht den Zug, hebt die Freigabestufe, und **keine
+Dauerregel senkt sie wieder**. Ein angedockter Dienst erweitert, was Icarus
+**kann**, nicht, wem es **glaubt**. Siehe [`03-delegation.md`](03-delegation.md)
+für die Kontaminationsregel im Allgemeinen.
+
+**Jedes angedockte Werkzeug ist `OUTWARD`.** `tools/list` kennt kein Feld für
+die Wirkung eines Werkzeugs. Ein Name wie `send_message` sieht nach Versand
+aus, aber danach zu raten hieße, eine Sicherheitszusage an eine Zeichenkette
+zu hängen, die der fremde Server frei wählt. Die Voreinstellung ist deshalb
+die vorsichtige: gefragt wird jedes Mal, bis ein Mensch für diesen einen
+Dienst etwas anderes einträgt.
+
+### Protokoll
+
+Wie beim Server: JSON-RPC 2.0 über stdin/stdout, von Hand statt über ein SDK.
+Vier Methoden reichen (`initialize`, `notifications/initialized`,
+`tools/list`, `tools/call`), und eine Abhängigkeit, die sich im
+Halbjahrestakt ändert, ist für eine App, die zehn Jahre laufen soll, der
+schlechtere Tausch — dieselbe Überlegung wie bei IMAP und CalDAV statt
+Anbieter-APIs.
+
+Der fremde Server läuft als eigener Kindprozess. Zeitlimits gelten für jeden
+Aufruf; ein Server, der nicht antwortet, hält Icarus nicht an. Der Start
+erfolgt **ohne Shell** — die Befehlszeile kommt aus der Einstellungsdatei, und
+eine Shell würde daraus mehr machen als einen Start.
+
+### Einrichtung
+
+Ein Name und eine Befehlszeile, wie man sie der Anleitung des Dienstes
+entnimmt (`npx -y @dienst/server`), unter „Mehr → Einrichtung → Angedockte
+Dienste“. „Verbinden und nachsehen“ startet den Dienst probeweise und zeigt,
+welche Werkzeuge dabei herauskamen, ohne etwas einzutragen. Erst „Andocken“
+schreibt den Eintrag fest — und auch das erst, nachdem der Dienst wirklich
+gestartet ist. Ein Eintrag, der nie funktioniert hat, soll gar nicht erst in
+der Liste stehen.
+
 ## Was offen ist
 
 **Das Token wechselt bei jedem Start der App.** Der MCP-Server liest

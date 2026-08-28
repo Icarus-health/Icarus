@@ -115,20 +115,28 @@ es das Wertvollste, was dasteht.
 Damit läuft **jede** Etappe ohne Modell. Wer keinen Anbieter anschließt,
 verliert das Gespräch — nicht das Urteil.
 
-## Wie angedockt wird
+## Wie angedockt wird ✓
 
 Die naheliegende Antwort auf „wir brauchen noch Dienst X“ ist ein weiterer
 Konnektor. Nach dem fünften ist das ein Zweitberuf.
 
-Der Weg ist stattdessen die **MCP-Tür in beide Richtungen**: Icarus ist heute
-schon ein MCP-Server. Wird es zusätzlich MCP-*Client*, dockt jeder Dienst an,
-für den irgendwer einen Server geschrieben hat — ohne dass hier eine Zeile
-dafür entsteht.
+Der Weg ist stattdessen die **MCP-Tür in beide Richtungen**: Icarus war schon
+MCP-Server. Es ist jetzt zusätzlich MCP-*Client* — `mcp_client.py` — und
+dockt an jeden Dienst an, für den irgendwer einen Server geschrieben hat, ohne
+dass hier eine Zeile dafür entsteht. Details in
+[`07-mcp-tuer.md`](07-mcp-tuer.md).
 
-Was dabei nicht verhandelbar ist: fremde Werkzeuge liefern **fremden Inhalt**.
-Ihre Ausgabe ist `returns_untrusted`, sie hebt die Freigabestufe des Zuges, und
-keine Dauerregel senkt sie wieder. Ein angedockter Dienst erweitert, was Icarus
+Was dabei nicht verhandelbar war und blieb: fremde Werkzeuge liefern **fremden
+Inhalt**. Ihre Ausgabe ist `returns_untrusted`, sie hebt die Freigabestufe des
+Zuges, und keine Dauerregel senkt sie wieder. Dazu kommt eine zweite Grenze,
+die sich erst beim Bauen zeigte: `tools/list` sagt nicht, ob ein Werkzeug liest
+oder handelt, also ist jedes angedockte Werkzeug `OUTWARD` — die vorsichtige
+Voreinstellung, nicht die bequeme. Ein angedockter Dienst erweitert, was Icarus
 kann — nicht, wem es glaubt.
+
+Einrichtung: ein Name und eine Befehlszeile unter „Mehr → Einrichtung →
+Angedockte Dienste“, mit einem Knopf, der verbindet und sagt, was er dabei
+gefunden hat, bevor irgendetwas eingetragen wird.
 
 ## Was bewusst nicht kommt
 

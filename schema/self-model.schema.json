@@ -57,7 +57,8 @@
             "goal",
             "relationship",
             "skill",
-            "constraint"
+            "constraint",
+            "decision"
           ]
         },
         "statement": {
@@ -99,7 +100,7 @@
         "status": {
           "description": "Lebenszyklus der Aussage. Nichts wird gelöscht, sondern überführt — ausgenommen 'redacted', das den ausgeübten Widerruf markiert.",
           "type": "string",
-          "enum": ["active", "superseded", "expired", "retracted", "redacted"]
+          "enum": ["active", "superseded", "expired", "retracted", "redacted", "disputed"]
         },
         "supersedes": {
           "description": "IDs der Aussagen, die durch diese ersetzt werden. Macht Wissensupdates nachvollziehbar, statt den alten Wert zu überschreiben.",
@@ -113,6 +114,11 @@
         "redaction": { "$ref": "#/$defs/redaction" },
         "derived_from": {
           "description": "IDs der Aussagen, aus denen diese abgeleitet wurde. Entscheidend für den Widerruf: wird eine Quelle gelöscht, müssen alle davon abgeleiteten Aussagen mitgelöscht oder neu begründet werden.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "disputed_with": {
+          "description": "IDs der Aussagen, zu denen diese Aussage im offenen Widerspruch steht. Der Verweis wird gegenseitig gepflegt.",
           "type": "array",
           "items": { "type": "string" }
         },

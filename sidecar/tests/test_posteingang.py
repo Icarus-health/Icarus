@@ -124,6 +124,42 @@ def test_ohne_mailkonto_sagt_es_das(tmp_path, monkeypatch) -> None:
     )
     try:
         antwort = TestClient(app).get("/mail")
+
+        # Kein Fehler: Nichts eingerichtet zu haben ist der Normalzustand am
+        # ersten Tag. Ein 409 färbte den Hinweis rot und schrieb bei jedem
+        # Öffnen des Gesprächs einen Fehler in die Browserkonsole — und eine
+        # Konsole voller normaler Zustände ist der beste Weg, einen echten
+        # Fehler zu übersehen.
+        assert antwort.status_code == 200
+        daten = antwort.json()
+        assert daten["items"] == []
+        assert daten["unread"] == 0
+        assert daten["can_send"] is False
+        assert daten["eingerichtet"] is False
+        # Und es sagt weiterhin, was zu tun ist.
+        assert WEGWEISER in daten["detail"]
+    finally:
+        app.state.scheduler.stop()
+
+
+def test_eine_einzelne_nachricht_bleibt_ein_fehler(tmp_path, monkeypatch) -> None:
+    """Wer eine bestimmte Mail verlangt, hat sich nicht verlaufen.
+
+    Der leere Posteingang ist ein Zustand; eine angeforderte Nachricht, die es
+    ohne Zugang nicht geben kann, ist etwas anderes — und muss als solches
+    beantwortet werden, statt still nichts zurückzugeben.
+    """
+    monkeypatch.setenv("ICARUS_DATA_DIR", str(tmp_path))
+    for name in ("ICARUS_IMAP_HOST", "ICARUS_MAIL_USER", "ICARUS_MAIL_PASSWORD"):
+        monkeypatch.delenv(name, raising=False)
+    app = create_app(
+        SelfModelStore(MemoryBackend(), subject_id="test"),
+        audit=AuditLog(tmp_path / "audit.sqlite3"),
+        episodes=EpisodeStore(tmp_path / "episodes.sqlite3"),
+    )
+    try:
+        antwort = TestClient(app).get("/mail/irgendeine")
+
         assert antwort.status_code == 409
         assert WEGWEISER in antwort.json()["detail"]
     finally:

@@ -60,6 +60,20 @@ class Kind(str, Enum):
     SKILL = "skill"
     CONSTRAINT = "constraint"
 
+    DECISION = "decision"
+    """Eine getroffene Entscheidung — und über `derived_from`, worauf sie stand.
+
+    Der Unterschied zu allen anderen Arten ist die Blickrichtung. Eine Aussage
+    beschreibt, was gilt. Eine Entscheidung beschreibt, was daraufhin
+    beschlossen wurde — und sie bleibt richtig oder falsch **je nachdem, ob
+    ihre Grundlage noch steht.**
+
+    Eine Entscheidung wird deshalb nie „überholt“, wenn sich die Welt ändert.
+    Sie wird *erschüttert*: sie gilt weiter, aber jemand sollte sie noch
+    einmal ansehen. Das ist der Unterschied zwischen einem Archiv und einem
+    Ratgeber.
+    """
+
 
 class Status(str, Enum):
     ACTIVE = "active"
@@ -94,6 +108,25 @@ class SourceType(str, Enum):
     TOOL_OUTPUT = "tool_output"
     INFERENCE = "inference"
     MANUAL_CORRECTION = "manual_correction"
+
+
+#: Quellenarten, deren Text jemand anderes geschrieben hat.
+#:
+#: Steht hier und nicht in einer der Ansichten, weil es eine Eigenschaft der
+#: Quellenart ist und keine Frage der Darstellung. Suche und Personenansicht
+#: müssen dieselbe Antwort geben — zwei Listen driften auseinander, und dann
+#: ist derselbe Text an einer Stelle gerahmt und an der anderen nicht.
+#:
+#: `inference` fehlt bewusst: Was Icarus selbst gefolgert hat, ist nicht fremd,
+#: sondern eigene Arbeit — und wird über die Herleitung geprüft, nicht über
+#: einen Rahmen.
+FREMDE_HERKUNFT = {
+    SourceType.EMAIL.value,
+    SourceType.CALENDAR.value,
+    SourceType.DOCUMENT.value,
+    SourceType.WEB.value,
+    SourceType.TOOL_OUTPUT.value,
+}
 
 
 class Sensitivity(str, Enum):
@@ -255,6 +288,7 @@ class SelfModel:
 
 
 __all__ = [
+    "FREMDE_HERKUNFT",
     "SCHEMA_VERSION",
     "Assertion",
     "ensure_aware",

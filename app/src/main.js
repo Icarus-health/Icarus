@@ -85,6 +85,7 @@ const SOURCE_LABELS = {
 const REFRESH = {
   dashboard: loadDashboard,
   projects: loadProjects,
+  people: loadPeople,
   ingest: loadEpisodes,
   proposals: loadProposals,
   setup: loadSetup,
@@ -134,7 +135,12 @@ function sucheOeffneTreffer(treffer) {
   sucheSchliessen();
   // Kein Ziel heißt: dafür gibt es noch keine Ansicht. Dann passiert nichts,
   // statt irgendwohin zu springen.
-  if (treffer?.ziel) openTab(treffer.ziel);
+  if (!treffer?.ziel) return;
+  // Wer einen Namen sucht, will den Menschen sehen und nicht eine Liste, in
+  // der er ihn ein zweites Mal suchen muss. Die Auswahl steht **vor** dem
+  // Wechsel: die Ansicht lädt beim Öffnen und liest sie dabei.
+  if (treffer.art === "person") gewaehlterMensch = treffer.ref;
+  openTab(treffer.ziel);
 }
 
 function sucheZeichnen(ergebnis) {
@@ -255,6 +261,7 @@ const ORT = {
   dashboard: "dashboard",
   chat: "chat",
   projects: "projects",
+  people: "projects",
   memory: "projects",
   proposals: "projects",
   ingest: "projects",
@@ -263,7 +270,7 @@ const ORT = {
 };
 
 // Die Ablage ist der einzige Ort mit Fächern.
-const ABLAGE = new Set(["projects", "memory", "proposals", "ingest"]);
+const ABLAGE = new Set(["projects", "people", "memory", "proposals", "ingest"]);
 
 // Einmal an einer Stelle, damit auch ein Knopf im Briefing umschalten kann.
 function openTab(name) {
@@ -335,6 +342,22 @@ function greeting() {
   return "Guten Abend";
 }
 
+const MONATE = [
+  "Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
+];
+
+// „bei Herrn Ohlsen“, nicht „bei Herr Ohlsen“. Nur die Anrede wird gebeugt,
+// nie der Name selbst — bei fremden Namen ist jede Regel eine Wette.
+function bei(name) {
+  return name.startsWith("Herr ") ? `Herrn ${name.slice(5)}` : name;
+}
+
+function alsTag(iso) {
+  const d = new Date(iso);
+  return `${d.getDate()}. ${MONATE[d.getMonth()]}`;
+}
+
 function li(main, meta, action) {
   const el = document.createElement("li");
   const p = document.createElement("p");
@@ -351,51 +374,208 @@ function li(main, meta, action) {
   return el;
 }
 
+// Kein Systemdialog. Erstens gibt es `prompt` in der Tauri-Hülle nicht
+// verlässlich, zweitens reißt ein Kasten vor dem Fenster den Blick aus der
+// Zeile heraus, um die es geht. Das Feld erscheint dort, wo geklickt wurde,
+// und die Namen, die Icarus schon kennt, stehen als Knöpfe daneben — tippen
+// muss nur, wer jemand Neues meint.
+function fragWemn(row, t) {
+  if (row.querySelector(".abgabe")) return;
+
+  const kasten = document.createElement("form");
+  kasten.className = "abgabe";
+
+  const feld = document.createElement("input");
+  feld.type = "text";
+  feld.placeholder = "Bei wem liegt es?";
+  feld.setAttribute("aria-label", `Bei wem liegt „${t.title}“?`);
+  kasten.append(feld);
+
+  const senden = document.createElement("button");
+  senden.className = "small";
+  senden.type = "submit";
+  senden.textContent = "Abgeben";
+  kasten.append(senden);
+
+  const zurueck = document.createElement("button");
+  zurueck.className = "ghost small";
+  zurueck.type = "button";
+  zurueck.textContent = "Abbrechen";
+  zurueck.addEventListener("click", () => kasten.remove());
+  kasten.append(zurueck);
+
+  const namen = bekannteNamen();
+  if (namen.length) {
+    const reihe = document.createElement("div");
+    reihe.className = "namen";
+    const lead = document.createElement("span");
+    lead.textContent = "Zuletzt:";
+    reihe.append(lead);
+    for (const name of namen) {
+      const vorschlag = document.createElement("button");
+      vorschlag.className = "small name";
+      vorschlag.type = "button";
+      vorschlag.textContent = name;
+      vorschlag.addEventListener("click", () => {
+        feld.value = name;
+        kasten.requestSubmit();
+      });
+      reihe.append(vorschlag);
+    }
+    kasten.append(reihe);
+  }
+
+  kasten.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = feld.value.trim();
+    if (!name) {
+      feld.focus();
+      return;
+    }
+    await api(`/tasks/${t.id}/warten`, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    await loadDashboard();
+  });
+
+  row.append(kasten);
+  feld.focus();
+}
+
+// Wen kennen wir schon? Wer heute etwas hält, hält wahrscheinlich auch das
+// Nächste. Mehr Quellen kommen mit der Personenebene dazu.
+let LETZTE_NAMEN = [];
+
+function bekannteNamen() {
+  return LETZTE_NAMEN.slice(0, 4);
+}
+
 function renderTasks(block) {
   const list = $("#task-list");
   const items = block.items ?? [];
   list.replaceChildren();
   $("#task-empty").hidden = items.length > 0;
 
+  LETZTE_NAMEN = [...new Set((block.wartend ?? []).map((t) => t.wartet_auf))];
+
   const badge = $("#task-badge");
   badge.hidden = !block.overdue;
   badge.textContent = `${block.overdue} überfällig`;
 
   for (const t of items) {
+    let row;
+    const taten = document.createElement("div");
+    taten.className = "taten";
+
+    // Abgeben oder zurückholen — je nachdem, wo die Sache gerade liegt.
+    const weiter = document.createElement("button");
+    weiter.className = "ghost small";
+    weiter.type = "button";
+    if (t.wartet_auf) {
+      weiter.textContent = "Zurückholen";
+      weiter.addEventListener("click", async () => {
+        await api(`/tasks/${t.id}/zurueckholen`, { method: "POST" });
+        await loadDashboard();
+      });
+    } else {
+      weiter.textContent = "Abgeben";
+      weiter.addEventListener("click", () => fragWemn(row, t));
+    }
+    taten.append(weiter);
+
     const done = document.createElement("button");
     done.className = "ghost small";
+    done.type = "button";
     done.textContent = "Erledigt";
     done.addEventListener("click", async () => {
       await api(`/tasks/${t.id}/done`, { method: "POST" });
       await loadDashboard();
     });
+    taten.append(done);
 
     const bits = [];
-    if (t.due) bits.push(`fällig ${new Date(t.due).toLocaleDateString("de-DE")}`);
+    if (t.wartet_auf) {
+      // Wo etwas liegt, ist wichtiger als wann es fällig war — die
+      // Fälligkeit gehört jetzt jemand anderem.
+      bits.push(
+        t.wartet_seit
+          ? `Liegt seit dem ${alsTag(t.wartet_seit)} bei ${bei(t.wartet_auf)}`
+          : `Liegt bei ${bei(t.wartet_auf)}`,
+      );
+    } else if (t.due) {
+      bits.push(`fällig ${new Date(t.due).toLocaleDateString("de-DE")}`);
+    }
     bits.push(SOURCE_LABELS[t.provenance.source_type] ?? t.provenance.source_type);
 
-    const row = li(t.title, bits.join(" · "), done);
-    if (t.overdue) row.classList.add("overdue");
+    row = li(t.title, bits.join(" · "), taten);
+    if (t.wartet_auf) row.classList.add("wartet");
+    else if (t.overdue) row.classList.add("overdue");
     list.append(row);
   }
 }
 
 function renderEvents(block) {
   const list = $("#event-list");
+  if (!list) return;
   list.replaceChildren();
   $("#event-note").textContent = block.error ?? (block.items.length ? "" : "Nichts geplant.");
 
+  // Ein Tag hat eine Form: Uhrzeiten links, untereinander, der nächste
+  // hervorgehoben. Eine Liste aus „Do 21.08., 14:00 · Klinikum · mit …“
+  // liest sich wie ein Export, nicht wie ein Tag.
+  const jetzt = new Date();
+  const heute = jetzt.toDateString();
+  let naechsterGefunden = false;
+
   for (const e of block.items ?? []) {
     const start = e.start ? new Date(e.start) : null;
-    const when = start
-      ? (e.all_day
-          ? start.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) + " ganztags"
-          : start.toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }))
-      : "?";
-    const bits = [when];
-    if (e.location) bits.push(e.location);
-    if (e.attendees?.length) bits.push(`mit ${e.attendees.join(", ")}`);
-    list.append(li(e.summary, bits.join(" · ")));
+    const zeile = document.createElement("li");
+    zeile.className = "termin";
+
+    const wann = document.createElement("span");
+    wann.className = "uhr";
+    if (!start) {
+      wann.textContent = "—";
+    } else if (e.all_day) {
+      wann.textContent = "ganztags";
+      wann.classList.add("ganztags");
+    } else {
+      wann.textContent = start.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    }
+    zeile.append(wann);
+
+    const rechts = document.createElement("div");
+    const titel = document.createElement("p");
+    titel.className = "statement";
+    titel.textContent = e.summary || "Ohne Titel";
+    rechts.append(titel);
+
+    // Was an einem Termin wirklich zählt: mit wem, und wo. Das Datum nur,
+    // wenn er nicht heute ist — sonst weiß man es ohnehin.
+    const teile = [];
+    if (start && start.toDateString() !== heute) {
+      teile.push(start.toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long" }));
+    }
+    if (e.attendees?.length) teile.push(`mit ${e.attendees.join(", ")}`);
+    if (e.location) teile.push(e.location);
+    if (teile.length) {
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      meta.textContent = teile.join(" · ");
+      rechts.append(meta);
+    }
+    zeile.append(rechts);
+
+    // Der nächste, der noch bevorsteht — genau einer, nicht alle künftigen.
+    if (!naechsterGefunden && start && start > jetzt) {
+      zeile.classList.add("naechster");
+      naechsterGefunden = true;
+    } else if (start && start < jetzt) {
+      zeile.classList.add("vorbei");
+    }
+
+    list.append(zeile);
   }
 }
 
@@ -465,10 +645,15 @@ function renderProjectTeaser(block) {
 const BRIEFING_TATEN = {
   aufgabe: (ref) => api(`/tasks/${ref}/done`, { method: "POST" }),
   bestaetigung: (ref) => api(`/proposals/${ref}/accept`, { method: "POST" }),
+  wartet: (ref) => api(`/tasks/${ref}/zurueckholen`, { method: "POST" }),
 };
 
 // Punkte ohne eigene Handlung führen dorthin, wo man sie erledigt.
 const BRIEFING_ZIELE = {
+  // Dort steht die Entscheidung neben der Aussage, die ihre Annahme ersetzt
+  // hat — beides an einem Ort, statt eines Knopfes, der etwas tut.
+  entscheidung: "memory",
+  vorhaben: "memory",
   widerspruch: "proposals",
   vorschlag: "proposals",
   mail: "chat",
@@ -576,12 +761,27 @@ function renderKacheln(data) {
   if (!feld) return;
   feld.replaceChildren();
 
-  const termin = (data.calendar?.items ?? [])[0];
+  // Der nächste Termin, der noch **bevorsteht** — nicht schlicht der erste im
+  // Fenster. Sonst stand um zwölf noch „Um 9:00 Uhr … Vorbereiten“ da, für
+  // eine Besprechung, die längst vorbei war. Die Terminliste daneben grante
+  // denselben Termin gleichzeitig als vergangen aus: zwei Anzeigen, die sich
+  // widersprachen, und die falsche war die auffälligere.
+  const jetzt = new Date();
+  const termin = (data.calendar?.items ?? []).find(
+    (e) => e.start && new Date(e.start) > jetzt,
+  );
   if (termin) {
     const beginn = new Date(termin.start);
+    const heute = beginn.toDateString() === jetzt.toDateString();
+    const uhrzeit = `${beginn.getHours()}:${String(beginn.getMinutes()).padStart(2, "0")} Uhr`;
     feld.append(kachel({
-      marke: `Um ${beginn.getHours()}:${String(beginn.getMinutes()).padStart(2, "0")} Uhr`,
-      jetzt: true,
+      // „Morgen um 11:00 Uhr“ statt „Um 11:00 Uhr“, wenn es nicht heute ist —
+      // eine nackte Uhrzeit liest jeder als heute.
+      marke: heute
+        ? `Um ${uhrzeit}`
+        : `${beginn.toLocaleDateString("de-DE", { weekday: "long" })} um ${uhrzeit}`,
+      // Hervorgehoben nur, was heute noch kommt.
+      jetzt: heute,
       titel: termin.summary || "Termin",
       zeile: termin.location || "Nichts weiter notiert",
       knopf: "Vorbereiten",
@@ -847,6 +1047,171 @@ $("#project-form").addEventListener("submit", async (event) => {
   await loadProjects();
 });
 
+// -- Menschen ---------------------------------------------------------------
+//
+// Abgeleitet, nicht angelegt. Diese Ansicht hat bewusst kein Formular: Wer im
+// Rohmaterial vorkommt, steht hier; wer nirgends mehr vorkommt, ist weg. Die
+// Herleitung liegt in sidecar/icarus_memory/personen.py.
+
+let gewaehlterMensch = null;
+
+/** Die Kennzeichnung für fremden Text — dieselbe wie in der Suche.
+ *
+ *  Herkunft ist nicht Vertrauenswürdigkeit: Ein Satz, der aus einer Mail
+ *  stammt, darf nicht ungerahmt neben etwas stehen, das der Nutzer selbst
+ *  gesagt hat. */
+function fremdMarke() {
+  const marke = document.createElement("span");
+  marke.className = "fremd";
+  marke.textContent = "von außen";
+  return marke;
+}
+
+/** „ein gemeinsamer Eintrag“ statt „1 gemeinsame Einträge“. */
+function gemeinsameEintraege(anzahl) {
+  return anzahl === 1 ? "ein gemeinsamer Eintrag" : `${anzahl} gemeinsame Einträge`;
+}
+
+function menschZeile(mensch) {
+  const bits = [];
+  // Nie eine nackte Zahl: Der Sidecar liefert den Satzteil bereits fertig.
+  if (mensch.kontakt_text) bits.push(`Zuletzt ${mensch.kontakt_text}`);
+  if (mensch.themen.length) bits.push(mensch.themen.join(", "));
+  return bits.join(" · ");
+}
+
+async function loadPeople() {
+  const menschen = await api("/people");
+  const liste = $("#people-list");
+  liste.replaceChildren();
+
+  // Ist niemand da, bleibt genau ein Satz stehen. Eine leere Liste neben
+  // einem Kasten mit einer Aufforderung fordert zu etwas auf, das
+  // gar nicht geht — im Bildschirmfoto sofort zu sehen, im Code nicht.
+  const leer = menschen.length === 0;
+  $("#people-intro").hidden = leer;
+  $("#people-split").hidden = leer;
+  $("#people-empty").hidden = !leer;
+
+  for (const mensch of menschen) {
+    const el = document.createElement("li");
+    el.className = "person";
+    if (mensch.name === gewaehlterMensch) el.classList.add("selected");
+
+    const name = document.createElement("p");
+    name.className = "statement";
+    if (mensch.nur_von_aussen) name.append(fremdMarke());
+    name.append(document.createTextNode(mensch.name));
+
+    const meta = document.createElement("p");
+    meta.className = "meta";
+    meta.textContent = menschZeile(mensch);
+
+    el.append(name, meta);
+    el.addEventListener("click", () => showPerson(mensch.name));
+    liste.append(el);
+  }
+
+  if (gewaehlterMensch) await showPerson(gewaehlterMensch);
+}
+
+async function showPerson(name) {
+  gewaehlterMensch = name;
+  for (const el of document.querySelectorAll("#people-list .person")) {
+    el.classList.toggle("selected", el.querySelector(".statement")?.textContent
+      .endsWith(name));
+  }
+
+  const box = $("#person-detail");
+  let mensch;
+  try {
+    mensch = await api(`/people/${encodeURIComponent(name)}`);
+  } catch (err) {
+    // Jede Aktion antwortet — mit Ergebnis oder mit Grund.
+    box.replaceChildren();
+    const p = document.createElement("p");
+    p.className = "meta error";
+    p.textContent = err.message;
+    box.append(p);
+    return;
+  }
+
+  box.replaceChildren();
+
+  const kopf = document.createElement("h3");
+  if (mensch.nur_von_aussen) kopf.append(fremdMarke());
+  kopf.append(document.createTextNode(mensch.name));
+  box.append(kopf);
+
+  const meta = document.createElement("p");
+  meta.className = "meta";
+  const bits = [];
+  if (mensch.kontakt_text) bits.push(`Zuletzt ${mensch.kontakt_text}`);
+  bits.push(gemeinsameEintraege(mensch.episoden_anzahl));
+  if (mensch.themen.length) bits.push(mensch.themen.join(", "));
+  meta.textContent = bits.join(" · ");
+  box.append(meta);
+
+  // Was zu tun ist, steht vor dem, was man weiß — wie in der Suche.
+  const aufgabenKopf = document.createElement("h4");
+  aufgabenKopf.textContent = `Offene Aufgaben (${mensch.offene_aufgaben.length})`;
+  box.append(aufgabenKopf);
+
+  if (mensch.offene_aufgaben.length) {
+    const aufgaben = document.createElement("ul");
+    for (const t of mensch.offene_aufgaben) {
+      const done = document.createElement("button");
+      done.className = "ghost small";
+      done.textContent = "Erledigt";
+      done.addEventListener("click", async () => {
+        await api(`/tasks/${t.id}/done`, { method: "POST" });
+        await showPerson(name);
+      });
+      const when = t.due ? `fällig ${new Date(t.due).toLocaleDateString("de-DE")}` : "";
+      const row = li(t.title, when, done);
+      if (t.overdue) row.classList.add("overdue");
+      aufgaben.append(row);
+    }
+    box.append(aufgaben);
+  } else {
+    const leer = document.createElement("p");
+    leer.className = "muted";
+    leer.textContent = "Nichts offen.";
+    box.append(leer);
+  }
+
+  const wissenKopf = document.createElement("h4");
+  wissenKopf.textContent = `Was ich weiß (${mensch.aussagen.length})`;
+  box.append(wissenKopf);
+
+  if (mensch.aussagen.length) {
+    const aussagen = document.createElement("ul");
+    for (const a of mensch.aussagen) {
+      const el = document.createElement("li");
+      const satz = document.createElement("p");
+      satz.className = "statement";
+      if (a.fremd) satz.append(fremdMarke());
+      satz.append(document.createTextNode(a.statement));
+      const herkunft = document.createElement("p");
+      herkunft.className = "meta";
+      herkunft.textContent =
+        SOURCE_LABELS[a.provenance.source_type] ?? a.provenance.source_type;
+      el.append(satz, herkunft);
+      aussagen.append(el);
+    }
+    box.append(aussagen);
+  } else {
+    const leer = document.createElement("p");
+    leer.className = "muted";
+    // Kein „keine Daten“: Der Satz sagt, was fehlt und woher es käme.
+    leer.textContent =
+      "Über diesen Menschen steht noch nichts im Gedächtnis. " +
+      "Was du mir erzählst oder was aus dem Rohmaterial verdichtet wird, " +
+      "steht danach hier.";
+    box.append(leer);
+  }
+}
+
 // -- Gespräch ---------------------------------------------------------------
 
 function addMessage(role, text) {
@@ -1103,9 +1468,15 @@ async function loadMailbox() {
   }
 
   setMailboxBadge(mailboxState.unread);
-  note.textContent = mailboxState.items.length
-    ? (mailboxState.can_send ? "" : "Kein SMTP eingerichtet — Lesen geht, Senden nicht.")
-    : "Nichts im Posteingang.";
+  // Der Hinweis „noch nichts verbunden“ kommt jetzt als gewöhnliche Antwort
+  // und nicht als Fehler — er darf deshalb auch nicht rot sein.
+  if (mailboxState.detail) {
+    note.textContent = mailboxState.detail;
+  } else {
+    note.textContent = mailboxState.items.length
+      ? (mailboxState.can_send ? "" : "Kein SMTP eingerichtet — Lesen geht, Senden nicht.")
+      : "Nichts im Posteingang.";
+  }
 
   liste.replaceChildren(...mailboxState.items.map(renderMailItem));
 }
@@ -2062,24 +2433,41 @@ async function loadSetup() {
     await loadSetup();
   }
 
-  for (const pfad of s.file_roots) {
+  // Der **geltende** Stand, nicht der gespeicherte. Wer mit
+  // `make lokal NOTIZEN=…` startet, gibt damit einen Ordner frei — und diese
+  // Liste sagte trotzdem „Noch kein Ordner freigegeben“. Eine Oberfläche, die
+  // weniger Zugriff behauptet, als tatsächlich besteht, ist der gefährlichste
+  // Fehler, den sie machen kann.
+  const geltend = setupState.status.file_roots ?? [];
+  const vomStart = new Set(setupState.status.file_roots_vom_start ?? []);
+
+  for (const pfad of geltend) {
     const zeile = document.createElement("li");
     const name = document.createElement("p");
     name.className = "statement";
     name.textContent = pfad;
+    zeile.append(name);
 
-    const weg = document.createElement("button");
-    weg.className = "ghost small";
-    weg.textContent = "Entfernen";
-    weg.addEventListener("click", async () => {
-      weg.disabled = true;
-      await speichereOrdner(s.file_roots.filter((x) => x !== pfad));
-    });
-
-    zeile.append(name, weg);
+    if (vomStart.has(pfad)) {
+      // Die Umgebung gewinnt. Ein Entfernen-Knopf würde hier nichts bewirken,
+      // und ein Knopf, der nichts bewirkt, ist schlimmer als keiner.
+      const woher = document.createElement("p");
+      woher.className = "meta";
+      woher.textContent = "Kommt vom Startbefehl — endet, wenn Icarus neu startet.";
+      zeile.append(woher);
+    } else {
+      const weg = document.createElement("button");
+      weg.className = "ghost small";
+      weg.textContent = "Entfernen";
+      weg.addEventListener("click", async () => {
+        weg.disabled = true;
+        await speichereOrdner(s.file_roots.filter((x) => x !== pfad));
+      });
+      zeile.append(weg);
+    }
     oliste.append(zeile);
   }
-  if (!s.file_roots.length) {
+  if (!geltend.length) {
     const leer = document.createElement("p");
     leer.className = "meta";
     leer.textContent = "Noch kein Ordner freigegeben — Icarus liest keine Dateien.";
@@ -2337,6 +2725,13 @@ async function loadSetup() {
   khint.id = "cal-hint";
   kal.insertBefore(khint, kal.querySelector(".row"));
   panel.append(kal);
+
+  // -- Angedockte Dienste
+  //
+  // Ein Name, eine Befehlszeile, ein Knopf. Was ein „stdio transport“ ist,
+  // muss hier niemand wissen — das steht in der Anleitung des jeweiligen
+  // Dienstes, und von dort kopiert man die Zeile hierher.
+  panel.append(baueDienste());
 
   /** Überträgt, was am Mailanbieter über den Kalender bekannt ist. */
   function applyCalendarProvider(anbieter) {
@@ -2641,6 +3036,172 @@ async function renderBackups(panel) {
   await zeichnen();
 }
 
+function baueDienste() {
+  const block = document.createElement("section");
+  block.className = "setup-block";
+
+  const h = document.createElement("h3");
+  h.textContent = "Angedockte Dienste";
+
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent =
+    "Dienste, die eigene Werkzeuge mitbringen. Was sie zurückgeben, gilt " +
+    "immer als fremder Inhalt — Icarus fragt danach bei jeder Handlung nach, " +
+    "auch wenn du sonst eine Dauerregel hast.";
+
+  const liste = document.createElement("ul");
+  liste.className = "dienste";
+  const ergebnis = document.createElement("p");
+  ergebnis.className = "meta";
+
+  async function zeichnen() {
+    liste.replaceChildren();
+    let items = [];
+    try {
+      items = (await api("/mcp/server")).items ?? [];
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+      return;
+    }
+    if (!items.length) {
+      const leer = document.createElement("p");
+      leer.className = "meta";
+      leer.textContent = "Noch nichts angedockt.";
+      liste.append(leer);
+      return;
+    }
+    for (const d of items) {
+      const zeile = document.createElement("li");
+      const name = document.createElement("p");
+      name.className = "statement";
+      name.textContent = d.name;
+      zeile.append(name);
+
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      if (d.fehler) {
+        meta.textContent = d.fehler;
+        meta.classList.add("error");
+      } else if (d.werkzeuge?.length) {
+        // Die Werkzeuge nennen, nicht nur zählen: Wer wissen will, was ein
+        // Dienst hier darf, soll es lesen können.
+        meta.textContent = d.werkzeuge.join(" · ");
+      } else {
+        meta.textContent = "Verbunden, aber ohne Werkzeuge.";
+      }
+      zeile.append(meta);
+
+      const weg = document.createElement("button");
+      weg.className = "ghost small";
+      weg.type = "button";
+      weg.textContent = "Abdocken";
+      weg.addEventListener("click", async () => {
+        weg.disabled = true;
+        try {
+          const { detail } = await api(`/mcp/server/${encodeURIComponent(d.name)}`,
+                                       { method: "DELETE" });
+          ergebnis.textContent = detail;
+          ergebnis.classList.remove("error");
+        } catch (err) {
+          ergebnis.textContent = err.message;
+          ergebnis.classList.add("error");
+        }
+        await zeichnen();
+      });
+      zeile.append(weg);
+      liste.append(zeile);
+    }
+  }
+
+  const nameFeld = field("Name", "mcp-name", { placeholder: "Wetterdienst" });
+  const befehlFeld = field("Befehl", "mcp-befehl", {
+    placeholder: "npx -y @beispiel/wetter-server",
+    hint: "Die Zeile steht in der Anleitung des Dienstes. Sie wird gestartet, " +
+          "nicht in einer Kommandozeile ausgeführt.",
+  });
+
+  function eingaben() {
+    return {
+      name: $("#mcp-name").value.trim(),
+      befehl: $("#mcp-befehl").value.trim(),
+    };
+  }
+
+  // Zwei Knöpfe, und der erste ist der harmlose. Nachsehen verändert nichts —
+  // deshalb darf man ihn drücken, ohne etwas zu entscheiden.
+  const pruefen = document.createElement("button");
+  pruefen.type = "button";
+  pruefen.className = "small";
+  pruefen.textContent = "Verbinden und nachsehen";
+  pruefen.addEventListener("click", async () => {
+    const daten = eingaben();
+    if (!daten.name || !daten.befehl) {
+      ergebnis.textContent = "Name und Befehl fehlen noch.";
+      ergebnis.classList.add("error");
+      return;
+    }
+    pruefen.disabled = true;
+    ergebnis.classList.remove("error");
+    ergebnis.textContent = "Wird gestartet…";
+    try {
+      const { ok, detail, werkzeuge } = await api("/mcp/pruefen", {
+        method: "POST",
+        body: JSON.stringify(daten),
+      });
+      ergebnis.textContent = werkzeuge?.length
+        ? `${detail} ${werkzeuge.join(" · ")}`
+        : detail;
+      if (!ok) ergebnis.classList.add("error");
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+    } finally {
+      pruefen.disabled = false;
+    }
+  });
+
+  const andocken = document.createElement("button");
+  andocken.type = "button";
+  andocken.textContent = "Andocken";
+  andocken.addEventListener("click", async () => {
+    const daten = eingaben();
+    if (!daten.name || !daten.befehl) {
+      ergebnis.textContent = "Name und Befehl fehlen noch.";
+      ergebnis.classList.add("error");
+      return;
+    }
+    andocken.disabled = true;
+    ergebnis.classList.remove("error");
+    try {
+      const { detail, werkzeuge } = await api("/mcp/server", {
+        method: "POST",
+        body: JSON.stringify(daten),
+      });
+      ergebnis.textContent = werkzeuge?.length
+        ? `${detail} ${werkzeuge.join(" · ")}`
+        : detail;
+      $("#mcp-name").value = "";
+      $("#mcp-befehl").value = "";
+      await zeichnen();
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+    } finally {
+      andocken.disabled = false;
+    }
+  });
+
+  const reihe = document.createElement("div");
+  reihe.className = "row";
+  reihe.append(pruefen, andocken);
+
+  block.append(h, note, liste, nameFeld, befehlFeld, reihe, ergebnis);
+  zeichnen();
+  return block;
+}
+
 /** „self-model-20260802T122954Z.sqlite3" → „2.8.2026, 12:29". */
 function lesbarerZeitpunkt(name) {
   const m = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(name);
@@ -2691,19 +3252,46 @@ const WIZARD_STEPS = [
     },
   },
   {
+    // Vorher ein Feld mit Doppelpunkt-Syntax — und es zeigte den *gespeicherten*
+    // Stand, nicht den geltenden. Wer mit `make lokal NOTIZEN=…` gestartet
+    // hatte, wurde hier nach etwas gefragt, das längst freigegeben war.
     title: "Ordnerzugriff",
     text:
       "Aus welchen Ordnern darf gelesen werden? Leer lassen heißt: gar kein " +
       "Dateizugriff. Es gibt bewusst keine Voreinstellung.",
-    build: (s) =>
-      field("Ordner, durch Doppelpunkt getrennt", "wiz-roots", {
-        value: s.settings.file_roots.join(":"),
-        placeholder: "/Users/du/Dokumente/Notizen",
-      }),
-    apply: async () => {
-      const roots = $("#wiz-roots").value.split(":").map((p) => p.trim()).filter(Boolean);
-      await saveSetup({ file_roots: roots });
-      return roots.length ? `${roots.length} Ordner freigegeben.` : "Kein Dateizugriff.";
+    build: (s) => {
+      const frag = document.createDocumentFragment();
+      const gelten = s.status.file_roots ?? [];
+      if (gelten.length) {
+        const schon = document.createElement("p");
+        schon.className = "meta";
+        schon.textContent =
+          gelten.length === 1
+            ? `Schon freigegeben: ${gelten[0]}`
+            : `Schon freigegeben: ${gelten.join(", ")}`;
+        frag.append(schon);
+      }
+      frag.append(
+        field(gelten.length ? "Noch einen Ordner" : "Ordner", "wiz-roots", {
+          placeholder: "/Users/du/Dokumente/Notizen",
+        }),
+      );
+      return frag;
+    },
+    apply: async (s) => {
+      const pfad = $("#wiz-roots").value.trim();
+      const gelten = s.status.file_roots ?? [];
+      if (!pfad) {
+        return gelten.length
+          ? `Bleibt bei ${gelten.length === 1 ? "einem Ordner" : `${gelten.length} Ordnern`}.`
+          : "Kein Dateizugriff.";
+      }
+      // Erst nachsehen, dann freigeben — ein Ordner, den es nicht gibt, ist
+      // fast immer ein Tippfehler, und den zeigt man sofort.
+      const pruef = await api(`/setup/folder?path=${encodeURIComponent(pfad)}`);
+      if (!pruef.ok) throw new Error(pruef.detail);
+      await saveSetup({ file_roots: [...s.settings.file_roots, pruef.path] });
+      return pruef.detail;
     },
   },
   {
@@ -2735,8 +3323,8 @@ const WIZARD_STEPS = [
         sel,
         field("Ordner", "wiz-ingest", {
           placeholder: "muss oben freigegeben sein",
-          hint: s.settings.file_roots.length
-            ? `Freigegeben: ${s.settings.file_roots.join(", ")}`
+          hint: (s.status.file_roots ?? []).length
+            ? `Freigegeben: ${s.status.file_roots.join(", ")}`
             : "Noch kein Ordner freigegeben — dann diesen Schritt überspringen.",
         })
       );
@@ -2784,7 +3372,7 @@ async function advanceWizard(apply) {
 
   if (apply) {
     try {
-      const message = await WIZARD_STEPS[wizardStep].apply();
+      const message = await WIZARD_STEPS[wizardStep].apply(setupState);
       if (message) {
         $("#wizard-result").textContent = message;
         $("#wizard-result").classList.remove("error");

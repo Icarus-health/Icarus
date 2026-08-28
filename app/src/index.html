@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Icarus</title>
+    <!-- Ein Zeichen statt eines leeren Reiters. Eingebettet, damit kein
+         zweiter Abruf nötig ist — und damit der Browser nicht bei jedem
+         Start vergeblich nach favicon.ico fragt. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232f5069'/%3E%3Cpath d='M16 7l7 12H9z' fill='none' stroke='%23f4f4f1' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -52,10 +59,14 @@
         <div id="wizard-body"></div>
         <p id="wizard-result" class="muted"></p>
         <div class="row wizard-actions">
+          <!-- Der Schritt steht **vor** den Knöpfen, nicht darunter: Wo man
+               ist, gehört vor die Frage, wohin es weitergeht. -->
+          <p class="muted wizard-steps"><span id="wizard-progress"></span></p>
           <button id="wizard-skip" type="button" class="ghost">Überspringen</button>
-          <button id="wizard-next" type="button">Weiter</button>
+          <!-- `primary`, weil fast jeder weitergeht. Was voreingestellt ist,
+               ist die Entscheidung für fast alle — und muss auch so aussehen. -->
+          <button id="wizard-next" type="button" class="primary">Weiter</button>
         </div>
-        <p class="muted wizard-steps"><span id="wizard-progress"></span></p>
       </div>
     </div>
 
@@ -63,6 +74,7 @@
          dort ist — im Briefing und im Gespräch hat sie nichts verloren. -->
     <div id="ablage-leiste" hidden>
       <button type="button" data-view="projects" class="fach">Projekte</button>
+      <button type="button" data-view="people" class="fach">Menschen</button>
       <button type="button" data-view="memory" class="fach">Was ich weiß</button>
       <button type="button" data-view="proposals" class="fach">Zu klären <span id="proposals-badge" class="badge" hidden></span></button>
       <button type="button" data-view="ingest" class="fach">Eingelesenes <span id="pending-badge" class="badge" hidden></span></button>
@@ -154,11 +166,45 @@
           <!-- Rechts der Stand des gewählten Projekts: Beschreibung, offene
                Aufgaben, Notizen. Ein Aufruf, nicht drei. -->
           <div id="project-detail">
-            <p class="muted">Wähle links ein Projekt.</p>
+            <!-- Kein „links“: im schmalen Fenster stapeln sich die Spalten,
+                 und dann steht die Liste **oben**. Eine Richtungsangabe, die
+                 in einer von zwei Anordnungen falsch ist, ist eine falsche
+                 Angabe. -->
+            <p class="muted">Öffne ein Projekt, um zu sehen, was dort ansteht.</p>
           </div>
         </div>
 
         <p id="project-empty" class="muted">Noch keine Projekte.</p>
+      </section>
+
+      <!-- Menschen: abgeleitet, nicht angelegt.
+           Wer in einer aufgenommenen Notiz oder Nachricht vorkommt, steht
+           hier. Es gibt bewusst kein Formular — eine zweite Ablage neben dem
+           Bestand müsste gepflegt werden, und das ist Arbeit, die dem Nutzer
+           abgenommen werden soll. -->
+      <section id="view-people" class="view" hidden>
+        <p id="people-intro" class="muted">
+          Niemand wird hier angelegt. Wer in deinen Aufzeichnungen vorkommt,
+          steht in dieser Liste.
+        </p>
+
+        <div id="people-split" class="split">
+          <ul id="people-list"></ul>
+
+          <div id="person-detail">
+            <p class="muted">Öffne einen Menschen, um zu sehen, was über ihn bekannt ist.</p>
+          </div>
+        </div>
+
+        <!-- Solange niemand da ist, steht **nur** dieser Satz hier: Ein
+             leerer Kasten mit einer Aufforderung neben einer leeren
+             Liste ist eine Aufforderung, die niemand befolgen kann. -->
+        <p id="people-empty" class="muted">
+          Noch niemand. Menschen entstehen von selbst: Sobald in einer
+          aufgenommenen Notiz oder einer Nachricht steht, mit wem du zu tun
+          hattest, taucht die Person hier auf — mit dem letzten Kontakt, den
+          gemeinsamen Themen und dem, was noch offen ist.
+        </p>
       </section>
 
       <!-- Gespräch -->

@@ -1,29 +1,47 @@
 :root {
   /* -- Grund und Flächen -------------------------------------------------
-     Der Grund ist kein Farbwert, sondern eine belichtete Fläche: warm von
-     oben links, kühl von rechts, mit feinem Korn darüber. Eine flache Farbe
-     sieht nach Vorlage aus. */
-  --grund-1: #faf7f2;
-  --grund-2: #f2ede5;
-  --flaeche-1: #fffefc;
-  --flaeche-2: #fbf9f5;
-  --mulde: #f7f4ef;
+     Der Grund ist kein Farbwert, sondern eine belichtete Fläche: Licht von
+     oben links, ein kühler Rückwurf von rechts, feines Korn darüber. Eine
+     flache Farbe sieht nach Vorlage aus.
 
-  --schrift: #211e1a;
-  --schrift-2: #6f6a61;
-  --schrift-3: #a8a299;
+     Der Ton ist **Leinen, nicht Pergament**. Warmes Papier wirkt freundlich;
+     das hier soll nicht freundlich wirken, sondern wertig. Zurückhaltung ist
+     das Zeichen, nicht Wärme. Siehe `docs/16-gestaltung.md`. */
+  --grund-1: #f4f4f1;
+  --grund-2: #e7e8e3;
+  --flaeche-1: #fcfcfa;
+  --flaeche-2: #f7f7f4;
+  --mulde: #f0f1ed;
+  --knopf-tief: #eceded;
+  --knopf-hoch: #ffffff;
+  /* Das Licht auf dem Grund. Auch das gehört in die Token — auf einem
+     dunklen Grund ist ein heller Schleier kein Licht, sondern Schmutz. */
+  --licht-warm: rgba(255, 255, 253, 0.80);
+  --licht-kalt: rgba(178, 199, 214, 0.40);
+  /* Gefüllter Knopf: heller Verlauf, weiße Schrift. */
+  --voll-oben: var(--akzent-hell);
+  --voll-unten: var(--akzent);
+  --voll-schrift: #ffffff;
 
-  --kante: rgba(48, 40, 30, 0.09);
-  --kante-stark: rgba(48, 40, 30, 0.17);
-  --fuellung: rgba(48, 40, 30, 0.055);
+  /* Tinte, nicht Braun: der Schwarzton zieht ins Blaugrüne. */
+  --schrift: #171a1a;
+  --schrift-2: #61676a;
+  --schrift-3: #9aa09f;
 
-  --akzent: #3572b0;
-  --akzent-hell: #4f8ccb;
-  --akzent-dunkel: #3670ac;
-  --akzent-schwach: rgba(53, 114, 176, 0.13);
-  --warn: #a9805a;
-  --gefahr: #b0483c;
-  --gut: #3f7f5e;
+  --kante: rgba(23, 30, 32, 0.10);
+  --kante-stark: rgba(23, 30, 32, 0.18);
+  --fuellung: rgba(23, 30, 32, 0.055);
+
+  /* Eisen und kaltes Wasser statt Weblau. Ein Blau, das nach Tinte aussieht
+     und nicht nach Verweis. */
+  --akzent: #2f5069;
+  --akzent-hell: #416a86;
+  --akzent-dunkel: #2a475e;
+  --akzent-schwach: rgba(47, 80, 105, 0.12);
+  /* Ocker, Ochsenblut, Flechte — gedeckt, keine Signalfarben. */
+  --warn: #8a6a2c;
+  --gefahr: #8f403a;
+  --gut: #3d6b52;
 
   /* -- Material ----------------------------------------------------------
      Eine Karte trägt eine Lichtkante oben, eine haarfeine Fassung und zwei
@@ -76,27 +94,37 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --grund-1: #1a1816;
-    --grund-2: #141210;
-    --flaeche-1: #262320;
-    --flaeche-2: #221f1c;
-    --mulde: #1c1a17;
+    /* Nachts: nasser Stein, nicht Kaffee. Derselbe kühle Zug wie am Tag. */
+    --grund-1: #16191a;
+    --grund-2: #101314;
+    --flaeche-1: #212527;
+    --flaeche-2: #1d2123;
+    --mulde: #191d1e;
+    --knopf-tief: #171b1c;
+    --knopf-hoch: #262b2d;
+    --licht-warm: rgba(190, 210, 220, 0.055);
+    --licht-kalt: rgba(120, 155, 180, 0.07);
+    /* Nachts trägt der helle Blauton keine weiße Schrift — 2:1 liest
+       niemand. Also dunkler Verlauf, helle Schrift. */
+    --voll-oben: #3d6382;
+    --voll-unten: #2f5069;
+    --voll-schrift: #eef4f8;
 
-    --schrift: #f0ece5;
-    --schrift-2: #a49e94;
-    --schrift-3: #736d64;
+    --schrift: #e9ecea;
+    --schrift-2: #9aa2a3;
+    --schrift-3: #6a7273;
 
-    --kante: rgba(255, 250, 240, 0.10);
-    --kante-stark: rgba(255, 250, 240, 0.16);
-    --fuellung: rgba(255, 250, 240, 0.06);
+    --kante: rgba(232, 244, 246, 0.10);
+    --kante-stark: rgba(232, 244, 246, 0.17);
+    --fuellung: rgba(232, 244, 246, 0.06);
 
-    --akzent: #6ea5da;
-    --akzent-hell: #6ea5da;
-    --akzent-dunkel: #4a80b4;
-    --akzent-schwach: rgba(110, 165, 218, 0.16);
-    --warn: #cf9f6d;
-    --gefahr: #d3796c;
-    --gut: #63a884;
+    --akzent: #7ba7c4;
+    --akzent-hell: #8fb8d3;
+    --akzent-dunkel: #5b87a4;
+    --akzent-schwach: rgba(123, 167, 196, 0.16);
+    --warn: #c2a061;
+    --gefahr: #cc8078;
+    --gut: #6ea88a;
 
     --karte-schatten:
       inset 0 1px 0 rgba(255, 255, 255, 0.055),
@@ -141,8 +169,8 @@ body {
   font: var(--t-fliess);
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(900px 520px at 12% -8%, rgba(255, 252, 246, 0.85), transparent 58%),
-    radial-gradient(760px 460px at 102% 2%, rgba(206, 219, 236, 0.42), transparent 56%),
+    radial-gradient(900px 520px at 12% -8%, var(--licht-warm), transparent 58%),
+    radial-gradient(760px 460px at 102% 2%, var(--licht-kalt), transparent 56%),
     linear-gradient(168deg, var(--grund-1) 0%, var(--grund-2) 100%);
   background-attachment: fixed;
 }
@@ -198,6 +226,32 @@ nav strong { font: var(--t-kopf); font-weight: 650; letter-spacing: -0.015em; ma
 
 .tab:hover { background: var(--fuellung); box-shadow: none; color: var(--schrift); }
 
+/* Fremder Text bleibt als fremder Text erkennbar — in der Suche, in der
+   Personenansicht, überall. Herkunft ist nicht Vertrauenswürdigkeit.
+
+   Die Regel hängt bewusst **nicht** an einer Ansicht: dieselbe Marke sitzt auf
+   einem Suchtreffer und auf einer Aussage bei einem Menschen, und zwei Regeln
+   für dieselbe Zusage wären zwei Gelegenheiten, sie auseinanderlaufen zu
+   lassen.
+
+   Sie fehlte eine Zeitlang ganz: die Neugestaltung hat die Regel entfernt,
+   während der Code die Klasse weiter vergab — die Marke stand da, sah aber
+   aus wie gewöhnlicher Text. Eine Warnung, die nicht warnt, ist schlimmer
+   als keine. */
+.fremd {
+  display: inline-block;
+  font: var(--t-fuss);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 999px;
+  padding: 0 var(--a2);
+  margin-right: var(--a2);
+  vertical-align: 0.05em;
+}
+
 /* Ein Knopf mit Symbol **und** Wort: ohne Abstand kleben sie aneinander. */
 .suche-knopf, #mehr-knopf {
   display: inline-flex;
@@ -230,6 +284,12 @@ input, select, textarea {
   border-radius: var(--r-klein);
   padding: 0 var(--a3);
   min-height: 34px;
+  /* Ein Auswahlfeld wächst von selbst auf seine längste Zeile. Steht dort ein
+     Dateipfad, sprengt es im schmalen Fenster die Seite — und dann scrollt der
+     ganze Inhalt seitwärts, nicht nur das Feld. Das war nur bei 520 Pixeln zu
+     sehen. */
+  max-width: 100%;
+  min-width: 0;
   background: var(--mulde);
   color: inherit;
   box-shadow:
@@ -259,12 +319,12 @@ button {
   padding: 0 var(--a4);
   min-height: 32px;
   cursor: pointer;
-  color: #3a3630;
-  background: linear-gradient(180deg, var(--flaeche-1) 0%, #f4f1ec 100%);
+  color: var(--schrift);
+  background: linear-gradient(180deg, var(--flaeche-1) 0%, var(--knopf-tief) 100%);
   box-shadow: var(--knopf-schatten);
 }
 
-button:hover:not(:disabled) { background: linear-gradient(180deg, #ffffff 0%, #efebe4 100%); }
+button:hover:not(:disabled) { background: linear-gradient(180deg, var(--knopf-hoch) 0%, var(--flaeche-2) 100%); }
 /* Beim Drücken sinkt der Knopf ein — Schatten nach innen, ein Pixel tiefer. */
 button:active:not(:disabled) {
   box-shadow: inset 0 1px 3px rgba(48, 40, 30, 0.20), 0 0 0 0.5px var(--kante-stark);
@@ -274,15 +334,16 @@ button:disabled { opacity: 0.45; cursor: default; box-shadow: var(--knopf-schatt
 
 /* Genau einer je Ansicht: der, den man drücken soll. */
 button.primary {
-  color: #ffffff;
+  color: var(--voll-schrift);
   font-weight: 550;
   padding: 0 var(--a5);
   text-shadow: 0 1px 0 rgba(20, 40, 70, 0.22);
-  background: linear-gradient(180deg, var(--akzent-hell) 0%, var(--akzent-dunkel) 100%);
+  background: linear-gradient(180deg, var(--voll-oben) 0%, var(--voll-unten) 100%);
   box-shadow: var(--knopf-voll-schatten);
 }
 button.primary:hover:not(:disabled) {
-  background: linear-gradient(180deg, #5a95d2 0%, #3d79b6 100%);
+  background: linear-gradient(180deg, var(--voll-oben) 0%, var(--voll-unten) 100%);
+  filter: brightness(1.08);
 }
 button.primary:active:not(:disabled) {
   box-shadow: inset 0 2px 4px rgba(20, 40, 70, 0.35);
@@ -411,6 +472,54 @@ li {
 .meta.inferred::before { content: "≈ "; }
 
 li > button { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+
+/* Zwei Handlungen an einer Zeile — abgeben und abhaken stehen nebeneinander,
+   nicht untereinander: sonst wächst die Zeile und die Liste verliert ihren
+   Takt. */
+li > .taten {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  display: flex;
+  gap: 0.5rem;
+}
+li > .taten > button { grid-row: auto; grid-column: auto; }
+
+/* Was bei jemand anderem liegt, ist nicht rot und nicht grau: es ist offen,
+   aber nicht deine Schuld. Ocker sagt genau das. */
+.wartet .meta { color: var(--warn); }
+
+/* Das Abgabefeld erscheint in der Zeile, über beide Spalten — es soll die
+   Zeile nicht seitlich sprengen. */
+li > .abgabe {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+li > .abgabe input { flex: 1 1 12rem; min-width: 0; }
+li > .abgabe > button { grid-row: auto; grid-column: auto; }
+/* Bekannte Namen sind eine Wahl, kein Hinweis. Ohne sichtbaren Rand liest
+   man sie als Fußnote und tippt daneben, was schon dasteht. */
+li > .abgabe .namen {
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--a2);
+}
+li > .abgabe .namen > span { font: var(--t-fuss); color: var(--schrift-2); }
+li > .abgabe .name {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--fuellung);
+  color: var(--schrift);
+  padding: 0 var(--a3);
+}
+li > .abgabe .name:hover:not(:disabled) { border-color: var(--akzent); color: var(--akzent); }
 
 /* -- Protokoll ----------------------------------------------------------- */
 
@@ -548,6 +657,39 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 #project-form { margin-bottom: 1rem; }
 #project-form input[type="text"] { flex: 1 1 10rem; }
 
+/* -- Menschen -------------------------------------------------------------- */
+
+/* Dieselbe Bauform wie die Projektliste: links wählen, rechts der Stand. Das
+   ist Absicht — eine eigene Optik für Menschen wäre die Behauptung, sie seien
+   etwas anderes als der übrige Arbeitsstand. Kein Bild, kein Kärtchen: Was
+   hier zählt, ist wann und worum, nicht wie jemand aussieht. */
+#people-list { margin: 0; }
+
+.person {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.person:hover { background: var(--panel); }
+
+.person.selected {
+  background: var(--panel);
+  border-left: 2px solid var(--accent, currentColor);
+}
+
+#person-detail {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+}
+
+#person-detail h3 { margin: 0 0 0.3rem; }
+#person-detail h4 { margin: 1.2rem 0 0.4rem; font-size: 0.9rem; }
+#person-detail ul { margin: 0; }
+#person-detail > p.muted { margin: 0.4rem 0 0; }
+
 /* -- Rohmaterial ----------------------------------------------------------- */
 
 .episode { padding: 0.7rem 0; }
@@ -641,6 +783,19 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
   word-break: break-all;
 }
 
+/* Angedockte Dienste. Dieselbe Bauform wie die Ordnerliste — beides ist eine
+   Liste aus Dingen, die man wieder loswerden können muss. Die Werkzeugnamen
+   stehen in derselben Schrift wie Pfade: Es sind Bezeichner, keine Prosa. */
+.dienste { margin: 0 0 0.7rem; }
+.dienste li { padding: 0.55rem 0; align-items: center; }
+.dienste .meta {
+  font: 0.75rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-word;
+}
+.dienste .meta.error {
+  font: var(--t-fuss);
+}
+
 .meta.error { color: var(--danger); }
 
 /* -- Erststart ------------------------------------------------------------- */
@@ -671,8 +826,11 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
 .wizard-card h2 { margin: 0 0 0.5rem; }
 .wizard-card > p.muted { margin: 0 0 1.25rem; }
 
-.wizard-actions { margin-top: 1.25rem; justify-content: flex-end; }
-.wizard-steps { margin: 0.75rem 0 0; text-align: right; font: var(--t-bild); }
+/* Schritt links, Handlungen rechts. Der Schritt schiebt sie mit `auto` nach
+   rechts, statt dass jedes Element sein eigenes `margin-left: auto` bekommt —
+   das erste frisst sonst den ganzen Platz. */
+.wizard-actions { margin-top: 1.25rem; align-items: center; }
+.wizard-steps { margin: 0; margin-right: auto; font: var(--t-bild); }
 
 #wizard-result:not(:empty) { margin-top: 0.9rem; }
 #wizard-result.error { color: var(--danger); }
@@ -1033,3 +1191,32 @@ button.rund { width: 34px; min-height: 34px; padding: 0; border-radius: var(--r-
 
 /* Eine Vollmacht ohne Einschränkung sieht anders aus als eine enge Regel. */
 .meta.warnung { color: var(--warn); }
+
+/* -- Der Tag ---------------------------------------------------------------- */
+
+/* Uhrzeiten stehen untereinander, damit man die Form des Tages sieht statt
+   einer Aufzählung. Tabellenziffern, sonst tanzt die Spalte. */
+li.termin {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  gap: 0 var(--a3);
+  align-items: baseline;
+}
+
+li.termin .uhr {
+  font: var(--t-fuss);
+  font-variant-numeric: tabular-nums;
+  color: var(--schrift-2);
+  letter-spacing: 0.01em;
+}
+
+li.termin .uhr.ganztags { font-size: 11.5px; }
+
+/* Was vorbei ist, tritt zurück — es ist nicht weg, aber es ist nicht mehr
+   der Tag, der vor einem liegt. */
+li.termin.vorbei .statement,
+li.termin.vorbei .uhr { color: var(--schrift-3); }
+
+/* Genau einer ist der nächste. */
+li.termin.naechster .uhr { color: var(--akzent); font-weight: 600; }
+li.termin.naechster .statement { font-weight: 550; }

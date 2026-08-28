@@ -4,12 +4,12 @@ Bewusst eine eigene Ablage neben dem Selbstmodell, obwohl es verlockend wäre,
 sie als Aussagen vom Typ `goal` zu führen.
 
 Der Grund: Aussagen im Selbstmodell beschreiben, **wie jemand ist**. Aufgaben
-beschreiben, **was zu tun ist**. Eine erledigte Aufgabe ist nicht „ersetzt" oder
-„widerrufen" — sie ist fertig, und das ist ein anderer Lebenszyklus. Sie in
+beschreiben, **was zu tun ist**. Eine erledigte Aufgabe ist nicht „ersetzt“ oder
+„widerrufen“ — sie ist fertig, und das ist ein anderer Lebenszyklus. Sie in
 dasselbe Modell zu pressen würde beide verwässern.
 
 Was übernommen wird, ist das Prinzip: Auch eine Aufgabe trägt ihre Herkunft.
-Wenn in drei Monaten „Rechnung an Müller schicken" auftaucht, muss beantwortbar
+Wenn in drei Monaten „Rechnung an Müller schicken“ auftaucht, muss beantwortbar
 sein, woher das kam — aus einer Mail, aus einem Gespräch, oder hat das System
 es sich ausgedacht.
 """
@@ -51,17 +51,46 @@ class Task:
     notes: str | None = None
     done_at: datetime | None = None
     tags: list[str] = field(default_factory=list)
+    wartet_auf: str | None = None
+    """Bei wem die Aufgabe gerade liegt.
+
+    Ein Stabschef unterscheidet zwei Dinge, die eine flache Liste in einen Topf
+    wirft: was **du** noch tun musst, und worauf du **wartest**. Beides ist
+    offen, aber nur das erste ist Arbeit für dich. Solange hier ein Name steht,
+    liegt die Aufgabe bei jemand anderem.
+    """
+
+    wartet_seit: datetime | None = None
+    """Seit wann sie dort liegt — die Grundlage jedes Nachfassens."""
+
     project_id: str | None = None
     """Zu welchem Projekt die Aufgabe gehört.
 
     Optional, und das ist Absicht: Nicht alles im Leben ist ein Projekt, und
-    ein Pflichtfeld hier würde dazu führen, dass ein Sammelprojekt „Sonstiges"
+    ein Pflichtfeld hier würde dazu führen, dass ein Sammelprojekt „Sonstiges“
     entsteht — das wäre dieselbe flache Liste mit mehr Schritten.
     """
 
     def is_overdue(self, at: datetime | None = None) -> bool:
-        at = at or now()
-        return self.status is TaskStatus.OPEN and self.due is not None and at > self.due
+        """Überfällig ist nur, was bei **dir** liegt.
+
+        Was jemand anderes schuldet, kann sein Datum reißen, ohne dass es
+        deine Versäumnisliste verlängert. Sonst wächst dort ein roter Berg
+        aus Dingen, an denen du nichts ändern kannst — und die Liste, die
+        eigentlich handlungsfähig machen soll, wird zur Anklage.
+        """
+        return (
+            self.status is TaskStatus.OPEN
+            and self.wartet_auf is None
+            and self.due is not None
+            and (at or now()) > self.due
+        )
+
+    def wartet_tage(self, at: datetime | None = None) -> int | None:
+        """Wie viele Tage die Aufgabe schon bei jemandem liegt."""
+        if self.wartet_seit is None:
+            return None
+        return max(0, ((at or now()) - self.wartet_seit).days)
 
     def to_dict(self) -> dict[str, Any]:
         def iso(v: datetime | None) -> str | None:
@@ -78,6 +107,9 @@ class Task:
             "done_at": iso(self.done_at),
             "tags": list(self.tags),
             "project_id": self.project_id,
+            "wartet_auf": self.wartet_auf,
+            "wartet_seit": iso(self.wartet_seit),
+            "wartet_tage": self.wartet_tage(),
             "overdue": self.is_overdue(),
         }
 
@@ -173,6 +205,36 @@ class TaskStore:
         self._put(task)
         return task
 
+    def warten_auf(self, task_id: str, name: str, at: datetime | None = None) -> Task:
+        """Die Aufgabe liegt ab jetzt bei jemand anderem.
+
+        Wird derselbe Name noch einmal gesetzt, bleibt die Frist stehen. Sonst
+        könnte man die eigene Wartezeit dadurch zurücksetzen, dass man das
+        System noch einmal daran erinnert, worauf man wartet — und genau der
+        Satz „das liegt seit sechs Wochen bei ihm“ ginge verloren.
+        """
+        task = self.get(task_id)
+        if task is None:
+            raise KeyError(f"Unbekannte Aufgabe: {task_id}")
+        name = name.strip()
+        if not name:
+            raise ValueError("Ohne Namen ist nicht sagbar, bei wem es liegt.")
+        if task.wartet_auf is None or name != task.wartet_auf:
+            task.wartet_auf = name
+            task.wartet_seit = at or now()
+        self._put(task)
+        return task
+
+    def zurueckholen(self, task_id: str) -> Task:
+        """Die Aufgabe liegt wieder bei dir."""
+        task = self.get(task_id)
+        if task is None:
+            raise KeyError(f"Unbekannte Aufgabe: {task_id}")
+        task.wartet_auf = None
+        task.wartet_seit = None
+        self._put(task)
+        return task
+
     def reopen(self, task_id: str) -> Task:
         task = self.get(task_id)
         if task is None:
@@ -213,10 +275,15 @@ class TaskStore:
             if t.due is not None and t.due <= limit
         ]
 
+    def wartend(self, at: datetime | None = None) -> list[Task]:
+        """Alles, was gerade bei anderen liegt — am längsten Wartendes zuerst."""
+        offen = [t for t in self.open_tasks() if t.wartet_auf is not None]
+        return sorted(offen, key=lambda t: t.wartet_seit or t.created_at)
+
     def by_project(self, project_id: str, include_closed: bool = False) -> list[Task]:
         """Alle Aufgaben eines Projekts.
 
-        Die zentrale Abfrage der Projektansicht: „Was steht bei X noch an?"
+        Die zentrale Abfrage der Projektansicht: „Was steht bei X noch an?“
         """
         with self._lock:
             rows = self._conn.execute(
@@ -277,6 +344,8 @@ class TaskStore:
             done_at=_parse(d.get("done_at")),
             tags=list(d.get("tags", [])),
             project_id=d.get("project_id"),
+            wartet_auf=d.get("wartet_auf"),
+            wartet_seit=_parse(d.get("wartet_seit")),
         )
 
 

@@ -170,6 +170,17 @@ class Settings:
     calendar: CalendarSettings = field(default_factory=CalendarSettings)
     schedule: ScheduleSettings = field(default_factory=ScheduleSettings)
 
+    mcp_server: list[dict[str, Any]] = field(default_factory=list)
+    """Fremde MCP-Server, an die Icarus andockt.
+
+    Je Eintrag ein Name, ein Befehl und optional Umgebungsvariablen — die Form
+    von `mcp_client.Serverangabe`. Hier als schlichte Wörterbücher, damit die
+    Einstellungsdatei kein Modul importieren muss, um lesbar zu sein.
+
+    Leer ist der Normalfall und bleibt es: Ein angedockter Server startet ein
+    fremdes Programm auf diesem Rechner. Das darf nie voreingestellt sein.
+    """
+
     onboarded: bool = False
     """Hat jemand die Einrichtung einmal bis zum Ende durchlaufen?
 
@@ -197,6 +208,10 @@ class Settings:
             model=str(data.get("model", "") or ""),
             endpoint=str(data.get("endpoint", "") or ""),
             file_roots=[str(p) for p in data.get("file_roots", []) if str(p).strip()],
+            mcp_server=[
+                d for d in (data.get("mcp_server") or [])
+                if isinstance(d, dict) and str(d.get("name", "")).strip()
+            ],
             mail=MailSettings(
                 imap_host=str(mail.get("imap_host", "") or ""),
                 imap_port=int(mail.get("imap_port") or 993),

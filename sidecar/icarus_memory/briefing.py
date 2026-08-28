@@ -32,6 +32,16 @@ MONATE = (
 
 ZAHLWORT = {1: "Eine Sache", 2: "Zwei Dinge", 3: "Drei Dinge"}
 
+_ZAHL = {
+    2: "zwei", 3: "drei", 4: "vier", 5: "fünf", 6: "sechs",
+    7: "sieben", 8: "acht", 9: "neun", 10: "zehn", 11: "elf",
+}
+
+# Ab wann eine abgegebene Sache es wert ist, den Morgen zu belegen. Wer
+# gestern etwas weitergegeben hat, will nicht heute daran erinnert werden —
+# das wäre kein Stabschef, sondern ein Wecker.
+WARTEFRIST_TAGE = 14
+
 
 @dataclass
 class Punkt:
@@ -44,7 +54,8 @@ class Punkt:
     """Höher heißt weiter oben. Nur zum Sortieren, nie angezeigt."""
 
     quelle: str
-    """`aufgabe`, `termin`, `bestaetigung`, `widerspruch`, `vorschlag`, `mail`."""
+    """`aufgabe`, `wartet`, `entscheidung`, `termin`, `bestaetigung`,
+    `widerspruch`, `vorhaben`, `vorschlag`, `mail`."""
 
     ref: str | None = None
     """Kennung des Gegenstands, damit die Oberfläche handeln kann."""
@@ -117,6 +128,26 @@ def _ueberfaellige(aufgaben: list[dict], jetzt: datetime) -> list[tuple[datetime
     return treffer
 
 
+def _bei(name: str) -> str:
+    """„bei Herrn Ohlsen“, nicht „bei Herr Ohlsen“.
+
+    Nur die Anrede wird gebeugt, nie der Name selbst — bei fremden Namen ist
+    jede Regel eine Wette, und ein falsch gebeugter Name liest sich schlimmer
+    als ein ungebeugter.
+    """
+    return f"Herrn {name[5:]}" if name.startswith("Herr ") else name
+
+
+def _lange_wartend(aufgaben: list[dict], jetzt: datetime) -> list[dict]:
+    """Was bei anderen liegt, und zwar lange genug. Am längsten zuerst."""
+    treffer = [
+        a for a in aufgaben
+        if a.get("wartet_auf") and (a.get("wartet_tage") or 0) >= WARTEFRIST_TAGE
+    ]
+    treffer.sort(key=lambda a: a.get("wartet_tage") or 0, reverse=True)
+    return treffer
+
+
 def _naechster_termin(termine: list[dict], jetzt: datetime) -> tuple[datetime, dict] | None:
     """Der nächste Termin von heute, der noch bevorsteht."""
     kommend: list[tuple[datetime, dict]] = []
@@ -141,6 +172,26 @@ def _heute_faellig(aufgaben: list[dict], jetzt: datetime) -> list[dict]:
         if faellig is not None and _gleicher_tag(faellig, jetzt):
             treffer.append(aufgabe)
     return treffer
+
+
+def _wochen(tage: int) -> str:
+    """„sechs Wochen“, nicht „42 Tagen“.
+
+    Bei einem halben Jahr Stillstand interessiert niemanden der einzelne Tag.
+    Eine genaue Zahl täuscht hier eine Genauigkeit vor, die die Sache nicht
+    hat.
+    """
+    wochen = tage // 7
+    if wochen < 2:
+        return "über einer Woche"
+    if wochen < 9:
+        return f"{_ZAHL.get(wochen, str(wochen))} Wochen"
+    monate = tage // 30
+    if monate < 2:
+        return "über einem Monat"
+    if monate < 12:
+        return f"{_ZAHL.get(monate, str(monate))} Monaten"
+    return "über einem Jahr"
 
 
 def _kurz(satz: str, laenge: int = 74) -> str:
@@ -197,7 +248,47 @@ def erstelle(
             aktion="Erledigt",
         ))
 
-    # 2. Der nächste Termin. Er hat eine Uhrzeit — er wartet nicht.
+    # 2. Eine Entscheidung, unter der eine Annahme weggerutscht ist. Selten,
+    # und wenn, dann das Wertvollste, was Icarus sagen kann: Es ist der eine
+    # Satz, den ein Archiv nicht kennt.
+    for wanken in (daten.get("decisions", {}).get("erschuettert", []) or [])[:1]:
+        wackler = (wanken.get("wackler") or [{}])[0]
+        gefallen = wackler.get("annahme") or ""
+        ersatz = wackler.get("ersetzt_durch")
+        nachsatz = (
+            f" Jetzt gilt: „{_kurz(ersatz)}“" if ersatz
+            else " Das gilt nicht mehr."
+        )
+        kandidaten.append(Punkt(
+            text=(
+                f"„{_zitat(wanken.get('satz', ''))}“ stand auf der Annahme: "
+                f"„{_kurz(gefallen)}“{nachsatz}"
+            ),
+            gewicht=98,
+            quelle="entscheidung",
+            ref=wanken.get("id"),
+            aktion="Ansehen",
+        ))
+
+    # 3. Was bei anderen liegt und dort zu lange liegt. Ein Stabschef fasst
+    # nach; er wartet nicht darauf, dass die andere Seite von selbst einfällt.
+    wartend = _lange_wartend(aufgaben, jetzt)
+    if wartend:
+        aufgabe = wartend[0]
+        seit = _tag(aufgabe.get("wartet_seit"))
+        wann = f"Seit dem {_datum(seit)}" if seit else "Seit Längerem"
+        kandidaten.append(Punkt(
+            text=(
+                f"{wann} liegt „{_kurz(aufgabe.get('title', ''))}“ "
+                f"bei {_bei(aufgabe.get('wartet_auf') or '')}."
+            ),
+            gewicht=95,
+            quelle="wartet",
+            ref=aufgabe.get("id"),
+            aktion="Zurückholen",
+        ))
+
+    # 4. Der nächste Termin. Er hat eine Uhrzeit — er wartet nicht.
     naechster = _naechster_termin(daten.get("calendar", {}).get("items", []) or [], jetzt)
     if naechster is not None:
         beginn, termin = naechster
@@ -212,7 +303,7 @@ def erstelle(
             aktion="Vorbereiten",
         ))
 
-    # 3. Wissen, das sein Verfallsdatum überschritten hat. Ein Fakt aus dem
+    # 5. Wissen, das sein Verfallsdatum überschritten hat. Ein Fakt aus dem
     #    Mai darf nicht stillschweigend als Gegenwart gelten.
     bestaetigungen = [v for v in vorschlaege if v.get("kind") == "confirmation"]
     if bestaetigungen:
@@ -234,7 +325,7 @@ def erstelle(
             aktion="Gilt noch",
         ))
 
-    # 4. Widersprüche. Zwei Sätze, die nicht beide stimmen können.
+    # 6. Widersprüche. Zwei Sätze, die nicht beide stimmen können.
     widersprueche = [v for v in vorschlaege if v.get("kind") == "conflict"]
     if widersprueche:
         kandidaten.append(Punkt(
@@ -248,7 +339,7 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 5. Was heute fällig ist, aber noch nicht überfällig.
+    # 7. Was heute fällig ist, aber noch nicht überfällig.
     heute = _heute_faellig(aufgaben, jetzt)
     if heute:
         if len(heute) == 1:
@@ -263,7 +354,26 @@ def erstelle(
             aktion="Ansehen",
         ))
 
-    # 6. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
+    # 8. Ein Vorhaben, an dem zu lange nichts geschah. Bewusst leises Gewicht:
+    # wichtig, aber nicht dringend. An einem vollen Tag kommt es nicht vor —
+    # wer drei brennende Dinge hat, soll nicht zusätzlich an das
+    # Halbjahresvorhaben erinnert werden. An einem ruhigen Tag ist es das
+    # Wertvollste, was dasteht.
+    for schlafend in (daten.get("goals", {}).get("eingeschlafen", []) or [])[:1]:
+        woran = schlafend.get("woran")
+        seither = f" Zuletzt in {woran}." if woran else ""
+        kandidaten.append(Punkt(
+            text=(
+                f"Seit {_wochen(schlafend.get('tage_still') or 0)} ist nichts an "
+                f"„{_zitat(schlafend.get('satz', ''))}“ passiert.{seither}"
+            ),
+            gewicht=45,
+            quelle="vorhaben",
+            ref=schlafend.get("id"),
+            aktion="Ansehen",
+        ))
+
+    # 9. Ungelesene Post. Fremder Inhalt — nur die Zahl, nie der Inhalt.
     ungelesen = daten.get("mail", {}).get("unread", 0) or 0
     if ungelesen:
         kandidaten.append(Punkt(

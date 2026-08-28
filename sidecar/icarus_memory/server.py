@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -34,7 +35,10 @@ from .backup import (
     restore,
     snapshot,
 )
-from . import briefing, config, providers, suche
+from . import (
+    briefing, config, entscheidungen, mcp_client, personen,
+    providers, suche, urteil,
+)
 from .consolidation import Consolidator
 from .proposals import ProposalError, ProposalKind, ProposalStore
 from .regeln import ERLAUBTE_STUFEN, RegelFehler, RegelStore
@@ -201,6 +205,28 @@ class TaskIn(BaseModel):
     project_id: str | None = None
 
 
+class MCPServerIn(BaseModel):
+    name: str = Field(min_length=1)
+    befehl: str = Field(min_length=1)
+    """Als eine Zeile, wie man sie im Terminal tippen würde.
+
+    Zerlegt wird hier, mit `shlex` — nicht von einer Shell. Der Nutzer soll
+    `npx -y @dienst/server` eintippen dürfen, ohne eine Liste zu bauen; eine
+    Shell dabei laufen zu lassen wäre etwas ganz anderes.
+    """
+    umgebung: dict[str, str] = Field(default_factory=dict)
+
+
+class EntscheidungIn(BaseModel):
+    statement: str = Field(min_length=1)
+    derived_from: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
+class WartetIn(BaseModel):
+    name: str = Field(min_length=1)
+
+
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1)
     area: str | None = None
@@ -318,6 +344,50 @@ class ToolIn(BaseModel):
     model_config = {"extra": "allow"}
 
 
+def _loese_mcp(app: FastAPI) -> None:
+    """Beendet alle angedockten Server.
+
+    Muss vor jedem Neubau laufen: Sonst bliebe bei jeder Änderung an den
+    Einstellungen ein Kindprozess übrig, und nach dem zehnten Speichern liefen
+    zehn fremde Programme.
+    """
+    for verbindung, _ in (getattr(app.state, "mcp", None) or {}).values():
+        try:
+            verbindung.stop()
+        except Exception:  # noqa: BLE001 - ein hängender Fremdprozess darf hier nichts kippen
+            pass
+    app.state.mcp = {}
+
+
+def _docke_mcp_an(app: FastAPI) -> None:
+    """Startet die eingetragenen MCP-Server und holt ihre Werkzeuge.
+
+    Ein Server, der nicht startet, ist kein Grund, die App nicht zu starten.
+    Sein Fehler wird gemerkt und in der Einrichtung angezeigt — dort kann
+    jemand etwas dagegen tun.
+    """
+    _loese_mcp(app)
+    fehler: dict[str, str] = {}
+    verbindungen: dict[str, Any] = {}
+
+    for eintrag in getattr(app.state, "settings", config.Settings()).mcp_server:
+        angabe = mcp_client.Serverangabe.from_dict(eintrag)
+        if not angabe.aktiv or not angabe.name:
+            continue
+        verbindung = mcp_client.MCPVerbindung(angabe)
+        try:
+            verbindung.start()
+            werkzeuge = verbindung.werkzeuge()
+        except mcp_client.MCPFehler as exc:
+            verbindung.stop()
+            fehler[angabe.name] = str(exc)
+            continue
+        verbindungen[angabe.name] = (verbindung, werkzeuge)
+
+    app.state.mcp = verbindungen
+    app.state.mcp_fehler = fehler
+
+
 def _build_agent(app: FastAPI) -> Agent:
     """Baut Konnektoren, Werkzeuge und Agent aus der aktuellen Umgebung.
 
@@ -336,6 +406,7 @@ def _build_agent(app: FastAPI) -> Agent:
     cal_config = CalendarConfig.from_env(dict(os.environ))
     app.state.mail = MailConnector(mail_config) if mail_config else None
     app.state.calendar = CalendarConnector(cal_config) if cal_config else None
+    _docke_mcp_an(app)
 
     agent = Agent(
         store=app.state.store,
@@ -351,6 +422,7 @@ def _build_agent(app: FastAPI) -> Agent:
             task_store=app.state.tasks,
             workspace=app.state.workspace,
             episodes=app.state.episodes,
+            mcp_verbindungen=getattr(app.state, "mcp", None),
         ),
         provider=provider_from_env(),
     )
@@ -557,8 +629,22 @@ def create_app(
                 "model": getattr(provider, "model", None),
                 "mail": getattr(app.state, "mail", None) is not None,
                 "calendar": getattr(app.state, "calendar", None) is not None,
+                # Was **tatsächlich** gilt, nicht was in der Datei steht.
+                # Eine gesetzte Umgebungsvariable gewinnt (siehe
+                # config.apply_to_env), und die Oberfläche muss den geltenden
+                # Stand zeigen — sonst sagt sie „kein Ordner freigegeben“,
+                # während einer freigegeben ist.
                 "file_roots": [
                     str(p) for p in file_roots_from_env(os.environ.get(ROOTS_ENV))
+                ],
+                # Welche davon vom Startbefehl kommen und nicht aus den
+                # Einstellungen. Sie lassen sich hier nicht entfernen — die
+                # Umgebung gewinnt —, und ein Knopf, der nichts bewirkt, ist
+                # schlimmer als keiner.
+                "file_roots_vom_start": [
+                    str(p)
+                    for p in file_roots_from_env(os.environ.get(ROOTS_ENV))
+                    if str(p) not in set(settings.file_roots)
                 ],
                 "semantic_search": not getattr(backend, "degraded", False),
             },
@@ -894,7 +980,28 @@ def create_app(
 
     @app.get("/mail", dependencies=guard)
     def mail_inbox(limit: int = 15, unread_only: bool = False) -> dict[str, Any]:
-        mail = _mail_or_404()
+        """Der Posteingang — und ein leerer, wenn keiner eingerichtet ist.
+
+        Bewusst **kein** Fehler in diesem Fall. Nichts eingerichtet zu haben
+        ist der Normalzustand am ersten Tag, kein Störfall. Ein 409 färbte den
+        Hinweis rot und schrieb bei jedem Öffnen des Gesprächs einen Fehler in
+        die Konsole des Browsers — und eine Konsole voller normaler Zustände
+        ist der beste Weg, einen echten Fehler zu übersehen.
+
+        Die Abrufe einzelner Nachrichten bleiben beim 409: Wer eine bestimmte
+        Mail verlangt, hat sich nicht verlaufen, sondern etwas verlangt, das
+        es ohne Zugang nicht geben kann.
+        """
+        mail = getattr(app.state, "mail", None)
+        if mail is None:
+            return {
+                "items": [],
+                "unread": 0,
+                "can_send": False,
+                "eingerichtet": False,
+                "detail": f"Noch keine Post verbunden. {WEGWEISER} deine "
+                          "Adresse eintragen — den Rest sucht Icarus.",
+            }
         try:
             nachrichten = mail.inbox(limit=limit, unread_only=unread_only)
         except Exception as exc:  # noqa: BLE001 - Netzwerk, Anmeldung, Serverlaune
@@ -1024,6 +1131,21 @@ def create_app(
         except ConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    @app.post("/assertions/{assertion_id}/retract", dependencies=guard)
+    def retract(assertion_id: str) -> dict[str, Any]:
+        """Die Aussage war inhaltlich falsch.
+
+        Der Unterschied zu `redact` ist wichtig genug für einen eigenen Weg:
+        Bei `redact` war der Inhalt womöglich richtig, soll aber weg — und
+        dann muss alles Abgeleitete mit. Hier stimmte er nie. Der Satz bleibt
+        lesbar, damit nachvollziehbar ist, was einmal geglaubt wurde, und
+        alles, was darauf stand, bleibt stehen — erschüttert, nicht gelöscht.
+        """
+        try:
+            return app.state.store.retract(assertion_id).to_dict()
+        except ConflictError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.post("/assertions/{assertion_id}/redact", dependencies=guard)
     def redact(assertion_id: str, body: RedactIn) -> list[dict[str, Any]]:
         try:
@@ -1067,8 +1189,34 @@ def create_app(
             offen = app.state.tasks.open_tasks(limit=50)
             result["tasks"]["items"] = [t.to_dict() for t in offen]
             result["tasks"]["overdue"] = sum(1 for t in offen if t.is_overdue())
+            result["tasks"]["wartend"] = [
+                t.to_dict() for t in offen if t.wartet_auf is not None
+            ]
         except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
             result["tasks"]["error"] = str(exc)
+
+        try:
+            wanken = entscheidungen.erschuettert(app.state.store)
+            result["decisions"] = {
+                "erschuettert": [e.to_dict() for e in wanken],
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
+            result["decisions"] = {"erschuettert": [], "error": str(exc)}
+
+        try:
+            schlafend = urteil.eingeschlafen(
+                store=app.state.store,
+                episodes=getattr(app.state, "episodes", None),
+                tasks=getattr(app.state, "tasks", None),
+                workspace=getattr(app.state, "workspace", None),
+            )
+            result["goals"] = {
+                "eingeschlafen": [v.to_dict() for v in schlafend],
+                "error": None,
+            }
+        except Exception as exc:  # noqa: BLE001 - ein Bereich darf die Seite nicht kippen
+            result["goals"] = {"eingeschlafen": [], "error": str(exc)}
 
         calendar = getattr(app.state, "calendar", None)
         if calendar is None:
@@ -1181,6 +1329,184 @@ def create_app(
             return app.state.tasks.drop(task_id).to_dict()
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/tasks/{task_id}/warten", dependencies=guard)
+    def wait_task(task_id: str, body: WartetIn) -> dict[str, Any]:
+        """Abgeben, nicht abhaken.
+
+        Die Aufgabe bleibt offen, zählt aber nicht mehr gegen dich. Was bei
+        jemand anderem liegt, ist kein Versäumnis, sondern eine Wartezeit —
+        und die will nachgefasst, nicht angemahnt werden.
+        """
+        try:
+            return app.state.tasks.warten_auf(task_id, body.name).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/tasks/{task_id}/zurueckholen", dependencies=guard)
+    def unwait_task(task_id: str) -> dict[str, Any]:
+        try:
+            return app.state.tasks.zurueckholen(task_id).to_dict()
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/goals", dependencies=guard)
+    def list_goals() -> dict[str, Any]:
+        """Alle Vorhaben mit ihrer letzten Regung, das stillste zuerst."""
+        alle = urteil.vorhaben(
+            store=app.state.store,
+            episodes=getattr(app.state, "episodes", None),
+            tasks=getattr(app.state, "tasks", None),
+            workspace=getattr(app.state, "workspace", None),
+        )
+        jetzt = datetime.now().astimezone()
+        return {
+            "items": [v.to_dict(jetzt) for v in alle],
+            "eingeschlafen": sum(1 for v in alle if v.schlaeft(jetzt)),
+        }
+
+    # -- Angedockte Dienste ------------------------------------------------
+
+    def _angabe_aus(body: MCPServerIn) -> mcp_client.Serverangabe:
+        try:
+            teile = shlex.split(body.befehl)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Der Befehl ist nicht lesbar: {exc}",
+            ) from exc
+        if not teile:
+            raise HTTPException(status_code=400, detail="Der Befehl ist leer.")
+        return mcp_client.Serverangabe(
+            name=body.name.strip(), befehl=teile, umgebung=dict(body.umgebung)
+        )
+
+    @app.get("/mcp/server", dependencies=guard)
+    def list_mcp() -> dict[str, Any]:
+        """Was eingetragen ist, was läuft, und was nicht startete."""
+        laufend = getattr(app.state, "mcp", None) or {}
+        fehler = getattr(app.state, "mcp_fehler", None) or {}
+        eintraege = []
+        for roh in app.state.settings.mcp_server:
+            angabe = mcp_client.Serverangabe.from_dict(roh)
+            verbunden = laufend.get(angabe.name)
+            eintraege.append({
+                **angabe.to_dict(),
+                "befehl_text": " ".join(angabe.befehl),
+                "verbunden": verbunden is not None,
+                "werkzeuge": [w.voller_name for w in (verbunden[1] if verbunden else [])],
+                "fehler": fehler.get(angabe.name),
+            })
+        return {"items": eintraege}
+
+    @app.post("/mcp/pruefen", dependencies=guard)
+    def check_mcp(body: MCPServerIn) -> dict[str, Any]:
+        """Verbinden und nachsehen — ohne etwas einzutragen.
+
+        Der Knopf, der sagt, was dabei herauskam. Ein Eintrag, der erst beim
+        nächsten Start scheitert, wäre eine Zusage ohne Deckung.
+        """
+        try:
+            werkzeuge = mcp_client.nachsehen(_angabe_aus(body))
+        except mcp_client.MCPFehler as exc:
+            return {"ok": False, "detail": str(exc), "werkzeuge": []}
+        namen = [w.voller_name for w in werkzeuge]
+        if not namen:
+            return {"ok": True, "detail": "Verbunden — aber der Dienst bietet "
+                                          "kein Werkzeug an.", "werkzeuge": []}
+        wie_viele = "ein Werkzeug" if len(namen) == 1 else f"{len(namen)} Werkzeuge"
+        return {
+            "ok": True,
+            "detail": f"Verbunden. {wie_viele} gefunden.",
+            "werkzeuge": namen,
+        }
+
+    @app.post("/mcp/server", dependencies=guard, status_code=201)
+    def add_mcp(body: MCPServerIn) -> dict[str, Any]:
+        """Einen Dienst andocken.
+
+        Erst prüfen, dann eintragen: Ein Dienst, der nicht startet, soll gar
+        nicht erst in der Liste stehen — sonst sammeln sich dort Einträge, von
+        denen niemand weiß, ob sie je funktioniert haben.
+        """
+        angabe = _angabe_aus(body)
+        if any(mcp_client.Serverangabe.from_dict(d).name == angabe.name
+               for d in app.state.settings.mcp_server):
+            raise HTTPException(
+                status_code=409,
+                detail=f"„{angabe.name}“ ist schon eingetragen.",
+            )
+        try:
+            werkzeuge = mcp_client.nachsehen(angabe)
+        except mcp_client.MCPFehler as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        app.state.settings.mcp_server.append({
+            "name": angabe.name,
+            "befehl": angabe.befehl,
+            "umgebung": angabe.umgebung,
+            "aktiv": True,
+        })
+        config.save(_data_dir(), app.state.settings)
+        _build_agent(app)
+        return {
+            "name": angabe.name,
+            "werkzeuge": [w.voller_name for w in werkzeuge],
+            "detail": f"„{angabe.name}“ angedockt.",
+        }
+
+    @app.delete("/mcp/server/{name}", dependencies=guard)
+    def remove_mcp(name: str) -> dict[str, Any]:
+        vorher = len(app.state.settings.mcp_server)
+        app.state.settings.mcp_server = [
+            d for d in app.state.settings.mcp_server
+            if mcp_client.Serverangabe.from_dict(d).name != name
+        ]
+        if len(app.state.settings.mcp_server) == vorher:
+            raise HTTPException(status_code=404, detail=f"„{name}“ ist nicht eingetragen.")
+        config.save(_data_dir(), app.state.settings)
+        _build_agent(app)
+        return {"detail": f"„{name}“ abgedockt."}
+
+    # -- Entscheidungen ----------------------------------------------------
+
+    @app.get("/decisions", dependencies=guard)
+    def list_decisions() -> dict[str, Any]:
+        """Alle Entscheidungen mit dem Stand ihrer Grundlage.
+
+        Auch widerrufene: Dass eine Entscheidung einmal getroffen wurde,
+        bleibt wahr. Ein Gedächtnis, das nichts löscht, muss das zeigen.
+        """
+        alle = entscheidungen.alle(app.state.store)
+        return {
+            "items": [e.to_dict() for e in alle],
+            "erschuettert": sum(1 for e in alle if e.erschuettert),
+        }
+
+    @app.post("/decisions", dependencies=guard, status_code=201)
+    def add_decision(body: EntscheidungIn) -> dict[str, Any]:
+        """Eine Entscheidung festhalten — und worauf sie stand.
+
+        Die Grundlage ist optional, aber ohne sie kann Icarus später nicht
+        merken, wenn sie wegfällt. Das sagt die Oberfläche auch.
+        """
+        try:
+            aussage = app.state.store.record(
+                body.statement,
+                Kind.DECISION,
+                Provenance(source_type=SourceType.USER_STATED,
+                           captured_at=datetime.now().astimezone()),
+                derived_from=body.derived_from,
+                tags=body.tags,
+            )
+        except ConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        for eine in entscheidungen.alle(app.state.store):
+            if eine.id == aussage.id:
+                return eine.to_dict()
+        return {"id": aussage.id, "satz": aussage.statement}
 
     # -- Projekte ----------------------------------------------------------
 
@@ -1327,6 +1653,43 @@ def create_app(
             return app.state.episodes.ignore(episode_id).to_dict()
         except EpisodeError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    # -- Menschen ----------------------------------------------------------
+    #
+    # Abgeleitet, nicht gespeichert: Es gibt keine Personentabelle und keinen
+    # Weg, hier etwas anzulegen. Wer in einer Episode vorkommt, ist da. Siehe
+    # personen.py.
+
+    @app.get("/people", dependencies=guard)
+    def list_people() -> list[dict[str, Any]]:
+        return [
+            p.to_dict() for p in personen.alle(
+                episodes=app.state.episodes,
+                tasks=app.state.tasks,
+                store=app.state.store,
+                workspace=app.state.workspace,
+                jetzt=datetime.now().astimezone(),
+            )
+        ]
+
+    @app.get("/people/{name}", dependencies=guard)
+    def person_detail(name: str) -> dict[str, Any]:
+        mensch = personen.eine(
+            name,
+            episodes=app.state.episodes,
+            tasks=app.state.tasks,
+            store=app.state.store,
+            workspace=app.state.workspace,
+            jetzt=datetime.now().astimezone(),
+        )
+        if mensch is None:
+            # 404 und keine leere Person: Eine leere Seite über jemanden sähe
+            # aus wie eine Auskunft, und wäre keine.
+            raise HTTPException(
+                status_code=404,
+                detail=f"In deinen Aufzeichnungen kommt „{name}“ nicht vor.",
+            )
+        return mensch.to_dict()
 
     # -- Aufnahme ----------------------------------------------------------
 

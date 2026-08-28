@@ -50,6 +50,21 @@ dann ist die Aufgabe, den kontrollierten Weg *einfacher zu machen*, nicht ihn
 aufzugeben. Eine Rückfrage, die sein muss, soll in einem Satz verständlich sein
 und mit einem Klick beantwortbar.
 
+## Wohin es geht
+
+Der Weg vom Gedächtnis zum Stabschef steht in
+[`docs/17-stabschef.md`](docs/17-stabschef.md): fünf Etappen, jede für sich
+nützlich. Der Maßstab dort gilt für jede neue Funktion — sie muss eine
+**Entscheidung abnehmen**, nicht eine Ansicht hinzufügen. Eine neue Liste ist
+keine Entlastung.
+
+## Gestaltung
+
+Wie die Oberfläche aussieht und warum, steht in
+[`docs/16-gestaltung.md`](docs/16-gestaltung.md). Kurzform: kühles Leinen statt
+warmem Pergament, ein gedeckter Akzent, Material statt Farbe, eine Schrift.
+Zurückhaltung ist das Zeichen von Wert.
+
 ## Sprache
 
 Code und Kommentare auf Deutsch, wie im Bestand. Bezeichner im Code englisch,

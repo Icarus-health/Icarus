@@ -783,6 +783,19 @@ summary { cursor: pointer; font: var(--t-fuss); color: var(--muted); }
   word-break: break-all;
 }
 
+/* Angedockte Dienste. Dieselbe Bauform wie die Ordnerliste — beides ist eine
+   Liste aus Dingen, die man wieder loswerden können muss. Die Werkzeugnamen
+   stehen in derselben Schrift wie Pfade: Es sind Bezeichner, keine Prosa. */
+.dienste { margin: 0 0 0.7rem; }
+.dienste li { padding: 0.55rem 0; align-items: center; }
+.dienste .meta {
+  font: 0.75rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-word;
+}
+.dienste .meta.error {
+  font: var(--t-fuss);
+}
+
 .meta.error { color: var(--danger); }
 
 /* -- Erststart ------------------------------------------------------------- */

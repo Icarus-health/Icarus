@@ -2726,6 +2726,13 @@ async function loadSetup() {
   kal.insertBefore(khint, kal.querySelector(".row"));
   panel.append(kal);
 
+  // -- Angedockte Dienste
+  //
+  // Ein Name, eine Befehlszeile, ein Knopf. Was ein „stdio transport“ ist,
+  // muss hier niemand wissen — das steht in der Anleitung des jeweiligen
+  // Dienstes, und von dort kopiert man die Zeile hierher.
+  panel.append(baueDienste());
+
   /** Überträgt, was am Mailanbieter über den Kalender bekannt ist. */
   function applyCalendarProvider(anbieter) {
     khint.replaceChildren();
@@ -3027,6 +3034,172 @@ async function renderBackups(panel) {
   block.append(head, note, liste, jetzt, ergebnis);
   panel.append(block);
   await zeichnen();
+}
+
+function baueDienste() {
+  const block = document.createElement("section");
+  block.className = "setup-block";
+
+  const h = document.createElement("h3");
+  h.textContent = "Angedockte Dienste";
+
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent =
+    "Dienste, die eigene Werkzeuge mitbringen. Was sie zurückgeben, gilt " +
+    "immer als fremder Inhalt — Icarus fragt danach bei jeder Handlung nach, " +
+    "auch wenn du sonst eine Dauerregel hast.";
+
+  const liste = document.createElement("ul");
+  liste.className = "dienste";
+  const ergebnis = document.createElement("p");
+  ergebnis.className = "meta";
+
+  async function zeichnen() {
+    liste.replaceChildren();
+    let items = [];
+    try {
+      items = (await api("/mcp/server")).items ?? [];
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+      return;
+    }
+    if (!items.length) {
+      const leer = document.createElement("p");
+      leer.className = "meta";
+      leer.textContent = "Noch nichts angedockt.";
+      liste.append(leer);
+      return;
+    }
+    for (const d of items) {
+      const zeile = document.createElement("li");
+      const name = document.createElement("p");
+      name.className = "statement";
+      name.textContent = d.name;
+      zeile.append(name);
+
+      const meta = document.createElement("p");
+      meta.className = "meta";
+      if (d.fehler) {
+        meta.textContent = d.fehler;
+        meta.classList.add("error");
+      } else if (d.werkzeuge?.length) {
+        // Die Werkzeuge nennen, nicht nur zählen: Wer wissen will, was ein
+        // Dienst hier darf, soll es lesen können.
+        meta.textContent = d.werkzeuge.join(" · ");
+      } else {
+        meta.textContent = "Verbunden, aber ohne Werkzeuge.";
+      }
+      zeile.append(meta);
+
+      const weg = document.createElement("button");
+      weg.className = "ghost small";
+      weg.type = "button";
+      weg.textContent = "Abdocken";
+      weg.addEventListener("click", async () => {
+        weg.disabled = true;
+        try {
+          const { detail } = await api(`/mcp/server/${encodeURIComponent(d.name)}`,
+                                       { method: "DELETE" });
+          ergebnis.textContent = detail;
+          ergebnis.classList.remove("error");
+        } catch (err) {
+          ergebnis.textContent = err.message;
+          ergebnis.classList.add("error");
+        }
+        await zeichnen();
+      });
+      zeile.append(weg);
+      liste.append(zeile);
+    }
+  }
+
+  const nameFeld = field("Name", "mcp-name", { placeholder: "Wetterdienst" });
+  const befehlFeld = field("Befehl", "mcp-befehl", {
+    placeholder: "npx -y @beispiel/wetter-server",
+    hint: "Die Zeile steht in der Anleitung des Dienstes. Sie wird gestartet, " +
+          "nicht in einer Kommandozeile ausgeführt.",
+  });
+
+  function eingaben() {
+    return {
+      name: $("#mcp-name").value.trim(),
+      befehl: $("#mcp-befehl").value.trim(),
+    };
+  }
+
+  // Zwei Knöpfe, und der erste ist der harmlose. Nachsehen verändert nichts —
+  // deshalb darf man ihn drücken, ohne etwas zu entscheiden.
+  const pruefen = document.createElement("button");
+  pruefen.type = "button";
+  pruefen.className = "small";
+  pruefen.textContent = "Verbinden und nachsehen";
+  pruefen.addEventListener("click", async () => {
+    const daten = eingaben();
+    if (!daten.name || !daten.befehl) {
+      ergebnis.textContent = "Name und Befehl fehlen noch.";
+      ergebnis.classList.add("error");
+      return;
+    }
+    pruefen.disabled = true;
+    ergebnis.classList.remove("error");
+    ergebnis.textContent = "Wird gestartet…";
+    try {
+      const { ok, detail, werkzeuge } = await api("/mcp/pruefen", {
+        method: "POST",
+        body: JSON.stringify(daten),
+      });
+      ergebnis.textContent = werkzeuge?.length
+        ? `${detail} ${werkzeuge.join(" · ")}`
+        : detail;
+      if (!ok) ergebnis.classList.add("error");
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+    } finally {
+      pruefen.disabled = false;
+    }
+  });
+
+  const andocken = document.createElement("button");
+  andocken.type = "button";
+  andocken.textContent = "Andocken";
+  andocken.addEventListener("click", async () => {
+    const daten = eingaben();
+    if (!daten.name || !daten.befehl) {
+      ergebnis.textContent = "Name und Befehl fehlen noch.";
+      ergebnis.classList.add("error");
+      return;
+    }
+    andocken.disabled = true;
+    ergebnis.classList.remove("error");
+    try {
+      const { detail, werkzeuge } = await api("/mcp/server", {
+        method: "POST",
+        body: JSON.stringify(daten),
+      });
+      ergebnis.textContent = werkzeuge?.length
+        ? `${detail} ${werkzeuge.join(" · ")}`
+        : detail;
+      $("#mcp-name").value = "";
+      $("#mcp-befehl").value = "";
+      await zeichnen();
+    } catch (err) {
+      ergebnis.textContent = err.message;
+      ergebnis.classList.add("error");
+    } finally {
+      andocken.disabled = false;
+    }
+  });
+
+  const reihe = document.createElement("div");
+  reihe.className = "row";
+  reihe.append(pruefen, andocken);
+
+  block.append(h, note, liste, nameFeld, befehlFeld, reihe, ergebnis);
+  zeichnen();
+  return block;
 }
 
 /** „self-model-20260802T122954Z.sqlite3" → „2.8.2026, 12:29". */

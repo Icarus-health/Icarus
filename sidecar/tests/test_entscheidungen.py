@@ -160,6 +160,57 @@ def test_ein_alter_widerruf_belegt_den_morgen_nicht(store) -> None:
     assert eine.gefallen_am() == JETZT - timedelta(days=31)
 
 
+def test_wiederholter_widerruf_erneuert_freshness_nicht(store) -> None:
+    grund = aussage(store, "Das Klinikum trägt die Hälfte der Kosten.")
+    entscheidung(store, "Wir kalkulieren mit halben Kosten.", [grund])
+    erster_widerruf = JETZT - timedelta(days=31)
+    store.retract(grund.id, at=erster_widerruf)
+
+    # Derselbe Vorgang kommt etwa durch einen Connector-Retry erneut herein.
+    store.retract(grund.id, at=JETZT)
+
+    assert store._require(grund.id).status_changed_at == erster_widerruf
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+
+
+def test_echter_neuer_statuswechsel_setzt_einen_neuen_zeitpunkt(store) -> None:
+    grund = aussage(store, "Das Budget ist freigegeben.")
+    gegenstimme = aussage(store, "Das Budget ist noch nicht freigegeben.")
+    entscheidung(store, "Wir starten im Januar.", [grund])
+    alter_streit = JETZT - timedelta(days=31)
+    store.dispute(grund.id, gegenstimme.id, at=alter_streit)
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+
+    # disputed → retracted ist ein anderer fachlicher Status und darf deshalb
+    # bewusst ein neues Überprüfungsfenster öffnen.
+    store.retract(grund.id, at=JETZT)
+
+    assert store._require(grund.id).status_changed_at == JETZT
+    assert len(entscheidungen.erschuettert(store, jetzt=JETZT)) == 1
+
+
+def test_neue_streitevidence_erneuert_decision_freshness_nicht(store) -> None:
+    grund = aussage(store, "Der Standort bleibt Hamburg.")
+    erste_evidence = aussage(store, "Der Mietvertrag endet.")
+    neue_evidence = aussage(store, "Die Geschäftsführung plant Leipzig.")
+    entscheidung(store, "Wir investieren in Hamburg.", [grund])
+    erster_streit = JETZT - timedelta(days=31)
+    store.dispute(grund.id, erste_evidence.id, at=erster_streit)
+
+    store.dispute(grund.id, neue_evidence.id, at=JETZT)
+
+    # Die zusätzliche Evidence ist verknüpft, aber ihre bewusste spätere
+    # Attention gehört in die Evidence-/Attention-Domain und nicht in einen
+    # erneuerten Statuszeitpunkt der alten Annahme.
+    gespeichert = store._require(grund.id)
+    assert gespeichert.status_changed_at == erster_streit
+    assert set(gespeichert.disputed_with) == {
+        erste_evidence.id,
+        neue_evidence.id,
+    }
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+
+
 def test_ein_alter_ablauf_belegt_den_morgen_nicht(store) -> None:
     ablauf = JETZT - timedelta(days=31)
     grund = store.record(

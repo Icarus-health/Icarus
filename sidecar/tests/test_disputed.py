@@ -57,6 +57,48 @@ def test_streit_merkt_sich_seinen_zeitpunkt(store: SelfModelStore) -> None:
     assert store._require(b.id).status_changed_at == zeitpunkt
 
 
+def test_identischer_streit_erneuert_den_zeitpunkt_nicht(
+    store: SelfModelStore,
+) -> None:
+    zuerst = datetime(2026, 8, 1, 9, 30, tzinfo=timezone.utc)
+    retry = datetime(2026, 8, 20, 9, 30, tzinfo=timezone.utc)
+    a = _record(store, "Wohnt in Hamburg.")
+    b = _record(store, "Wohnt in Berlin.")
+    store.dispute(a.id, b.id, at=zuerst)
+
+    store.dispute(a.id, b.id, at=retry)
+
+    assert store._require(a.id).status_changed_at == zuerst
+    assert store._require(b.id).status_changed_at == zuerst
+
+
+def test_neue_widersprechende_evidence_ist_keine_statuswiederholung(
+    store: SelfModelStore,
+) -> None:
+    """Neue Evidence wird als zusätzliche Relation erhalten.
+
+    Sie darf später über einen eigenen Evidence-/Attention-Mechanismus bewusst
+    Aufmerksamkeit erzeugen. Den alten Dispute-Zeitpunkt umzudatieren wäre
+    dagegen ein zufälliger Nebeneffekt eines idempotenten Statuswrites.
+    """
+    zuerst = datetime(2026, 8, 1, 9, 30, tzinfo=timezone.utc)
+    spaeter = datetime(2026, 8, 20, 9, 30, tzinfo=timezone.utc)
+    a = _record(store, "Wohnt in Hamburg.")
+    b = _record(store, "Wohnt in Berlin.")
+    c = _record(store, "Der Mietvertrag nennt Leipzig.")
+    store.dispute(a.id, b.id, at=zuerst)
+
+    store.dispute(a.id, c.id, at=spaeter)
+
+    # A war bereits disputed: neue Evidence erweitert die Relation, ohne den
+    # ursprünglichen fachlichen Statuswechsel zu fälschen.
+    assert store._require(a.id).status_changed_at == zuerst
+    assert set(store._require(a.id).disputed_with) == {b.id, c.id}
+    # C wechselt dagegen tatsächlich erstmals in den Status disputed.
+    assert store._require(c.id).status_changed_at == spaeter
+    assert store._require(c.id).disputed_with == [a.id]
+
+
 def test_strittiges_geht_nicht_als_gewusst_durch(store: SelfModelStore) -> None:
     """Der Kern: Bis hierher gingen beide als `active` in den Prompt."""
     a = _record(store, "Wohnt in Hamburg.")

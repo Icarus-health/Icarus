@@ -167,6 +167,11 @@ class SelfModelStore:
         """
         at = ensure_aware(at) or now()
         assertion = self._require(assertion_id)
+        # Derselbe fachliche Vorgang darf nicht wie ein neuer Statuswechsel
+        # aussehen. Connector-Retries und wiederholte API-Aufrufe sind normal;
+        # sie dürfen das Freshness-Fenster einer Entscheidung nicht erneuern.
+        if assertion.status is Status.RETRACTED:
+            return assertion
         assertion.status = Status.RETRACTED
         assertion.status_changed_at = at
         assertion.last_confirmed_at = None
@@ -247,12 +252,21 @@ class SelfModelStore:
                 )
 
         for assertion in betroffen:
-            assertion.status = Status.DISPUTED
-            assertion.status_changed_at = at
+            geaendert = False
+            # Ein bereits offener Streit bleibt derselbe Status. Neue
+            # widersprechende Evidence erweitert die Relation unten, ist aber
+            # kein zweiter Statuswechsel und erneuert deshalb nicht dessen
+            # Freshness-Zeitpunkt.
+            if assertion.status is not Status.DISPUTED:
+                assertion.status = Status.DISPUTED
+                assertion.status_changed_at = at
+                geaendert = True
             for other in betroffen:
                 if other.id != assertion.id and other.id not in assertion.disputed_with:
                     assertion.disputed_with.append(other.id)
-            self._backend.put(assertion)
+                    geaendert = True
+            if geaendert:
+                self._backend.put(assertion)
         return betroffen
 
     def disputed(self) -> list[Assertion]:

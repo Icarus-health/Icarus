@@ -73,6 +73,7 @@ def assertion_from_dict(d: dict[str, Any]) -> Assertion:
         valid_from=_parse_dt(d.get("valid_from")),
         expires_at=_parse_dt(d.get("expires_at")),
         last_confirmed_at=_parse_dt(d.get("last_confirmed_at")),
+        status_changed_at=_parse_dt(d.get("status_changed_at")),
         supersedes=list(d.get("supersedes", [])),
         superseded_by=d.get("superseded_by"),
         derived_from=list(d.get("derived_from", [])),

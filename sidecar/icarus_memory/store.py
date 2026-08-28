@@ -107,6 +107,7 @@ class SelfModelStore:
             confidence=confidence,
             valid_from=valid_from,
             expires_at=expires_at,
+            status_changed_at=at,
             supersedes=supersedes,
             derived_from=derived_from,
             sensitivity=sensitivity,
@@ -123,6 +124,7 @@ class SelfModelStore:
                     f"Aussage {ref} wurde widerrufen und kann nicht ersetzt werden."
                 )
             old.status = Status.SUPERSEDED
+            old.status_changed_at = at
             old.superseded_by = assertion.id
             self._backend.put(old)
 
@@ -134,7 +136,7 @@ class SelfModelStore:
         Eine abgelaufene Aussage wird dadurch wieder aktiv — das ist der
         Mechanismus, über den das Modell aktuell bleibt, ohne zu raten.
         """
-        at = at or now()
+        at = ensure_aware(at) or now()
         assertion = self._require(assertion_id)
         if assertion.status in (Status.REDACTED, Status.RETRACTED):
             raise ConflictError(
@@ -149,6 +151,7 @@ class SelfModelStore:
         assertion.last_confirmed_at = at
         if assertion.status is Status.EXPIRED:
             assertion.status = Status.ACTIVE
+            assertion.status_changed_at = at
             # Ein bereits überschrittenes Ablaufdatum würde die Aussage sofort
             # wieder unbenutzbar machen.
             if assertion.expires_at is not None and at >= assertion.expires_at:
@@ -162,9 +165,10 @@ class SelfModelStore:
         Unterschied zu `redact`: hier stimmt der Inhalt nicht. Bei `redact`
         war er womöglich richtig, soll aber weg.
         """
-        at = at or now()
+        at = ensure_aware(at) or now()
         assertion = self._require(assertion_id)
         assertion.status = Status.RETRACTED
+        assertion.status_changed_at = at
         assertion.last_confirmed_at = None
         self._backend.put(assertion)
         return assertion
@@ -184,7 +188,7 @@ class SelfModelStore:
         Der Inhalt wird entfernt, ein Grabstein bleibt, damit eine Lücke als
         Lücke erkennbar ist statt als Nie-dagewesen.
         """
-        at = at or now()
+        at = ensure_aware(at) or now()
         self._require(assertion_id)
 
         affected = self._descendants(assertion_id)
@@ -195,6 +199,7 @@ class SelfModelStore:
             assertion.statement = "Entfernt auf Wunsch der Person."
             assertion.structured = None
             assertion.status = Status.REDACTED
+            assertion.status_changed_at = at
             assertion.confidence = None
             assertion.tags = []
             assertion.provenance = Provenance(
@@ -209,7 +214,9 @@ class SelfModelStore:
 
         return [self._require(i) for i in sorted(affected)]
 
-    def dispute(self, *assertion_ids: str) -> list[Assertion]:
+    def dispute(
+        self, *assertion_ids: str, at: datetime | None = None
+    ) -> list[Assertion]:
         """Markiert zwei oder mehr Aussagen als einander widersprechend.
 
         Löst nichts auf — das ist der Punkt. Bis hierher gingen zwei
@@ -227,6 +234,7 @@ class SelfModelStore:
         falsch war. Beide sind protokolliert; ein eigener „Streit beilegen"-Pfad
         wäre ein dritter Weg, Bestand zu ändern, und davon gibt es genug.
         """
+        at = ensure_aware(at) or now()
         if len(assertion_ids) < 2:
             raise ConflictError("Ein Widerspruch braucht mindestens zwei Aussagen.")
 
@@ -240,6 +248,7 @@ class SelfModelStore:
 
         for assertion in betroffen:
             assertion.status = Status.DISPUTED
+            assertion.status_changed_at = at
             for other in betroffen:
                 if other.id != assertion.id and other.id not in assertion.disputed_with:
                     assertion.disputed_with.append(other.id)
@@ -279,6 +288,9 @@ class SelfModelStore:
                 and at >= assertion.expires_at
             ):
                 assertion.status = Status.EXPIRED
+                # Der Status fällt am fachlichen Ablaufzeitpunkt, nicht erst
+                # dann, wenn irgendein späterer Lesezugriff ihn materialisiert.
+                assertion.status_changed_at = assertion.expires_at
                 self._backend.put(assertion)
             if assertion.is_usable(at):
                 result.append(assertion)

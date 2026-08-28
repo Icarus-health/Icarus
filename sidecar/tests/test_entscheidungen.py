@@ -21,6 +21,7 @@ from icarus_memory import (
     Provenance,
     SelfModelStore,
     SourceType,
+    Status,
 )
 from icarus_memory import entscheidungen
 
@@ -144,6 +145,106 @@ def test_eine_alte_erschuetterung_belegt_den_morgen_nicht(store) -> None:
     assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
     # In der Ansicht steht sie weiterhin.
     assert entscheidungen.alle(store, jetzt=JETZT)[0].erschuettert is True
+
+
+def test_ein_alter_widerruf_belegt_den_morgen_nicht(store) -> None:
+    """Der Fehlerfall ohne Replacement: `at` wurde bisher verworfen und die
+    Entscheidung deshalb für immer als frisch behandelt."""
+    grund = aussage(store, "Das Klinikum trägt die Hälfte der Kosten.")
+    entscheidung(store, "Wir kalkulieren mit halben Kosten.", [grund])
+    store.retract(grund.id, at=JETZT - timedelta(days=31))
+
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+    eine = entscheidungen.alle(store, jetzt=JETZT)[0]
+    assert eine.erschuettert is True
+    assert eine.gefallen_am() == JETZT - timedelta(days=31)
+
+
+def test_ein_alter_ablauf_belegt_den_morgen_nicht(store) -> None:
+    ablauf = JETZT - timedelta(days=31)
+    grund = store.record(
+        "Die Förderung läuft bis Juni.",
+        Kind.STATE,
+        herkunft(),
+        expires_at=ablauf,
+        at=JETZT - timedelta(days=100),
+    )
+    entscheidung(store, "Wir stellen jemanden ein.", [grund])
+    # Der Ablauf wird beim Lesen materialisiert, fachlich gilt aber sein
+    # Ablaufdatum und nicht dieser spätere Lesezeitpunkt.
+    store.usable(at=JETZT)
+
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+    assert entscheidungen.alle(store, jetzt=JETZT)[0].gefallen_am() == ablauf
+
+
+def test_ein_alter_streit_belegt_den_morgen_nicht(store) -> None:
+    grund = aussage(store, "Das Budget ist freigegeben.")
+    gegenstimme = aussage(store, "Das Budget ist noch nicht freigegeben.")
+    entscheidung(store, "Wir starten im Januar.", [grund])
+    store.dispute(
+        grund.id,
+        gegenstimme.id,
+        at=JETZT - timedelta(days=31),
+    )
+
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+    assert entscheidungen.alle(store, jetzt=JETZT)[0].gefallen_am() == (
+        JETZT - timedelta(days=31)
+    )
+
+
+def test_redaction_hat_einen_endlichen_erschuetterungszeitpunkt(store) -> None:
+    """Redaction zieht die abhängige Entscheidung aus Datenschutzgründen mit.
+
+    Die Rückschau muss den Zeitpunkt trotzdem korrekt kennen; auch ein alter
+    oder unvollständig migrierter Bestand darf daraus kein ewiges „frisch“
+    ableiten.
+    """
+    grund = aussage(store, "Enthält eine zu löschende Annahme.")
+    entscheidung(store, "Darauf beruhte eine Entscheidung.", [grund])
+    wechsel = JETZT - timedelta(days=31)
+    store.redact(grund.id, at=wechsel)
+
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+    eine = entscheidungen.alle(store, jetzt=JETZT)[0]
+    assert eine.aussage.status is Status.REDACTED
+    assert eine.gefallen_am() == wechsel
+
+
+def test_dreissig_tage_sind_eingeschlossen_danach_ist_schluss(store) -> None:
+    grund = aussage(store, "Die Frist steht.")
+    entscheidung(store, "Wir unterschreiben.", [grund])
+    store.retract(grund.id, at=JETZT - timedelta(days=30))
+
+    assert len(entscheidungen.erschuettert(store, jetzt=JETZT)) == 1
+    assert entscheidungen.erschuettert(
+        store, jetzt=JETZT + timedelta(microseconds=1)
+    ) == []
+
+
+def test_legacy_widerruf_ohne_zeitpunkt_ist_nicht_unbegrenzt_frisch(store) -> None:
+    """Bestehende JSON-Dokumente besitzen `status_changed_at` nicht.
+
+    Ihr ehrlicher Fallback ist endlich: die Aufnahmezeit der Annahme. So geht
+    kein alter Bestand kaputt und dieselbe Warnung erscheint nicht für immer.
+    """
+    grund = aussage(
+        store,
+        "Die Lieferung kommt rechtzeitig.",
+        at=JETZT - timedelta(days=100),
+    )
+    entscheidung(store, "Wir planen den Start.", [grund])
+    store.retract(grund.id, at=JETZT - timedelta(days=1))
+    legacy = store._backend.get(grund.id)
+    assert legacy is not None
+    legacy.status_changed_at = None
+    store._backend.put(legacy)
+
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+    eine = entscheidungen.alle(store, jetzt=JETZT)[0]
+    assert eine.gefallen_am() == JETZT - timedelta(days=100)
+    assert eine.wackler[0].annahme.status is Status.RETRACTED
 
 
 def test_eine_widerrufene_entscheidung_belegt_den_morgen_nicht(store) -> None:

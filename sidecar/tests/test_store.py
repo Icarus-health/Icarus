@@ -294,6 +294,20 @@ def test_sqlite_haelt_den_bestand(tmp_path: Path) -> None:
     assert kette[0].provenance.source_ref == "chat:1"
 
 
+def test_statuswechselzeit_ueberlebt_sqlite_neu_oeffnen(tmp_path: Path) -> None:
+    path = tmp_path / "statuswechsel.sqlite3"
+    wechsel = T0 + timedelta(days=5)
+
+    store = SelfModelStore(SqliteBackend(path), subject_id="test")
+    assertion = store.record("Galt einmal.", Kind.STATE, chat(), at=T0)
+    store.retract(assertion.id, at=wechsel)
+
+    wieder = SelfModelStore(SqliteBackend(path), subject_id="test")
+    gespeichert = wieder.history(assertion.id)[0]
+    assert gespeichert.status is Status.RETRACTED
+    assert gespeichert.status_changed_at == wechsel
+
+
 def test_sqlite_ueber_threads_nutzbar(tmp_path: Path) -> None:
     """Regression: FastAPI führt synchrone Endpunkte in einem Threadpool aus.
 

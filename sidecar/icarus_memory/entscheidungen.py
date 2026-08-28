@@ -123,25 +123,21 @@ class Entscheidung:
 
     def gefallen_am(self) -> datetime | None:
         """Wann die jüngste Annahme gefallen ist."""
-        zeiten = [
-            w.ersetzt_durch.recorded_at
-            for w in self.wackler
-            if w.ersetzt_durch is not None
-        ]
+        zeiten = [_gefallen_am(w) for w in self.wackler]
         return max(zeiten) if zeiten else None
 
     def frisch_erschuettert(self, jetzt: datetime) -> bool:
         """Ist die Erschütterung neu genug, um den Morgen zu belegen?
 
-        Ohne bekannten Zeitpunkt: ja. Lieber einmal zu viel gefragt als eine
-        Entscheidung stillschweigend auf einer weggefallenen Annahme stehen
-        lassen.
+        Alte Datensätze ohne eigenen Statuswechselzeitpunkt erhalten in
+        `_gefallen_am()` einen endlichen, konservativen Fallback. Eine
+        Entscheidung darf nie unbegrenzt jeden Morgen neu erscheinen.
         """
         if not self.erschuettert:
             return False
         wann = self.gefallen_am()
         if wann is None:
-            return True
+            return False
         return (jetzt - wann) <= timedelta(days=FRISCH_TAGE)
 
     def to_dict(self) -> dict[str, Any]:
@@ -164,6 +160,27 @@ def _ersatz(annahme: Assertion, nach_id: dict[str, Assertion]) -> Assertion | No
     if annahme.superseded_by:
         return nach_id.get(annahme.superseded_by)
     return None
+
+
+def _gefallen_am(wackler: Wackler) -> datetime:
+    """Der fachliche Zeitpunkt, an dem eine Annahme nicht mehr trug.
+
+    Neue Datensätze tragen `status_changed_at`. Die folgenden Fallbacks halten
+    alte SQLite-Dateien und Exporte lesbar, ohne einen unbekannten Zeitpunkt
+    für immer als frisch zu behandeln. Der Replacement-Zeitpunkt ist bei
+    älteren Supersessions exakt, ebenso Redaction und Expiry. Für alte Retracts
+    und Disputes bleibt nur die Aufnahmezeit der Annahme als sichere Untergrenze.
+    """
+    annahme = wackler.annahme
+    if annahme.status_changed_at is not None:
+        return annahme.status_changed_at
+    if wackler.ersetzt_durch is not None:
+        return wackler.ersetzt_durch.recorded_at
+    if annahme.redaction is not None:
+        return annahme.redaction.redacted_at
+    if annahme.status is Status.EXPIRED and annahme.expires_at is not None:
+        return annahme.expires_at
+    return annahme.recorded_at
 
 
 def alle(store: Any, *, jetzt: datetime | None = None) -> list[Entscheidung]:

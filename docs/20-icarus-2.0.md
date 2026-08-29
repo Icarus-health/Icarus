@@ -31,8 +31,9 @@ Fortschritt, wenn sie anschließend gepflegt werden muss.
 - SQLite bleibt die operative Quelle, solange keine dokumentierte Entscheidung
   mit mindestens gleicher Nachvollziehbarkeit und Wiederherstellbarkeit fällt.
 - Cognee und andere semantische Indizes bleiben optional und nie autoritativ.
-- Episoden und der Canonical Event Layer werden zu **einem** Rohdatenpfad
-  weiterentwickelt; es entsteht kein zweites Memory-System.
+- Quellenabgeleitete rohe Episoden und der Canonical Event Layer werden zu
+  **einem** Rohdatenpfad weiterentwickelt; abgeleitete Artefakte bleiben davon
+  getrennt. Es entsteht kein zweites Memory-System.
 - Assertions behalten Provenienz, Versionierung, Supersession, Expiry,
   Disputes, Retract, Redaction und kaskadierende Löschpfade.
 - Der bestehende Policy-, Approval- und Audit-Pfad bleibt die einzige
@@ -40,8 +41,8 @@ Fortschritt, wenn sie anschließend gepflegt werden muss.
 - Fremde Inhalte bleiben Daten, nie Anweisungen. Ihre Klassifizierung muss sich
   durch Ableitungen und Aktionen fortpflanzen.
 - OpenAI-kompatible Modelle, Anthropic und Ollama bleiben austauschbar.
-- MCP wird ausgebaut, nicht durch connector-spezifische Parallelarchitekturen
-  umgangen.
+- Native Connectoren, MCP-Connectoren und lokale Adapter erfüllen denselben
+  Canonical-Event-, Trust-, Scope-, Provenance-, Deletion- und Policy-Vertrag.
 - Ohne Modell und ohne semantischen Zusatzindex bleibt der deterministische
   Kern nutzbar.
 - Keine irreversible, verdeckte Zusammenführung von Personen oder Wissen.
@@ -167,7 +168,7 @@ Die Kategorien bedeuten:
 | Assertions / `SelfModelStore` | KEEP | Autoritative, überprüfbare Wissensschicht. |
 | `SqliteBackend` | KEEP | Exakter lokaler Bestand; additive Migrationen vorbereiten. |
 | Cognee-Backend | KEEP | Optionaler semantischer Index mit deterministischem Fallback. |
-| Episodes / `EpisodeStore` | EVOLVE | Wird zum Canonical Event Layer; keine zweite Rohdatenwahrheit. |
+| Episodes / `EpisodeStore` | EVOLVE | Quellenabgeleitete/raw Episodes werden zum Canonical Event Layer; abgeleitete Artefakte bleiben getrennt. |
 | Tasks / `TaskStore` | KEEP | Operative Aufgaben bleiben kompatibel; Commitments sind nicht bloß Tasks. |
 | `wartet_auf` | EVOLVE | Kompatibilitätsquelle für echte Waiting-for-Objekte. |
 | Workspace / Projekte / Notizen | EVOLVE | Eingaben weiter unterstützen, aber Project State zunehmend rekonstruieren. |
@@ -216,6 +217,37 @@ Wahrheit. Der bestehende Episode-Vertrag wird additiv erweitert um:
 Bestehende Episode-IDs, Digests und APIs bleiben lesbar. Altdaten werden nicht
 nachträglich als `personal` oder `work` erraten, sondern erhalten einen
 expliziten unbekannten/Legacy-Scope.
+
+#### 5.1.1 Beobachtung und abgeleitete Artefakte
+
+Nur **source-derived/raw Episodes** evolvieren in den Canonical Event Layer.
+`EpisodeKind.SUMMARY` und andere von ICARUS erzeugte Inhalte sind abgeleitete
+Artefakte: Sie interpretieren Beobachtungen, sind aber selbst keine beobachteten
+Canonical Events. Sie bleiben im Vertrag, in der Speicherung und in der
+Provenienz eindeutig von Rohbeobachtungen unterscheidbar.
+
+Abgeleitete Inhalte dürfen Canonical Events referenzieren und für Briefings
+oder Project State verwendet werden. Sie dürfen jedoch weder eine zweite
+Rohdatenwahrheit bilden noch den unveränderten Ursprung ersetzen. Die
+bestehende Sicherheitsregel bleibt erhalten: Eine Summary darf nicht selbst
+Quelle einer bestätigten Assertion werden. Bestätigung muss auf die
+zugrunde liegende Evidence oder eine ausdrückliche Nutzerbestätigung verweisen.
+
+#### 5.1.2 Gemeinsamer Connector-Vertrag
+
+MCP bleibt ein wichtiger Integrationsmechanismus, verbietet aber keine nativen,
+hochwertigen Kernconnectoren. Native Connectoren, MCP-Connectoren und lokale
+Adapter liefern durch dieselbe Grenze und müssen identisch erfüllen:
+
+- Canonical Event Contract;
+- Trust- und Scope-Propagation;
+- Provenienz und Raw Reference;
+- Deletion- und Tombstone-Verhalten;
+- Policy- und Berechtigungsgrenzen.
+
+Quellenspezifische Authentifizierung, Cursor und Transportlogik enden im
+Adapter. Connector-spezifische Sonderlogik darf nicht in Entity Resolution,
+Commitments, Project State oder Attention eindringen.
 
 ### 5.2 Entity Resolution
 
@@ -368,6 +400,46 @@ Fallback möglich, nicht als Voraussetzung.
 - **Danach:** Summary, Decisions, Commitments, Requests, Waiting-for,
   Deadlines, Abhängigkeiten und offene Fragen als belegte Kandidaten.
 
+### 6.6 Messbare Produkt- und UX-Akzeptanzkriterien
+
+Die folgenden SLOs sind Abnahmekriterien, keine nachträglichen
+Optimierungswünsche:
+
+- **Morning:** Die wichtigste erforderliche Aufmerksamkeit ist für eine
+  repräsentative Testperson innerhalb von ungefähr fünf Sekunden erfassbar.
+- **Meeting Preparation:** Das Briefing ist von Today oder Ask mit höchstens
+  einer bewussten Nutzeraktion erreichbar.
+- **Why:** Die erste Evidence-Ebene liegt höchstens eine Aktion hinter der
+  begründeten Aussage.
+- **Correction:** Eine einfache falsche Person-, Projekt- oder
+  Task-Erkennung ist mit höchstens zwei Aktionen korrigierbar.
+- **Quiet Day:** Die Attention-Antwort und die Oberfläche enthalten null
+  künstlich erzeugte Attention Items.
+- Die Interaktionsanzahl wird für jeden Golden Flow im Prototyp und später im
+  Browsertest gemessen und dokumentiert.
+- False-positive Rates für Commitments und Attention werden mit Einführung
+  der jeweiligen Domain als Qualitätsmetriken geführt.
+- Attention optimiert auf Präzision und langfristiges Vertrauen, nicht auf
+  maximale Trefferzahl. Mehr angezeigte Items sind kein Erfolgskriterium.
+
+### 6.7 Human Usability Prototype Gate
+
+Nach dem vollständigen visuellen Gesamtkonzept und vor der React-Implementierung
+wird das Kernkonzept mit realen Nutzern oder repräsentativen Testpersonen als
+bedienbarer Prototyp geprüft. Verbindliche Szenarien sind:
+
+- Morning / Today;
+- Ask;
+- Meeting Preparation;
+- Why / Sources;
+- Korrektur eines falschen Project- oder Person-Mappings;
+- Quiet Day.
+
+Während des Tests wird die Oberfläche nicht erklärt. Beobachtet und
+dokumentiert werden Verständnis, Fehlwege, Rückfragen und benötigte Aktionen.
+Kritische Befunde müssen vor P7b in das Design einfließen; ein Protokoll ohne
+Designänderung schließt das Gate nicht.
+
 ## 7. Golden Flows und Abnahmekriterien
 
 | Flow | Backend-Beweis | UX-Beweis |
@@ -473,20 +545,28 @@ Rollback. UI-PRs enthalten Browser-Verifikation und Screenshots.
 13. **P7a — Visuelles Gesamtkonzept**  
     alle geforderten Desktop-, Narrow-, Mobile-, Empty-, Error- und
     Offline-Zustände vor Code.
-14. **P7b — React/TypeScript/Vite-Shell in Tauri 2**  
+14. **P7a.5 — Human Usability Prototype Test**
+
+    Vollständiges Kernkonzept ohne Erklärung mit realen oder repräsentativen
+    Testpersonen prüfen; kritische Befunde vor der Implementierung einarbeiten.
+15. **P7b — React/TypeScript/Vite-Shell in Tauri 2**
+
     Heute und Ask, Lazy Loading, API-/State-Grenzen, alte UI als Fallback.
-15. **P8 — Today Experience**  
+16. **P8 — Today Experience**
+
     echte Attention-Daten, Golden States, Accessibility, Browser- und Visual-QA.
-16. **P9 — ASK**  
+17. **P9 — ASK**
+
     Fragen, Suche, Navigation, Why und Action Preparation über bestehendem
     Agent-/Policy-Kern.
-17. **P10 — Project und Person Context**  
+18. **P10 — Project und Person Context**
+
     rekonstruierte Lagebilder und Korrekturen.
-18. **P11 — Meeting Foundation und Transcript Import**.
-19. **P12 — Connectoren einzeln nach Priorität**.
-20. **P13 — Hintergrundjobs und fertiges Lagebild beim Start**.
-21. **P14 — Kontextuelle Notifications**.
-22. **P15 — Graduelle, kontextspezifische Autonomie über bestehende Policies**.
+19. **P11 — Meeting Foundation und Transcript Import**.
+20. **P12 — Connectoren einzeln nach Priorität**.
+21. **P13 — Hintergrundjobs und fertiges Lagebild beim Start**.
+22. **P14 — Kontextuelle Notifications**.
+23. **P15 — Graduelle, kontextspezifische Autonomie über bestehende Policies**.
 
 Abhängige PRs bleiben als Draft offen oder warten auf den Merge ihres
 Vorgängers. Es werden keine Ketten großer, ungeprüfter PRs automatisch gemergt.
@@ -547,14 +627,19 @@ Semantik, sicheren Daten, guter UX und wartbarem Code.
 ### A-20.1 — Canonical Events evolvieren Episodes
 
 **Decision:** Der Event Layer erweitert den bestehenden Episode Store und
-dessen Ingest-Pfad.  
-**Context:** Episodes besitzen bereits Rohinhalt, Provenienz, Zeit, Teilnehmer,
-Digest und Deduplizierung.  
+dessen Ingest-Pfad für source-derived/raw Episodes. Derived Artifacts wie
+`EpisodeKind.SUMMARY` bleiben eindeutig getrennte Interpretationen.
+
+**Context:** Rohe Episodes besitzen bereits Rohinhalt, Provenienz, Zeit,
+Teilnehmer, Digest und Deduplizierung. Der Store enthält zugleich Summaries,
+die nicht als beobachtete Events behandelt werden dürfen.
+
 **Alternatives:** neue Event-Datenbank; Connector-spezifische Tabellen.  
 **Reason:** Eine zweite Rohdatenwahrheit verletzt den Memory-Vertrag und
 erzwingt Synchronisation ohne Nutzwert.  
 **Consequences:** additive Migration und Legacy-Felder; Episode-APIs bleiben
-zunächst kompatibel.
+zunächst kompatibel. Derived Content ersetzt keine Raw Evidence und eine
+Summary bleibt als Quelle bestätigter Assertions unzulässig.
 
 ### A-20.2 — Tauri und Sidecar bleiben
 

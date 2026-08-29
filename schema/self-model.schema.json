@@ -96,6 +96,11 @@
           "type": "string",
           "format": "date-time"
         },
+        "status_changed_at": {
+          "description": "Wann die Aussage zuletzt in ihren aktuellen Status wechselte. Optional für ältere Exporte; neue Statusübergänge setzen den Wert.",
+          "type": "string",
+          "format": "date-time"
+        },
         "status": {
           "description": "Lebenszyklus der Aussage. Nichts wird gelöscht, sondern überführt — ausgenommen 'redacted', das den ausgeübten Widerruf markiert.",
           "type": "string",

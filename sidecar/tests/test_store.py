@@ -295,6 +295,23 @@ def test_export_ist_schemakonform(store: SelfModelStore) -> None:
     geheim = store.record("Privat.", Kind.RELATIONSHIP, chat(), at=T0)
     store.redact(geheim.id, at=T0)
 
+    # Der Laufzeitvertrag darf dem veröffentlichten Export-Schema nicht
+    # vorauslaufen. Beide Werte existieren seit der Entscheidungs- und
+    # Dispute-Etappe und fehlten bisher unbemerkt im Schema, weil das statische
+    # Beispielprofil sie nicht enthält.
+    grundlage = store.record("Das Budget ist freigegeben.", Kind.STATE, chat(), at=T0)
+    store.record(
+        "Wir starten im Januar.",
+        Kind.DECISION,
+        chat(),
+        derived_from=[grundlage.id],
+        at=T0,
+    )
+    gegenstimme = store.record(
+        "Das Budget ist noch nicht freigegeben.", Kind.STATE, chat(), at=T0
+    )
+    store.dispute(grundlage.id, gegenstimme.id)
+
     schema_path = Path(__file__).resolve().parents[2] / "schema" / "self-model.schema.json"
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
 

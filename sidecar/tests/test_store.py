@@ -173,6 +173,36 @@ def test_widerruf_nimmt_abgeleitete_mit(store: SelfModelStore) -> None:
     assert store.usable(at=T0) == []
 
 
+def test_wiederholtes_redact_bewahrt_urspruengliche_grabsteine(
+    store: SelfModelStore,
+) -> None:
+    quelle = store.record("Private Quelle.", Kind.IDENTITY, chat(), at=T0)
+    ableitung = store.record(
+        "Private Ableitung.",
+        Kind.PREFERENCE,
+        Provenance(source_type=SourceType.INFERENCE),
+        derived_from=[quelle.id],
+        at=T0,
+    )
+    store.redact(quelle.id, reason=RedactionReason.USER_REQUEST, at=T0)
+
+    erneut = store.redact(
+        quelle.id,
+        reason=RedactionReason.USER_REQUEST,
+        at=T0 + timedelta(days=7),
+    )
+
+    assert {a.id for a in erneut} == {quelle.id, ableitung.id}
+    for assertion in erneut:
+        assert assertion.status is Status.REDACTED
+        assert assertion.status_changed_at == T0
+        assert assertion.redaction is not None
+        assert assertion.redaction.redacted_at == T0
+        assert assertion.redaction.reason is RedactionReason.USER_REQUEST
+    assert store._require(quelle.id).redaction is not None
+    assert store._require(quelle.id).redaction.cascade == [ableitung.id]
+
+
 def test_widerruf_hinterlaesst_grabstein(store: SelfModelStore) -> None:
     a = store.record("Etwas Privates.", Kind.RELATIONSHIP, chat(), at=T0)
     store.redact(a.id, at=T0)
@@ -265,6 +295,23 @@ def test_export_ist_schemakonform(store: SelfModelStore) -> None:
     geheim = store.record("Privat.", Kind.RELATIONSHIP, chat(), at=T0)
     store.redact(geheim.id, at=T0)
 
+    # Der Laufzeitvertrag darf dem veröffentlichten Export-Schema nicht
+    # vorauslaufen. Beide Werte existieren seit der Entscheidungs- und
+    # Dispute-Etappe und fehlten bisher unbemerkt im Schema, weil das statische
+    # Beispielprofil sie nicht enthält.
+    grundlage = store.record("Das Budget ist freigegeben.", Kind.STATE, chat(), at=T0)
+    store.record(
+        "Wir starten im Januar.",
+        Kind.DECISION,
+        chat(),
+        derived_from=[grundlage.id],
+        at=T0,
+    )
+    gegenstimme = store.record(
+        "Das Budget ist noch nicht freigegeben.", Kind.STATE, chat(), at=T0
+    )
+    store.dispute(grundlage.id, gegenstimme.id)
+
     schema_path = Path(__file__).resolve().parents[2] / "schema" / "self-model.schema.json"
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
@@ -292,6 +339,20 @@ def test_sqlite_haelt_den_bestand(tmp_path: Path) -> None:
     assert [a.statement for a in kette] == ["Wohnt in Hamburg.", "Wohnt in Leipzig."]
     assert kette[0].status is Status.SUPERSEDED
     assert kette[0].provenance.source_ref == "chat:1"
+
+
+def test_statuswechselzeit_ueberlebt_sqlite_neu_oeffnen(tmp_path: Path) -> None:
+    path = tmp_path / "statuswechsel.sqlite3"
+    wechsel = T0 + timedelta(days=5)
+
+    store = SelfModelStore(SqliteBackend(path), subject_id="test")
+    assertion = store.record("Galt einmal.", Kind.STATE, chat(), at=T0)
+    store.retract(assertion.id, at=wechsel)
+
+    wieder = SelfModelStore(SqliteBackend(path), subject_id="test")
+    gespeichert = wieder.history(assertion.id)[0]
+    assert gespeichert.status is Status.RETRACTED
+    assert gespeichert.status_changed_at == wechsel
 
 
 def test_sqlite_ueber_threads_nutzbar(tmp_path: Path) -> None:

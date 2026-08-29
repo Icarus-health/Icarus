@@ -1,8 +1,10 @@
 # ICARUS 2.0 — Produkt-, UX- und Architekturplan
 
-Stand: 2026-08-28  
-Ausgangspunkt: `main` auf `c4716d6`, einschließlich PR #53
-„Vom Gedächtnis zum Stabschef — fünf Etappen“.
+Stand: 2026-08-29
+
+Audit-Ausgangspunkt: `main` auf `c4716d6`, einschließlich PR #53
+„Vom Gedächtnis zum Stabschef — fünf Etappen“. Aktualisierter Planungsstand:
+`main` auf `439675f`, einschließlich der inzwischen gemergten PRs #55 und #56.
 
 Dieses Dokument ist die verbindende Spezifikation für den schrittweisen Ausbau
 von ICARUS 2.0. Es ersetzt weder die Produktvision noch die Sicherheits- oder
@@ -109,27 +111,33 @@ Deletion-Verhalten und eine nachvollziehbare Understanding-Pipeline.
   sicheren, ablaufenden und weiterhin zentralen Persistenzpfad.
 - Frontend-CI prüft nur JavaScript-Syntax. TypeScript, Lint, Komponenten- und
   Browser-E2E fehlen.
-- Der Python-Bestand hat eine breite Testsuite, aber keine statische Typprüfung
-  oder Laufzeit-Export-gegen-Schema-Prüfung.
-- Das JSON-Schema ist bereits hinter der Laufzeit zurück: `decision` und
-  `disputed` fehlen in den Enums.
+- Der Python-Bestand hat eine breite Testsuite, aber keine statische
+  Typprüfung. Zum Audit-Zeitpunkt fehlte außerdem eine
+  Laufzeit-Export-gegen-Schema-Prüfung; dieser Teil wurde inzwischen durch
+  PR #56 behoben.
+- Zum Audit-Zeitpunkt lag das JSON-Schema hinter der Laufzeit zurück:
+  `decision`, `disputed` und `disputed_with` fehlten. PR #56 hat die Drift
+  inzwischen behoben und den echten Runtime-Exporttest ergänzt.
 - `package-lock.json` fehlt; Frontend-Installationen sind nicht reproduzierbar.
 - Einzelne Bestandsdokumente beschreiben inzwischen überholte Zwischenstände,
   etwa Secrets ausschließlich in `.env`. Implementierung und aktuelle Tests
   sind bei Audits gegen Dokumentbehauptungen abzugleichen; die Dokumente werden
   in kleinen thematischen PRs nachgezogen.
 
-### 3.4 Bekannter kritischer Fehler
+### 3.4 Beim Audit gefundener kritischer Fehler — durch PR #55 behoben
 
-`Entscheidung.gefallen_am()` berücksichtigt nur `recorded_at` einer
-Replacement-Assertion. Für widerrufene, abgelaufene oder bestrittene Annahmen
-ohne Replacement ist der Zeitpunkt unbekannt. `frisch_erschuettert()` behandelt
-„unbekannt“ derzeit unbegrenzt als frisch. Damit kann dieselbe Entscheidung
-weit länger als 30 Tage jeden Morgen Aufmerksamkeit erzeugen.
+Zum Audit-Zeitpunkt berücksichtigte `Entscheidung.gefallen_am()` nur
+`recorded_at` einer Replacement-Assertion. Für widerrufene, abgelaufene oder
+bestrittene Annahmen ohne Replacement war der Zeitpunkt unbekannt;
+`frisch_erschuettert()` behandelte „unbekannt“ unbegrenzt als frisch. Damit
+konnte dieselbe Entscheidung weit länger als 30 Tage jeden Morgen
+Aufmerksamkeit erzeugen.
 
-Der isolierte Fix erhält einen eigenen PR. Semantisch notwendig ist ein
-persistierter Statuswechsel-Zeitpunkt mit konservativen Fallbacks für alte
-Daten. Ein bloßer UI-Filter würde die Ursache verdecken.
+PR #55 hat den isolierten Fix inzwischen in `main` integriert: ein persistierter
+Statuswechsel-Zeitpunkt, konservative endliche Fallbacks für alte Daten und
+zeitlich idempotente Wiederholungen von Retract, Dispute und Redact. Das
+30-Tage-Fenster basiert damit auf dem fachlichen Statuswechsel statt auf einem
+späteren Retry oder Lesezugriff.
 
 ## 4. Bestandsklassifikation
 
@@ -173,7 +181,7 @@ Die Kategorien bedeuten:
 | `wartet_auf` | EVOLVE | Kompatibilitätsquelle für echte Waiting-for-Objekte. |
 | Workspace / Projekte / Notizen | EVOLVE | Eingaben weiter unterstützen, aber Project State zunehmend rekonstruieren. |
 | Personenableitung | EVOLVE | Identity- und Alias-Layer hinzufügen; exakte Namen bleiben sicherer Fallback. |
-| Entscheidungen | EVOLVE | Freshness reparieren und Attention/Project State anbinden. |
+| Entscheidungen | EVOLVE | Freshness ist durch PR #55 repariert; als Nächstes an Attention und Project State anbinden. |
 | Zielurteil über Tags | KEEP als MVP | Erklärbarer Fallback; Beziehungen später durch explizite und semantische Signale ergänzen. |
 | Briefing | EVOLVE | Regeln und Begründbarkeit in allgemeine Attention Engine überführen. |
 | Konsolidierung / Proposals | KEEP | Unsichere Extraktion bleibt Vorschlag, kein versteckter Memory Write. |
@@ -425,8 +433,9 @@ Optimierungswünsche:
 ### 6.7 Human Usability Prototype Gate
 
 Nach dem vollständigen visuellen Gesamtkonzept und vor der React-Implementierung
-wird das Kernkonzept mit realen Nutzern oder repräsentativen Testpersonen als
-bedienbarer Prototyp geprüft. Verbindliche Szenarien sind:
+wird das Kernkonzept mit mindestens drei repräsentativen Testpersonen als
+bedienbarer Prototyp geprüft; angestrebt werden drei bis fünf Personen.
+Verbindliche Szenarien sind:
 
 - Morning / Today;
 - Ask;
@@ -437,8 +446,9 @@ bedienbarer Prototyp geprüft. Verbindliche Szenarien sind:
 
 Während des Tests wird die Oberfläche nicht erklärt. Beobachtet und
 dokumentiert werden Verständnis, Fehlwege, Rückfragen und benötigte Aktionen.
-Kritische Befunde müssen vor P7b in das Design einfließen; ein Protokoll ohne
-Designänderung schließt das Gate nicht.
+Jeder kritische Befund blockiert P7b, bis das Design korrigiert und die
+Korrektur im Prototyp nachvollziehbar ist. Ein Protokoll ohne Designänderung
+schließt das Gate nicht.
 
 ## 7. Golden Flows und Abnahmekriterien
 
@@ -517,10 +527,15 @@ Rollback. UI-PRs enthalten Browser-Verifikation und Screenshots.
 
 1. **P0 — ICARUS-2.0-Audit und Ausführungsplan**  
    Dieses Dokument; keine Laufzeitänderung.
-2. **P1 — Decision Freshness korrekt begrenzen**  
-   Statuswechselzeit, Legacy-Fallbacks, 30-Tage-Grenztests; keine Features.
-3. **P1b — Laufzeitexport und JSON-Schema synchronisieren**  
-   `decision`, `disputed`, Statuswechselzeit und echter Exporttest.
+2. **P1 — Decision Freshness korrekt begrenzen — abgeschlossen durch PR #55**
+
+   Statuswechselzeit, idempotente Statuswiederholungen, Legacy-Fallbacks und
+   30-Tage-Grenztests; keine Features.
+3. **P1b — Laufzeitexport und JSON-Schema synchronisieren — abgeschlossen
+   durch PR #55 und #56**
+
+   `decision`, `disputed`, `disputed_with`, Statuswechselzeit und echter
+   Exporttest.
 4. **P2a — Versionierte SQLite-Migrationen**  
    Migration Runner, `user_version`, atomare Upgrades, Downgrade Guard und
    Recovery-Tests.
@@ -547,8 +562,9 @@ Rollback. UI-PRs enthalten Browser-Verifikation und Screenshots.
     Offline-Zustände vor Code.
 14. **P7a.5 — Human Usability Prototype Test**
 
-    Vollständiges Kernkonzept ohne Erklärung mit realen oder repräsentativen
-    Testpersonen prüfen; kritische Befunde vor der Implementierung einarbeiten.
+    Vollständiges Kernkonzept ohne Erklärung mit mindestens drei, idealerweise
+    drei bis fünf repräsentativen Testpersonen prüfen. Kritische Befunde
+    blockieren P7b bis zur nachweisbaren Designkorrektur.
 15. **P7b — React/TypeScript/Vite-Shell in Tauri 2**
 
     Heute und Ask, Lazy Loading, API-/State-Grenzen, alte UI als Fallback.

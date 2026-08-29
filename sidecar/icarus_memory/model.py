@@ -203,6 +203,17 @@ class Assertion:
     valid_from: datetime | None = None
     expires_at: datetime | None = None
     last_confirmed_at: datetime | None = None
+    status_changed_at: datetime | None = None
+    """Wann die Aussage zuletzt in ihren aktuellen Status wechselte.
+
+    `recorded_at` sagt, wann die Aussage entstand. Für eine später
+    widerrufene oder bestrittene Annahme ist das nicht derselbe Zeitpunkt.
+    Ohne diese Trennung kann eine davon abhängige Entscheidung nicht
+    zuverlässig nur für ein begrenztes Zeitfenster Aufmerksamkeit erzeugen.
+
+    Optional für Rückwärtskompatibilität mit bestehenden Exporten. Neue und
+    veränderte Aussagen setzen den Wert immer.
+    """
     supersedes: list[str] = field(default_factory=list)
     superseded_by: str | None = None
     derived_from: list[str] = field(default_factory=list)
@@ -247,7 +258,12 @@ class Assertion:
             d["structured"] = self.structured
         if self.confidence is not None:
             d["confidence"] = self.confidence
-        for key in ("valid_from", "expires_at", "last_confirmed_at"):
+        for key in (
+            "valid_from",
+            "expires_at",
+            "last_confirmed_at",
+            "status_changed_at",
+        ):
             value = getattr(self, key)
             if value is not None:
                 d[key] = _iso(value)

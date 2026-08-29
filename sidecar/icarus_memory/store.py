@@ -201,6 +201,13 @@ class SelfModelStore:
 
         for current_id in sorted(affected):
             assertion = self._require(current_id)
+            # Ein Grabstein ist endgültig. Derselbe Löschvorgang kann durch
+            # Retries erneut eintreffen, darf aber weder den fachlichen
+            # Statuswechsel noch den ursprünglichen Redaction-Zeitpunkt
+            # umdatieren. Noch nicht redigierte Nachfahren werden weiterhin
+            # vom Kaskadenpfad erfasst.
+            if assertion.status is Status.REDACTED:
+                continue
             assertion.statement = "Entfernt auf Wunsch der Person."
             assertion.structured = None
             assertion.status = Status.REDACTED

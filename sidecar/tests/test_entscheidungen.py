@@ -263,6 +263,23 @@ def test_redaction_hat_einen_endlichen_erschuetterungszeitpunkt(store) -> None:
     assert eine.gefallen_am() == wechsel
 
 
+def test_wiederholtes_redact_erneuert_keine_zeitpunkte(store) -> None:
+    grund = aussage(store, "Enthält eine zu löschende Annahme.")
+    entscheidung(store, "Darauf beruhte eine Entscheidung.", [grund])
+    erste_redaction = JETZT - timedelta(days=31)
+    store.redact(grund.id, at=erste_redaction)
+
+    # Derselbe Löschvorgang wird idempotent wiederholt. Der bestehende
+    # Grabstein und sein Freshness-Zeitpunkt müssen unverändert bleiben.
+    store.redact(grund.id, at=JETZT)
+
+    gespeichert = store._require(grund.id)
+    assert gespeichert.status_changed_at == erste_redaction
+    assert gespeichert.redaction is not None
+    assert gespeichert.redaction.redacted_at == erste_redaction
+    assert entscheidungen.erschuettert(store, jetzt=JETZT) == []
+
+
 def test_dreissig_tage_sind_eingeschlossen_danach_ist_schluss(store) -> None:
     grund = aussage(store, "Die Frist steht.")
     entscheidung(store, "Wir unterschreiben.", [grund])

@@ -173,6 +173,36 @@ def test_widerruf_nimmt_abgeleitete_mit(store: SelfModelStore) -> None:
     assert store.usable(at=T0) == []
 
 
+def test_wiederholtes_redact_bewahrt_urspruengliche_grabsteine(
+    store: SelfModelStore,
+) -> None:
+    quelle = store.record("Private Quelle.", Kind.IDENTITY, chat(), at=T0)
+    ableitung = store.record(
+        "Private Ableitung.",
+        Kind.PREFERENCE,
+        Provenance(source_type=SourceType.INFERENCE),
+        derived_from=[quelle.id],
+        at=T0,
+    )
+    store.redact(quelle.id, reason=RedactionReason.USER_REQUEST, at=T0)
+
+    erneut = store.redact(
+        quelle.id,
+        reason=RedactionReason.USER_REQUEST,
+        at=T0 + timedelta(days=7),
+    )
+
+    assert {a.id for a in erneut} == {quelle.id, ableitung.id}
+    for assertion in erneut:
+        assert assertion.status is Status.REDACTED
+        assert assertion.status_changed_at == T0
+        assert assertion.redaction is not None
+        assert assertion.redaction.redacted_at == T0
+        assert assertion.redaction.reason is RedactionReason.USER_REQUEST
+    assert store._require(quelle.id).redaction is not None
+    assert store._require(quelle.id).redaction.cascade == [ableitung.id]
+
+
 def test_widerruf_hinterlaesst_grabstein(store: SelfModelStore) -> None:
     a = store.record("Etwas Privates.", Kind.RELATIONSHIP, chat(), at=T0)
     store.redact(a.id, at=T0)

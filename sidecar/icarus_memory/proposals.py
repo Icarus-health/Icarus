@@ -46,6 +46,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    IndexContract,
+    Migration,
+    run_migrations,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import Kind, Sensitivity, ensure_aware, now
 
 
@@ -157,7 +164,7 @@ class Proposal:
         }
 
 
-_SCHEMA = """
+_CREATE_PROPOSALS = """
 CREATE TABLE IF NOT EXISTS proposals (
     id         TEXT PRIMARY KEY,
     kind       TEXT NOT NULL,
@@ -165,15 +172,53 @@ CREATE TABLE IF NOT EXISTS proposals (
     created_at TEXT NOT NULL,
     fingerprint TEXT NOT NULL,
     document   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_proposals_state ON proposals(state);
-CREATE INDEX IF NOT EXISTS idx_proposals_kind  ON proposals(kind);
-
--- Über den Fingerabdruck erkennt ein zweiter Lauf, dass er denselben Punkt
--- schon einmal vorgelegt hat. Kein UNIQUE-Index: Ein abgelehnter Vorschlag
--- darf Monate später erneut auftauchen, wenn neue Belege dazukommen.
-CREATE INDEX IF NOT EXISTS idx_proposals_finger ON proposals(fingerprint);
+)
 """
+
+_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_proposals_state ON proposals(state)",
+    "CREATE INDEX IF NOT EXISTS idx_proposals_kind ON proposals(kind)",
+    # Kein UNIQUE-Index: Ein abgelehnter Vorschlag darf mit neuer Evidence
+    # später erneut auftauchen.
+    "CREATE INDEX IF NOT EXISTS idx_proposals_finger ON proposals(fingerprint)",
+)
+_INDEX_CONTRACTS = {
+    "idx_proposals_state": IndexContract("proposals", ("state",)),
+    "idx_proposals_kind": IndexContract("proposals", ("kind",)),
+    "idx_proposals_finger": IndexContract("proposals", ("fingerprint",)),
+}
+_SCHEMA_CONTRACT = {
+    "proposals": {"id", "kind", "state", "created_at", "fingerprint", "document"}
+}
+_PRIMARY_KEYS = {"proposals": {"id"}}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="proposals",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_PROPOSALS)
+    for statement in _INDEXES:
+        connection.execute(statement)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
 
 
 class ProposalError(Exception):
@@ -206,9 +251,17 @@ class ProposalStore:
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+        try:
+            with self._lock:
+                run_migrations(
+                    self._conn,
+                    store="proposals",
+                    path=self._path,
+                    migrations=_MIGRATIONS,
+                )
+        except Exception:
+            self._conn.close()
+            raise
 
     # -- Anlegen -----------------------------------------------------------
 

@@ -18,9 +18,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    Migration,
+    run_migrations,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import now
 
-_SCHEMA = """
+_CREATE_AUDIT = """
 CREATE TABLE IF NOT EXISTS audit (
     seq        INTEGER PRIMARY KEY AUTOINCREMENT,
     at         TEXT NOT NULL,
@@ -33,22 +39,74 @@ CREATE TABLE IF NOT EXISTS audit (
     arguments  TEXT NOT NULL,
     result     TEXT,
     detail     TEXT
-);
+)
+"""
 
--- Das Log ist anhängend. Änderungen und Löschungen sind auf Datenbankebene
--- unterbunden, nicht nur per Konvention im Anwendungscode.
+_TRIGGER_UPDATE = """
 CREATE TRIGGER IF NOT EXISTS audit_no_update
 BEFORE UPDATE ON audit
 BEGIN
     SELECT RAISE(ABORT, 'Audit-Log ist anhaengend: UPDATE nicht erlaubt');
 END;
+"""
 
+_TRIGGER_DELETE = """
 CREATE TRIGGER IF NOT EXISTS audit_no_delete
 BEFORE DELETE ON audit
 BEGIN
     SELECT RAISE(ABORT, 'Audit-Log ist anhaengend: DELETE nicht erlaubt');
 END;
 """
+
+_SCHEMA_CONTRACT = {
+    "audit": {
+        "seq",
+        "at",
+        "tool",
+        "action_class",
+        "level",
+        "outcome",
+        "approved_by",
+        "model",
+        "arguments",
+        "result",
+        "detail",
+    }
+}
+_PRIMARY_KEYS = {"audit": {"seq"}}
+_TRIGGER_CONTRACTS = {
+    "audit_no_update": _TRIGGER_UPDATE,
+    "audit_no_delete": _TRIGGER_DELETE,
+}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="audit",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_triggers=_TRIGGER_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_AUDIT)
+    # Das Log ist auf Datenbankebene anhängend, nicht nur per Konvention.
+    connection.execute(_TRIGGER_UPDATE)
+    connection.execute(_TRIGGER_DELETE)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_triggers=_TRIGGER_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
 
 
 class AuditLog:
@@ -61,9 +119,17 @@ class AuditLog:
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+        try:
+            with self._lock:
+                run_migrations(
+                    self._conn,
+                    store="audit",
+                    path=self._path,
+                    migrations=_MIGRATIONS,
+                )
+        except Exception:
+            self._conn.close()
+            raise
 
     def record(
         self,

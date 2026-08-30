@@ -42,6 +42,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    IndexContract,
+    Migration,
+    run_migrations,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import Provenance, SourceType, ensure_aware, now
 
 
@@ -181,7 +188,7 @@ class Episode:
         }
 
 
-_SCHEMA = """
+_CREATE_EPISODES = """
 CREATE TABLE IF NOT EXISTS episodes (
     id          TEXT PRIMARY KEY,
     digest      TEXT NOT NULL,
@@ -193,16 +200,67 @@ CREATE TABLE IF NOT EXISTS episodes (
     title       TEXT NOT NULL,
     body        TEXT NOT NULL,
     document    TEXT NOT NULL
-);
-
--- Die Entdopplung hängt an dieser Bedingung, nicht an einer Prüfung im Code.
--- Ein zweiter Aufnahmeweg könnte die Prüfung vergessen; den Index nicht.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_digest ON episodes(digest);
-
-CREATE INDEX IF NOT EXISTS idx_episodes_state    ON episodes(state);
-CREATE INDEX IF NOT EXISTS idx_episodes_occurred ON episodes(occurred_at);
-CREATE INDEX IF NOT EXISTS idx_episodes_project  ON episodes(project_id);
+)
 """
+
+_INDEXES = (
+    # Die Entdopplung hängt an dieser Bedingung, nicht an einer Prüfung im Code.
+    # Ein zweiter Aufnahmeweg könnte die Prüfung vergessen; den Index nicht.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_episodes_digest ON episodes(digest)",
+    "CREATE INDEX IF NOT EXISTS idx_episodes_state ON episodes(state)",
+    "CREATE INDEX IF NOT EXISTS idx_episodes_occurred ON episodes(occurred_at)",
+    "CREATE INDEX IF NOT EXISTS idx_episodes_project ON episodes(project_id)",
+)
+_INDEX_CONTRACTS = {
+    "idx_episodes_digest": IndexContract("episodes", ("digest",), unique=True),
+    "idx_episodes_state": IndexContract("episodes", ("state",)),
+    "idx_episodes_occurred": IndexContract("episodes", ("occurred_at",)),
+    "idx_episodes_project": IndexContract("episodes", ("project_id",)),
+}
+
+_LEGACY_SCHEMA = {
+    "episodes": {
+        "id",
+        "digest",
+        "kind",
+        "state",
+        "recorded_at",
+        "occurred_at",
+        "project_id",
+        "title",
+        "body",
+        "document",
+    }
+}
+_PRIMARY_KEYS = {"episodes": {"id"}}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="episodes",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_LEGACY_SCHEMA,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_EPISODES)
+    for statement in _INDEXES:
+        connection.execute(statement)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_LEGACY_SCHEMA,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
 
 
 class EpisodeError(Exception):
@@ -222,9 +280,17 @@ class EpisodeStore:
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+        try:
+            with self._lock:
+                run_migrations(
+                    self._conn,
+                    store="episodes",
+                    path=self._path,
+                    migrations=_MIGRATIONS,
+                )
+        except Exception:
+            self._conn.close()
+            raise
 
     # -- Aufnehmen ---------------------------------------------------------
 

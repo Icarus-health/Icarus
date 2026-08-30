@@ -29,6 +29,7 @@ from icarus_memory import (
 from icarus_memory.audit import AuditLog
 from icarus_memory.migrations import (
     IncompatibleLegacySchema,
+    InvalidDatabaseVersion,
     Migration,
     MigrationError,
     UnsupportedDatabaseVersion,
@@ -131,6 +132,34 @@ def test_future_version_wird_vor_jeder_aenderung_abgewiesen(
     assert raised.value.code == "unsupported_database_version"
     assert raised.value.found == 999
     assert _version(path) == 999
+    assert _snapshot(path) == before
+    assert not path.with_name(path.name + "-wal").exists()
+
+
+@pytest.mark.parametrize(("name", "factory", "_expected"), STORE_SPECS)
+@pytest.mark.parametrize("invalid_version", [-1, -999])
+def test_negative_version_wird_ohne_python_negativindex_abgewiesen(
+    tmp_path: Path,
+    name: str,
+    factory: StoreFactory,
+    _expected: set[str],
+    invalid_version: int,
+) -> None:
+    path = tmp_path / f"{name}.sqlite3"
+    connection = sqlite3.connect(path)
+    connection.execute("CREATE TABLE sentinel (value TEXT NOT NULL)")
+    connection.execute("INSERT INTO sentinel VALUES ('bleibt')")
+    connection.execute(f"PRAGMA user_version = {invalid_version}")
+    connection.commit()
+    connection.close()
+    before = _snapshot(path)
+
+    with pytest.raises(InvalidDatabaseVersion) as raised:
+        factory(path)
+
+    assert raised.value.code == "invalid_database_version"
+    assert raised.value.found == invalid_version
+    assert _version(path) == invalid_version
     assert _snapshot(path) == before
     assert not path.with_name(path.name + "-wal").exists()
 

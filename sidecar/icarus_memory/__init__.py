@@ -32,6 +32,7 @@ from .episodes import Episode, EpisodeKind, EpisodeState, EpisodeStore, digest_o
 from .ingest import IngestReport, ingest_directory
 from .migrations import (
     IncompatibleLegacySchema,
+    InvalidDatabaseVersion,
     MigrationError,
     UnsupportedDatabaseVersion,
 )
@@ -75,6 +76,7 @@ __all__ = [
     "EpisodeStore",
     "IngestReport",
     "IncompatibleLegacySchema",
+    "InvalidDatabaseVersion",
     "Kind",
     "MemoryBackend",
     "MigrationError",

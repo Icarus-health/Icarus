@@ -17,6 +17,9 @@ Jeder operative Store speichert seine Schemaversion in
 - Eine Version über der von dieser ICARUS-Version unterstützten Zielversion
   wird mit `UnsupportedDatabaseVersion` abgewiesen, bevor Schema, Trigger oder
   Journal-Modus verändert werden.
+- Ein negativer Versionswert wird mit `InvalidDatabaseVersion` als ungültiger
+  Datenbankvertrag abgewiesen. Der gültige Bereich ist ausschließlich
+  `0 <= user_version <= target_version`.
 
 Eine fehlende Versionsnummer ist damit weder ein Grund, Nutzerdaten zu
 überschreiben, noch ein Freibrief, eine beliebige SQLite-Datei als ICARUS-Datei
@@ -96,6 +99,7 @@ kontrolliert erweitern kann.
 ## Fehler, Diagnose und Recovery
 
 - `MigrationError`: Migration oder Verifikation ist fehlgeschlagen.
+- `InvalidDatabaseVersion`: Der gespeicherte Versionswert ist negativ.
 - `IncompatibleLegacySchema`: Version 0 ist weder leer noch ein bekannter
   Legacy-Bestand.
 - `UnsupportedDatabaseVersion`: Die Datei stammt aus einer neueren Version.
@@ -125,6 +129,7 @@ Austausch gehört zusammen mit vollständigen Recovery-Sätzen in P2b.
 - Rollback von DDL, Rows und Version nach künstlichem Abbruch;
 - erfolgreichen Retry nach einem Abbruch;
 - Future-Versionen ohne Dateiveränderung;
+- negative Versionswerte ohne Dateiveränderung oder Negativindizierung;
 - Ablehnung unbekannter Legacy-Schemata, Spalten, Indexe und Triggerverträge;
 - den Wechsel auf einen eigenständigen Schemavertrag einer späteren Version;
 - gleichzeitige Initialisierung über zwei Verbindungen.

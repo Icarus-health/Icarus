@@ -54,6 +54,27 @@ class UnsupportedDatabaseVersion(MigrationError):
         self.supported = supported
 
 
+class InvalidDatabaseVersion(MigrationError):
+    """Der gespeicherte Versionswert liegt außerhalb des gültigen Bereichs."""
+
+    code = "invalid_database_version"
+
+    def __init__(
+        self,
+        *,
+        store: str,
+        path: str | Path,
+        found: int,
+    ) -> None:
+        super().__init__(
+            "Diese ICARUS-Datenbank besitzt einen ungültigen "
+            f"Schema-Versionswert (gefunden: {found}; erlaubt: mindestens 0).",
+            store=store,
+            path=path,
+        )
+        self.found = found
+
+
 class IncompatibleLegacySchema(MigrationError):
     """Eine unversionierte Datei entspricht keinem bekannten Legacy-Schema."""
 
@@ -124,7 +145,7 @@ def run_migrations(
             store=store,
             path=db_path,
         ) from exc
-    _guard_future(store, db_path, version, target)
+    _guard_version(store, db_path, version, target)
 
     while version < target:
         migration = ordered[version]
@@ -132,7 +153,7 @@ def run_migrations(
         try:
             connection.execute("BEGIN IMMEDIATE")
             locked_version = current_version(connection)
-            _guard_future(store, db_path, locked_version, target)
+            _guard_version(store, db_path, locked_version, target)
 
             # Eine andere Verbindung kann den Schritt während unserer
             # Wartezeit bereits abgeschlossen haben.
@@ -338,7 +359,19 @@ def _ordered(migrations: Iterable[Migration]) -> tuple[Migration, ...]:
     return ordered
 
 
-def _guard_future(store: str, path: Path, found: int, supported: int) -> None:
+def _guard_version(store: str, path: Path, found: int, supported: int) -> None:
+    if found < 0:
+        logger.error(
+            "Ungültige SQLite-Version abgewiesen: store=%s path=%s found=%d",
+            store,
+            path,
+            found,
+        )
+        raise InvalidDatabaseVersion(
+            store=store,
+            path=path,
+            found=found,
+        )
     if found > supported:
         logger.error(
             "SQLite-Future-Version abgewiesen: store=%s path=%s "

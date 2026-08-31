@@ -42,7 +42,7 @@ flowchart LR
     Z -.-> E
     A -.->|"Episoden"| E[("Episoden")]
     V -.->|"Vorschläge"| P[("Schlange")]
-    S -.-> B[("Snapshots")]
+    S -.-> B[("Backup-Sätze")]
     P --> M{{"Mensch<br/>entscheidet"}}
     M -->|"angenommen"| R[("Bestand")]
 
@@ -108,7 +108,7 @@ Der Bericht sagt dann `ok: false`, aber die Liste zeigt, welcher Schritt es war:
 gelaufen um: 2026-08-01T09:31:44 | ok: false
   aufnahme:Vault        FileNotFoundError: /Users/…/Weg
   verdichtung           1 Bestätigungen fällig. Nichts davon steht im Bestand.
-  sicherung             self-model-20260801T093144Z.sqlite3
+  sicherung             icarus-backup-20260801T093144Z-a1b2c3d4
 ```
 
 Auch der Thread selbst darf nicht sterben. Ein Zeitplan, der nach einem
@@ -150,7 +150,9 @@ Der billigste Schritt mit dem größten Nutzen. Ein Gedächtnis, das zwanzig Jah
 halten soll, hat genau einen katastrophalen Fehlerfall, und eine Sicherung, die
 nur läuft, wenn jemand daran denkt, verhindert ihn nicht.
 
-Fehlt die Datenbank noch, ist das **kein Fehler**, sondern „nichts zu sichern“.
+Fehlen beim ersten Start noch alle Stores, ist das **kein Fehler**, sondern
+„nichts zu sichern“. Existiert dagegen nur ein Teilsatz, schlägt die Sicherung
+sichtbar fehl; ein unvollständiger Satz darf nie als erfolgreich gelten.
 Beim ersten Start gibt es nichts — und wer sich an rote Meldungen gewöhnt,
 übersieht die eine, die zählt.
 

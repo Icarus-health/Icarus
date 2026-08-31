@@ -8,6 +8,7 @@ falscher Fakt.
 from __future__ import annotations
 
 import time
+import threading
 from datetime import timedelta
 
 import pytest
@@ -25,6 +26,7 @@ from icarus_memory.scheduler import (
     JobResult,
     Scheduler,
 )
+import icarus_memory.scheduler as scheduler_module
 from icarus_memory.server import create_app
 from icarus_memory.tasks import TaskStore
 from icarus_memory.workspace import WorkspaceStore
@@ -138,6 +140,37 @@ def test_zweimal_starten_erzeugt_keinen_zweiten_thread() -> None:
     plan.start()
     try:
         assert plan._thread is erster  # noqa: SLF001
+    finally:
+        plan.stop()
+
+
+def test_stop_timeout_beendet_den_zeitplan_nicht_still(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+    completed = threading.Event()
+
+    def slow_backup() -> JobResult:
+        started.set()
+        release.wait(timeout=2)
+        completed.set()
+        return JobResult("sicherung", True, "fertig")
+
+    monkeypatch.setattr(scheduler_module, "TICK_SECONDS", 0.001)
+    plan = Scheduler(run_backup=slow_backup)
+    plan.configure(enabled=True)
+    plan.start()
+    assert started.wait(timeout=1)
+
+    assert plan.stop(timeout=0.01) is False
+    assert not plan._stop.is_set()  # noqa: SLF001 - Sicherheitsvertrag des Timeouts
+
+    release.set()
+    assert completed.wait(timeout=1)
+    time.sleep(0.02)
+    try:
+        assert plan.state()["running"] is True
     finally:
         plan.stop()
 

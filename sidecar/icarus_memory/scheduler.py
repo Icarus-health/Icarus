@@ -49,6 +49,7 @@ dauerhaft, und der Zeitplan trägt tatsächlich durch die Nacht.
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -138,6 +139,9 @@ class Scheduler:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._lock = threading.Lock()
+        self._run_lock = threading.Lock()
+        self._idle = threading.Event()
+        self._idle.set()
 
     # -- Einstellen --------------------------------------------------------
 
@@ -184,6 +188,16 @@ class Scheduler:
     # -- Laufen ------------------------------------------------------------
 
     def run_once(self, with_model: bool | None = None) -> RunReport:
+        """Serialisiert Läufe und signalisiert Restore-sichere Leerlaufphasen."""
+
+        with self._run_lock:
+            self._idle.clear()
+            try:
+                return self._run_once(with_model)
+            finally:
+                self._idle.set()
+
+    def _run_once(self, with_model: bool | None = None) -> RunReport:
         """Ein Durchgang. Auch von Hand auslösbar.
 
         Jeder Schritt ist einzeln fehlertolerant. Ein Mailserver, der hakt, darf
@@ -244,11 +258,24 @@ class Scheduler:
         )
         self._thread.start()
 
-    def stop(self, timeout: float = 5.0) -> None:
+    def stop(self, timeout: float = 5.0) -> bool:
+        started = time.monotonic()
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=timeout)
+            if not self._idle.wait(timeout=timeout):
+                # Der laufende Job wurde nicht unterbrochen und darf mit den
+                # weiterhin offenen Stores fertig werden. Den Stop-Wunsch
+                # nehmen wir zurück, damit ein abgelehnter Restore nicht den
+                # Zeitplan still beendet.
+                self._stop.clear()
+                return False
+            remaining = max(0.0, timeout - (time.monotonic() - started))
+            self._thread.join(timeout=remaining)
+            if self._thread.is_alive():
+                self._stop.clear()
+                return False
             self._thread = None
+        return True
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -332,24 +359,23 @@ def summary_job(summarizer: Any) -> Callable[[bool], JobResult]:
 
 
 def backup_job(data_dir: Path) -> Callable[[], JobResult]:
-    """Legt einen Snapshot an — der billigste Schritt mit dem größten Nutzen.
+    """Legt einen vollständigen Satz an — der billigste Schritt mit größtem Nutzen.
 
     Ein Gedächtnis, das zwanzig Jahre halten soll, hat genau einen
     katastrophalen Fehlerfall, und eine Sicherung, die nur läuft, wenn jemand
     daran denkt, verhindert ihn nicht.
     """
-    from .backup import snapshot
+    from .backup import STORE_SPECS, create_backup
 
     def run() -> JobResult:
-        datenbank = data_dir / "self-model.sqlite3"
-        if not datenbank.is_file():
+        if not any((data_dir / spec.filename).is_file() for spec in STORE_SPECS):
             # Beim ersten Start gibt es noch nichts zu sichern, und im
             # Speicherbetrieb nie. Das als Fehler zu melden hieße, dass ein
             # neuer Nutzer bei jedem Lauf einen roten Schritt sieht — und wer
             # sich an rote Meldungen gewöhnt, übersieht die eine, die zählt.
             return JobResult("sicherung", True, "nichts zu sichern")
-        pfad = snapshot(datenbank, data_dir / "sicherungen")
-        return JobResult("sicherung", True, pfad.name)
+        result = create_backup(data_dir, data_dir / "sicherungen")
+        return JobResult("sicherung", True, result.path.name)
 
     return run
 

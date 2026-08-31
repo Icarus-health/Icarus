@@ -13,10 +13,11 @@ Deshalb zwei Ablagen mit klarer Trennung:
 * **Der Schlüsselbund** (`secrets.py`) — alles, was eines ist: API-Schlüssel,
   Mailpasswort, CalDAV-Passwort.
 
-Die Trennung ist keine Förmlichkeit. Die Einstellungsdatei landet in Backups, in
-Sicherungen des Datenverzeichnisses, womöglich in einem Cloud-Ordner. Ein
-Schlüssel darin wäre genau der Klartext auf der Platte, den `secrets.py`
-vermeiden soll.
+Die Trennung ist keine Förmlichkeit. Die Einstellungsdatei kann bei manuell
+konfigurierten MCP-Servern derzeit allerdings beliebige Umgebungswerte enthalten
+— darunter auch Zugangsdaten. P2b nimmt sie deshalb bewusst **nicht** in den
+normalen Backup-Satz auf. Ein späterer Konfigurationsbackup-Pfad muss diese
+Werte zuerst zuverlässig in den Schlüsselbund überführen oder entfernen.
 
 ## Vorrang
 

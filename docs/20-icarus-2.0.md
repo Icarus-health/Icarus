@@ -101,9 +101,9 @@ Deletion-Verhalten und eine nachvollziehbare Understanding-Pipeline.
   P2a führt inzwischen einen gemeinsamen Runner mit atomaren Migrationen je
   SQLite-Datei ein; eine storeübergreifende Transaktion ist ausdrücklich nicht
   Teil dieser Phase.
-- Backup und Restore sichern derzeit nur `self-model.sqlite3`; Aufgaben,
-  Projekte, Episoden, Regeln, Vorschläge und Audit sind nicht Teil eines
-  konsistenten Wiederherstellungssatzes.
+- Zum Audit-Zeitpunkt sicherten Backup und Restore nur `self-model.sqlite3`.
+  P2b führt inzwischen versionierte vollständige Sätze für alle sieben
+  operativen Stores mit Hash-, Integritäts-, Versions- und Rollback-Vertrag ein.
 - Episoden werden heute global über den SHA-256-Digest ihres Textkörpers
   dedupliziert. Zwei verschiedene Nachrichten mit identischem Inhalt können
   dadurch kollabieren; Events benötigen stattdessen eine Idempotenz aus Quelle,
@@ -488,7 +488,6 @@ Heute fehlen insbesondere:
 - Hintergrundjob-Status, Retry und Dead Letter ohne UI-Abhängigkeit;
 - kontextuelle Notification Events;
 - eine universelle ASK-Schnittstelle oberhalb des bestehenden Chats;
-- sichere, vollständige Backup-/Restore-Sätze für alle operativen Stores.
 
 Bestehende Endpunkte bleiben während der Migration verfügbar. Neue APIs werden
 versioniert oder mit ausdrücklich getesteter Backward Compatibility ergänzt.
@@ -538,12 +537,13 @@ Rollback. UI-PRs enthalten Browser-Verifikation und Screenshots.
 
    `decision`, `disputed`, `disputed_with`, Statuswechselzeit und echter
    Exporttest.
-4. **P2a — Versionierte SQLite-Migrationen — dieser PR**
+4. **P2a — Versionierte SQLite-Migrationen — abgeschlossen durch PR #57**
 
    Migration Runner, `user_version`, atomare Upgrades, Downgrade Guard und
    Recovery-Tests.
-5. **P2b — Vollständige lokale Backup-Sätze**  
-   alle operativen Stores konsistent sichern und wiederherstellen.
+5. **P2b — Vollständige lokale Backup-Sätze — dieser PR**
+   Alle sieben operativen Stores als kontrollierten Satz sichern, vor dem
+   Restore vollständig prüfen und bei Aktivierungsfehler gemeinsam zurückrollen.
 6. **P2c — Canonical Event Contract auf Episodes**  
    additive Felder, Legacy-Backfill, Idempotenz- und Provenienztests.
 7. **P2d — Connector Adapter Contract**  

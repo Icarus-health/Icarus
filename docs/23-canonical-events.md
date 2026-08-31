@@ -86,6 +86,14 @@ Dadurch bleibt später erklärbar, was ICARUS zu einem Zeitpunkt wusste. Eine
 Quellenlöschung wird in P2c noch nicht synchronisiert; der vorbereitete
 `source_state` ist kein Auftrag, Historie still zu löschen.
 
+Die Source-Identity wird innerhalb einer `BEGIN IMMEDIATE`-Write-Transaction
+gelesen und bewertet. Damit gilt der Vertrag auch für mehrere unabhängige
+`EpisodeStore`-Verbindungen auf derselben Datei: Current Row und Revision
+werden gemeinsam committed, gleiche Replays bleiben idempotent und konkurrierende
+Updates erhalten eine eindeutige Revisionsfolge. SQLite darf bis zu 30 Sekunden
+auf den Write-Lock warten; ein danach verbleibender Lock-Fehler wird nicht als
+erfolgreicher Ingest verschluckt.
+
 ## Connector-Grenze
 
 Providerlogik endet im Adapter. Der bestehende Mail-Remember-Pfad liefert
@@ -110,6 +118,12 @@ Legacy-Episoden erhalten ausschließlich die explizite konservative Identität
 erraten. Legacy-Summaries werden als `derived` markiert. Neue Datenbanken laufen
 über denselben v1→v2-Pfad.
 
+Nach dem vollständigen v2-Backfill wird der Digest aus der kanonischen
+Event-Repräsentation neu berechnet und identisch in Current Row und Revision 1
+geschrieben. Der frühere v1-Body-Digest bleibt als
+`raw_metadata.legacy_body_digest` erhalten, weil Proposal-Evidenz diesen
+historischen Prüfwert dauerhaft referenzieren kann.
+
 P2b sichert den Store mit Schema-Version 2. Ein Backup mit unterstütztem v1
 wird nur in einer temporären Restore-Kopie migriert; das Backup-Original bleibt
 unverändert. Future- und negative Schema-Versionen bleiben fail-closed.
@@ -122,9 +136,13 @@ bleiben fremde Daten und niemals Anweisungen.
 
 Die Tests decken Source-Identity-Idempotenz, gleiche Texte mit verschiedenen
 IDs/Konten, Revision History, Raw-vs-Derived, v1→v2-Erhalt, Mail-, Kalender- und
-Datei-Normalisierung sowie Backup-Restore von Episode-v1 ab. Temporäre
-Sabotageproben prüfen, dass Digest nicht wieder globale Identität wird, das
-Konto nicht aus der Identität fällt und Summaries nicht als Source Events gelten.
+Datei-Normalisierung sowie Backup-Restore von Episode-v1 ab. Echte parallele
+Upserts verwenden zwei unabhängige Store-Verbindungen und prüfen gleiche sowie
+unterschiedliche Inhalte und Identitäten. Temporäre Sabotageproben prüfen, dass
+Digest nicht wieder globale Identität wird, das Konto nicht aus der Identität
+fällt, Summaries nicht als Source Events gelten und ein Rückfall von
+`BEGIN IMMEDIATE` auf eine nicht serialisierende Transaktion die Paralleltests
+zuverlässig rot macht.
 
 P2c ist keine Understanding Engine: keine Commitment-Extraktion, Entity
 Resolution, automatische Projektzuordnung, Attention, LLM-Normalisierung,

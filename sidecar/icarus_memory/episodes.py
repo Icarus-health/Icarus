@@ -238,6 +238,10 @@ def _iso_utc(value: datetime | None) -> str | None:
     return ensure_aware(value).astimezone(timezone.utc).isoformat()  # type: ignore[union-attr]
 
 
+def _parse(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+
+
 @dataclass
 class Episode:
     id: str
@@ -450,6 +454,51 @@ def _legacy_event_type(kind: EpisodeKind) -> str:
     }[kind]
 
 
+def _episode_from_document(d: dict[str, Any]) -> Episode:
+    """Baut den öffentlichen Episode-Vertrag aus einem gespeicherten Dokument."""
+    p = d["provenance"]
+    kind = EpisodeKind(d["kind"])
+    return Episode(
+        id=d["id"],
+        kind=kind,
+        title=d["title"],
+        body=d["body"],
+        provenance=Provenance(
+            source_type=SourceType(p["source_type"]),
+            source_ref=p.get("source_ref"),
+            captured_at=_parse(p.get("captured_at")),
+            extracted_by=p.get("extracted_by"),
+            verbatim=p.get("verbatim"),
+        ),
+        recorded_at=_parse(d["recorded_at"]),  # type: ignore[arg-type]
+        digest=d["digest"],
+        occurred_at=_parse(d.get("occurred_at")),
+        state=EpisodeState(d["state"]),
+        project_id=d.get("project_id"),
+        participants=list(d.get("participants", [])),
+        produced=list(d.get("produced", [])),
+        consolidated_at=_parse(d.get("consolidated_at")),
+        tags=list(d.get("tags", [])),
+        covers=list(d.get("covers", [])),
+        period=str(d.get("period", "")),
+        source_identity=SourceIdentity(
+            str(d.get("source_type", d.get("source_identity", {}).get("source_type", "legacy"))),
+            str(d.get("source_account", d.get("source_identity", {}).get("source_account", "legacy"))),
+            str(d.get("native_source_id", d.get("source_identity", {}).get("native_source_id", d["id"]))),
+        ),
+        event_type=str(d.get("event_type", _legacy_event_type(kind))),
+        captured_at=_parse(d.get("captured_at")) or _parse(d.get("recorded_at")),
+        source_updated_at=_parse(d.get("source_updated_at")),
+        artifact=EpisodeArtifact(d.get("artifact", "derived" if kind is EpisodeKind.SUMMARY else "source")),
+        scope_id=d.get("scope_id"),
+        trust=str(d.get("trust", "derived" if kind is EpisodeKind.SUMMARY else "direct_source")),
+        raw_metadata=dict(d.get("raw_metadata", {})),
+        participant_details=[Participant(**detail) for detail in d.get("participant_details", [])],
+        revision=int(d.get("revision", 1)),
+        source_state=str(d.get("source_state", "active")),
+    )
+
+
 def _migrate_v1(connection: sqlite3.Connection) -> None:
     validate_legacy_or_empty(
         connection,
@@ -506,6 +555,7 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
     rows = connection.execute("SELECT * FROM episodes ORDER BY id").fetchall()
     for row in rows:
         document = json.loads(row["document"])
+        legacy_body_digest = str(document.get("digest") or row["digest"])
         kind = EpisodeKind(document["kind"])
         provenance = document.get("provenance", {})
         artifact = EpisodeArtifact.DERIVED if kind is EpisodeKind.SUMMARY else EpisodeArtifact.SOURCE
@@ -515,6 +565,11 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
             "source_account": "legacy",
             "native_source_id": document["id"],
         }
+        raw_metadata = dict(document.get("raw_metadata", {}))
+        # Proposal-Evidenz referenziert den bisherigen v1-Body-Digest dauerhaft.
+        # Der v2-Digest wird kanonisch neu berechnet; der alte Prüfwert bleibt
+        # deshalb explizit und nachvollziehbar am migrierten Event erhalten.
+        raw_metadata["legacy_body_digest"] = legacy_body_digest
         document.update({
             "source_identity": identity,
             **identity,
@@ -524,18 +579,21 @@ def _migrate_v2(connection: sqlite3.Connection) -> None:
             "artifact": artifact.value,
             "scope_id": None,
             "trust": "derived" if artifact is EpisodeArtifact.DERIVED else "direct_source",
-            "raw_metadata": {},
+            "raw_metadata": raw_metadata,
             "participant_details": [],
             "revision": 1,
             "source_state": "active",
         })
+        migrated = _episode_from_document(document)
+        document["digest"] = canonical_digest(migrated)
         encoded = json.dumps(document, ensure_ascii=False, sort_keys=True)
         connection.execute(
-            "UPDATE episodes SET source_type=?, source_account=?, native_source_id=?, "
+            "UPDATE episodes SET digest=?, source_type=?, source_account=?, native_source_id=?, "
             "event_type=?, captured_at=?, artifact=?, trust=?, raw_metadata=?, revision=1, "
             "source_state='active', document=? WHERE id=?",
-            ("legacy", "legacy", document["id"], document["event_type"], captured_at,
-             artifact.value, document["trust"], "{}", encoded, document["id"]),
+            (document["digest"], "legacy", "legacy", document["id"], document["event_type"],
+             captured_at, artifact.value, document["trust"],
+             json.dumps(raw_metadata, ensure_ascii=False, sort_keys=True), encoded, document["id"]),
         )
         connection.execute(
             "INSERT INTO episode_revisions "
@@ -568,17 +626,15 @@ class EpisodeError(Exception):
     """Eine Episode ist unbekannt oder ein Zustandswechsel ist nicht erlaubt."""
 
 
-def _parse(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
-
-
 class EpisodeStore:
     """Episoden in einer lokalen Datei, neben dem Selbstmodell."""
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
+        self._conn = sqlite3.connect(
+            str(self._path), check_same_thread=False, timeout=30.0,
+        )
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         try:
@@ -694,24 +750,36 @@ class EpisodeStore:
         )
         event.digest = canonical_digest(event)
         with self._lock:
-            row = self._conn.execute(
-                "SELECT document FROM episodes WHERE source_type=? AND source_account=? "
-                "AND native_source_id=?",
-                (identity.source_type, identity.source_account, identity.native_source_id),
-            ).fetchone()
-            if row is None:
-                self._insert_locked(event)
-                return EventIngestResult("created", event)
-            previous = self._from_row(row)
-            if previous.digest == event.digest:
-                return EventIngestResult("unchanged", previous)
-            event.id = previous.id
-            event.revision = previous.revision + 1
-            event.state = previous.state
-            event.produced = list(previous.produced)
-            event.consolidated_at = previous.consolidated_at
-            self._update_source_locked(event)
-            return EventIngestResult("updated", event, previous.revision)
+            try:
+                # Der Lock gilt nur für diese Store-Instanz. BEGIN IMMEDIATE
+                # serialisiert die Identity-Entscheidung auch gegenüber anderen
+                # Verbindungen auf dieselbe SQLite-Datei.
+                self._conn.execute("BEGIN IMMEDIATE")
+                row = self._conn.execute(
+                    "SELECT document FROM episodes WHERE source_type=? AND source_account=? "
+                    "AND native_source_id=?",
+                    (identity.source_type, identity.source_account, identity.native_source_id),
+                ).fetchone()
+                if row is None:
+                    self._write_event_and_revision_locked(event, insert=True)
+                    result = EventIngestResult("created", event)
+                else:
+                    previous = self._from_row(row)
+                    if previous.digest == event.digest:
+                        result = EventIngestResult("unchanged", previous)
+                    else:
+                        event.id = previous.id
+                        event.revision = previous.revision + 1
+                        event.state = previous.state
+                        event.produced = list(previous.produced)
+                        event.consolidated_at = previous.consolidated_at
+                        self._write_event_and_revision_locked(event, insert=False)
+                        result = EventIngestResult("updated", event, previous.revision)
+                self._conn.commit()
+                return result
+            except Exception:
+                self._conn.rollback()
+                raise
 
     # -- Zustand -----------------------------------------------------------
 
@@ -1045,21 +1113,19 @@ class EpisodeStore:
             self._insert_locked(episode)
 
     def _insert_locked(self, episode: Episode) -> None:
-        self._write_event_and_revision_locked(episode, insert=True)
-
-    def _update_source_locked(self, episode: Episode) -> None:
-        self._write_event_and_revision_locked(episode, insert=False)
-
-    def _write_event_and_revision_locked(self, episode: Episode, *, insert: bool) -> None:
-        """Aktuellen Event und seine Revision als untrennbaren Write sichern."""
+        """Schreibt außerhalb eines bestehenden Write-Kontexts atomar."""
         try:
             self._conn.execute("BEGIN")
-            self._write_current_locked(episode, insert=insert)
-            self._write_revision_locked(episode)
+            self._write_event_and_revision_locked(episode, insert=True)
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
+
+    def _write_event_and_revision_locked(self, episode: Episode, *, insert: bool) -> None:
+        """Schreibt Current Row und Revision in der bereits offenen Transaktion."""
+        self._write_current_locked(episode, insert=insert)
+        self._write_revision_locked(episode)
 
     def _write_revision_locked(self, episode: Episode) -> None:
         d = episode.to_dict()
@@ -1104,50 +1170,7 @@ class EpisodeStore:
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> Episode:
-        d = json.loads(row["document"])
-        p = d["provenance"]
-        return Episode(
-            id=d["id"],
-            kind=EpisodeKind(d["kind"]),
-            title=d["title"],
-            body=d["body"],
-            provenance=Provenance(
-                source_type=SourceType(p["source_type"]),
-                source_ref=p.get("source_ref"),
-                captured_at=_parse(p.get("captured_at")),
-                extracted_by=p.get("extracted_by"),
-                verbatim=p.get("verbatim"),
-            ),
-            recorded_at=_parse(d["recorded_at"]),  # type: ignore[arg-type]
-            digest=d["digest"],
-            occurred_at=_parse(d.get("occurred_at")),
-            state=EpisodeState(d["state"]),
-            project_id=d.get("project_id"),
-            participants=list(d.get("participants", [])),
-            produced=list(d.get("produced", [])),
-            consolidated_at=_parse(d.get("consolidated_at")),
-            tags=list(d.get("tags", [])),
-            # Mit Vorgabe gelesen: Episoden, die vor der Zusammenfassungsschicht
-            # entstanden sind, haben diese Felder nicht — und sollen deshalb
-            # nicht unlesbar werden.
-            covers=list(d.get("covers", [])),
-            period=str(d.get("period", "")),
-            source_identity=SourceIdentity(
-                str(d.get("source_type", d.get("source_identity", {}).get("source_type", "legacy"))),
-                str(d.get("source_account", d.get("source_identity", {}).get("source_account", "legacy"))),
-                str(d.get("native_source_id", d.get("source_identity", {}).get("native_source_id", d["id"]))),
-            ),
-            event_type=str(d.get("event_type", _legacy_event_type(EpisodeKind(d["kind"])))),
-            captured_at=_parse(d.get("captured_at")) or _parse(d.get("recorded_at")),
-            source_updated_at=_parse(d.get("source_updated_at")),
-            artifact=EpisodeArtifact(d.get("artifact", "derived" if d["kind"] == "summary" else "source")),
-            scope_id=d.get("scope_id"),
-            trust=str(d.get("trust", "derived" if d["kind"] == "summary" else "direct_source")),
-            raw_metadata=dict(d.get("raw_metadata", {})),
-            participant_details=[Participant(**detail) for detail in d.get("participant_details", [])],
-            revision=int(d.get("revision", 1)),
-            source_state=str(d.get("source_state", "active")),
-        )
+        return _episode_from_document(json.loads(row["document"]))
 
 
 __all__ = [

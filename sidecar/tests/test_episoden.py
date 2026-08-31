@@ -6,7 +6,9 @@ Zustand statt Löschen. Alles andere ist Ablage.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
 
 import pytest
 
@@ -156,6 +158,91 @@ def test_revision_write_rollt_bei_fehler_komplett_zurueck(
     monkeypatch.setattr(store, "_write_revision_locked", original)
     retry = _source_event(store, identity, "Nachher")
     assert retry.status == "updated" and retry.event.revision == 2
+
+
+def _parallel_source_events(
+    stores: list[EpisodeStore],
+    identities_and_bodies: list[tuple[SourceIdentity, str]],
+):
+    barrier = Barrier(len(stores))
+
+    def run(
+        store: EpisodeStore, identity_and_body: tuple[SourceIdentity, str],
+    ):
+        barrier.wait()
+        identity, body = identity_and_body
+        return _source_event(store, identity, body)
+
+    with ThreadPoolExecutor(max_workers=len(stores)) as executor:
+        futures = [
+            executor.submit(run, store, identity_and_body)
+            for store, identity_and_body in zip(stores, identities_and_bodies, strict=True)
+        ]
+        return [future.result(timeout=10) for future in futures]
+
+
+def test_parallel_ingest_gleicher_identity_und_inhalt_ist_idempotent(tmp_path) -> None:
+    path = tmp_path / "parallel-same.sqlite3"
+    stores = [EpisodeStore(path), EpisodeStore(path)]
+    identity = SourceIdentity("imap", "account-a", "parallel-same")
+    try:
+        results = _parallel_source_events(
+            stores, [(identity, "Gleicher Inhalt"), (identity, "Gleicher Inhalt")],
+        )
+
+        assert sorted(result.status for result in results) == ["created", "unchanged"]
+        assert len({result.event.id for result in results}) == 1
+        assert len(stores[0].raw_events()) == 1
+        assert len(stores[0].revisions(results[0].event.id)) == 1
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_parallel_ingest_gleicher_identity_und_anderer_inhalt_bleibt_konsistent(
+    tmp_path,
+) -> None:
+    path = tmp_path / "parallel-update.sqlite3"
+    stores = [EpisodeStore(path), EpisodeStore(path)]
+    identity = SourceIdentity("imap", "account-a", "parallel-update")
+    try:
+        results = _parallel_source_events(
+            stores, [(identity, "Inhalt A"), (identity, "Inhalt B")],
+        )
+
+        assert sorted(result.status for result in results) == ["created", "updated"]
+        assert len({result.event.id for result in results}) == 1
+        event_id = results[0].event.id
+        history = stores[0].revisions(event_id)
+        current = stores[0].get(event_id)
+        assert [item.revision for item in history] == [1, 2]
+        assert {item.body for item in history} == {"Inhalt A", "Inhalt B"}
+        assert current.to_dict() == history[-1].to_dict()
+        assert all(item.digest == canonical_digest(item) for item in history)
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_parallel_ingest_unterschiedlicher_identity_bleibt_getrennt(tmp_path) -> None:
+    path = tmp_path / "parallel-distinct.sqlite3"
+    stores = [EpisodeStore(path), EpisodeStore(path)]
+    identities = [
+        SourceIdentity("imap", "account-a", "parallel-one"),
+        SourceIdentity("imap", "account-a", "parallel-two"),
+    ]
+    try:
+        results = _parallel_source_events(
+            stores, [(identities[0], "Danke."), (identities[1], "Danke.")],
+        )
+
+        assert [result.status for result in results] == ["created", "created"]
+        assert len({result.event.id for result in results}) == 2
+        assert len(stores[0].raw_events()) == 2
+        assert all(len(stores[0].revisions(result.event.id)) == 1 for result in results)
+    finally:
+        for store in stores:
+            store.close()
 
 
 # -- Zustand ----------------------------------------------------------------

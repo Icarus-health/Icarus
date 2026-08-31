@@ -27,6 +27,7 @@ from icarus_memory import (
     Task,
     TaskStore,
     WorkspaceStore,
+    canonical_digest,
 )
 from icarus_memory.audit import AuditLog
 from icarus_memory.migrations import (
@@ -521,7 +522,20 @@ def test_episodes_v1_werden_ohne_inhaltsverlust_zu_canonical_events(tmp_path: Pa
     store = EpisodeStore(path)
     migrated = store.get("e-legacy")
     migrated_summary = store.get("z-legacy")
+    history = store.revisions("e-legacy")
+    summary_history = store.revisions("z-legacy")
     store.close()
+
+    connection = sqlite3.connect(path)
+    try:
+        current_digest = connection.execute(
+            "SELECT digest FROM episodes WHERE id = 'e-legacy'"
+        ).fetchone()[0]
+        revision_digest = connection.execute(
+            "SELECT digest FROM episode_revisions WHERE event_id = 'e-legacy' AND revision = 1"
+        ).fetchone()[0]
+    finally:
+        connection.close()
 
     assert _version(path) == EPISODES_SCHEMA_VERSION
     assert migrated.id == source.id and migrated.body == source.body
@@ -529,7 +543,16 @@ def test_episodes_v1_werden_ohne_inhaltsverlust_zu_canonical_events(tmp_path: Pa
     assert migrated.participants == ["Claudia"] and migrated.project_id == "p-1"
     assert migrated.source_identity.native_source_id == "e-legacy"
     assert migrated_summary.artifact.value == "derived"
-    assert len(EpisodeStore(path).revisions("e-legacy")) == 1
+    assert migrated.digest == canonical_digest(migrated)
+    assert current_digest == migrated.digest
+    assert revision_digest == migrated.digest
+    assert history[0].digest == migrated.digest
+    assert history[0].digest == canonical_digest(history[0])
+    assert migrated.raw_metadata["legacy_body_digest"] == source.digest
+    assert migrated_summary.digest == canonical_digest(migrated_summary)
+    assert summary_history[0].digest == migrated_summary.digest
+    assert summary_history[0].digest == canonical_digest(summary_history[0])
+    assert migrated_summary.raw_metadata["legacy_body_digest"] == summary.digest
 
 
 def test_legacy_index_mit_richtigem_namen_aber_falschem_vertrag_wird_abgewiesen(

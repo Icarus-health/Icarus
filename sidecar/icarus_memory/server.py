@@ -11,16 +11,20 @@ Angriffsweg.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
 import shlex
 import sys
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, AsyncIterator
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -29,11 +33,12 @@ from .audit import AuditLog
 from .backends import CogneeBackend
 from .backup import (
     BackupError,
+    RestoreRollbackError,
+    create_backup as create_backup_set,
     export_model,
     import_model,
-    list_snapshots,
-    restore,
-    snapshot,
+    list_backups,
+    restore_backup as restore_backup_set,
 )
 from . import (
     briefing, config, entscheidungen, mcp_client, personen,
@@ -90,6 +95,67 @@ UI_ENV = "ICARUS_UI_DIR"
 #: gesamte persönliche Gedächtnis im lokalen Netz.
 HOST_ENV = "ICARUS_SIDECAR_HOST"
 DEFAULT_HOST = "127.0.0.1"
+
+
+class _MaintenanceUnavailable(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class _OperationalLifecycle:
+    """Nicht persistierter Laufzustand, der einen Restore überleben muss."""
+
+    scheduler_running: bool
+
+
+class _MaintenanceGate:
+    """Lässt normale Requests parallel, Restore aber exklusiv laufen.
+
+    Der Restore ersetzt alle offenen SQLite-Dateien. Nur den Scheduler zu
+    stoppen reicht nicht: Ein bereits laufender FastAPI-Thread könnte sonst
+    nach dem Austausch noch in den alten Inode schreiben. Das Gate wartet auf
+    laufende Requests und hält neue bis zum vollständigen Reopen zurück.
+    """
+
+    def __init__(self) -> None:
+        self._condition = asyncio.Condition()
+        self._active = 0
+        self._maintenance = False
+        self._fatal_reason: str | None = None
+
+    def fail_closed(self, reason: str) -> None:
+        """Lässt nach einem gescheiterten Rollback nur den Neustart als Ausweg."""
+
+        self._fatal_reason = reason
+
+    @asynccontextmanager
+    async def enter(self, *, exclusive: bool) -> AsyncIterator[None]:
+        async with self._condition:
+            if exclusive:
+                await self._condition.wait_for(
+                    lambda: not self._maintenance or self._fatal_reason is not None
+                )
+                if self._fatal_reason is not None:
+                    raise _MaintenanceUnavailable(self._fatal_reason)
+                self._maintenance = True
+                await self._condition.wait_for(lambda: self._active == 0)
+            else:
+                await self._condition.wait_for(
+                    lambda: not self._maintenance or self._fatal_reason is not None
+                )
+                if self._fatal_reason is not None:
+                    raise _MaintenanceUnavailable(self._fatal_reason)
+                self._active += 1
+        try:
+            yield
+        finally:
+            async with self._condition:
+                if exclusive:
+                    if self._fatal_reason is None:
+                        self._maintenance = False
+                else:
+                    self._active -= 1
+                self._condition.notify_all()
 
 
 def _ui_dir() -> Path | None:
@@ -165,8 +231,8 @@ class ExportIn(BaseModel):
 
 
 class RestoreIn(BaseModel):
-    # Nur der Dateiname, nie ein Pfad. `Path(name).name` wirft alles davor weg;
-    # so ist „../../etc/passwd" schlicht „passwd" und findet sich nicht.
+    # Nur der exakte Satzname, nie ein Pfad. Der Endpunkt verwirft Präfixe
+    # nicht still, sondern lehnt jede Abweichung vom reinen Namen ab.
     name: str = Field(min_length=1)
 
 
@@ -388,7 +454,11 @@ def _docke_mcp_an(app: FastAPI) -> None:
     app.state.mcp_fehler = fehler
 
 
-def _build_agent(app: FastAPI) -> Agent:
+def _build_agent(
+    app: FastAPI,
+    *,
+    scheduler_running: bool | None = None,
+) -> Agent:
     """Baut Konnektoren, Werkzeuge und Agent aus der aktuellen Umgebung.
 
     Als eigene Funktion, weil das **zweimal** gebraucht wird: beim Start und
@@ -438,11 +508,15 @@ def _build_agent(app: FastAPI) -> Agent:
     app.state.summarizer = Summarizer(
         episodes=app.state.episodes, provider=agent.provider
     )
-    _wire_scheduler(app)
+    _wire_scheduler(app, should_run=scheduler_running)
     return agent
 
 
-def _wire_scheduler(app: FastAPI) -> None:
+def _wire_scheduler(
+    app: FastAPI,
+    *,
+    should_run: bool | None = None,
+) -> None:
     """Hängt den Zeitplan an die aktuellen Bausteine.
 
     Muss nach jedem Agentenneubau erneut laufen: Der Verdichter darin ist ein
@@ -470,8 +544,102 @@ def _wire_scheduler(app: FastAPI) -> None:
         interval_minutes=plan.interval_minutes,
         with_model=plan.with_model,
     )
-    if plan.enabled:
+    # Beim normalen Start folgt der Thread dem persistierten Plan. Restore und
+    # Rollback übergeben dagegen den tatsächlichen Vorzustand: Ein bewusst
+    # gestoppter Scheduler darf nicht durch den Rebuild anspringen, ein zuvor
+    # laufender muss danach wieder laufen.
+    if (plan.enabled if should_run is None else should_run):
         scheduler.start()
+
+
+def _close_operational_state(app: FastAPI) -> _OperationalLifecycle:
+    """Stoppt Schreiber und schließt alle sieben Live-Store-Verbindungen."""
+
+    scheduler = getattr(app.state, "scheduler", None)
+    lifecycle = _OperationalLifecycle(
+        scheduler_running=(
+            scheduler is not None and bool(scheduler.state().get("running"))
+        )
+    )
+    if scheduler is not None and not scheduler.stop():
+        raise BackupError(
+            "Der Hintergrundprozess konnte für die Wiederherstellung nicht "
+            "sicher angehalten werden."
+        )
+    try:
+        _loese_mcp(app)
+        handles = [
+            getattr(app.state, "backend", None),
+            getattr(app.state, "episodes", None),
+            getattr(app.state, "tasks", None),
+            getattr(app.state, "workspace", None),
+            getattr(app.state, "proposals", None),
+            getattr(app.state, "audit", None),
+            getattr(app.state, "regeln", None),
+        ]
+        seen: set[int] = set()
+        for handle in handles:
+            if handle is None or id(handle) in seen:
+                continue
+            seen.add(id(handle))
+            close = getattr(handle, "close", None)
+            if close is not None:
+                close()
+    except Exception as exc:
+        try:
+            _open_operational_state(app, lifecycle=lifecycle)
+        except Exception as reopen_exc:
+            raise RestoreRollbackError(
+                "Der Betriebszustand konnte vor dem Restore nicht sicher "
+                "geschlossen und anschließend nicht wieder geöffnet werden."
+            ) from reopen_exc
+        raise BackupError(
+            "Der Betriebszustand konnte für den Restore nicht sicher geschlossen werden."
+        ) from exc
+    return lifecycle
+
+
+def _open_operational_state(
+    app: FastAPI,
+    *,
+    lifecycle: _OperationalLifecycle | None = None,
+) -> None:
+    """Öffnet den kompletten Satz neu und verdrahtet Agent/Scheduler darauf."""
+
+    directory = _data_dir()
+    opened: list[Any] = []
+    try:
+        backend = CogneeBackend(directory / "self-model.sqlite3")
+        opened.append(backend)
+        audit = AuditLog(directory / "audit.sqlite3")
+        opened.append(audit)
+        tasks = TaskStore(directory / "tasks.sqlite3")
+        opened.append(tasks)
+        workspace = WorkspaceStore(directory / "workspace.sqlite3")
+        opened.append(workspace)
+        episodes = EpisodeStore(directory / "episodes.sqlite3")
+        opened.append(episodes)
+        proposals = ProposalStore(directory / "proposals.sqlite3")
+        opened.append(proposals)
+        regeln = RegelStore(directory / "regeln.sqlite3")
+        opened.append(regeln)
+    except Exception:
+        for handle in reversed(opened):
+            handle.close()
+        raise
+
+    app.state.backend = backend
+    app.state.store = SelfModelStore(backend, subject_id="local")
+    app.state.audit = audit
+    app.state.tasks = tasks
+    app.state.workspace = workspace
+    app.state.episodes = episodes
+    app.state.proposals = proposals
+    app.state.regeln = regeln
+    _build_agent(
+        app,
+        scheduler_running=(lifecycle.scheduler_running if lifecycle else None),
+    )
 
 
 def create_app(
@@ -484,6 +652,23 @@ def create_app(
     proposals: ProposalStore | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Icarus", version="0.1.0")
+    maintenance = _MaintenanceGate()
+
+    @app.middleware("http")
+    async def maintenance_gate(request: Request, call_next):
+        presented = request.headers.get("x-icarus-token")
+        authenticated = expected is None or (
+            presented is not None and secrets.compare_digest(presented, expected)
+        )
+        exclusive = (
+            request.method == "POST" and request.url.path == "/backups/restore"
+            and authenticated
+        )
+        try:
+            async with maintenance.enter(exclusive=exclusive):
+                return await call_next(request)
+        except _MaintenanceUnavailable as exc:
+            return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     if store is None:
         backend = CogneeBackend(_data_dir() / "self-model.sqlite3")
@@ -1868,15 +2053,18 @@ def create_app(
 
     @app.get("/backups", dependencies=guard)
     def backups() -> list[dict[str, Any]]:
-        return list_snapshots(_data_dir() / "sicherungen")
+        return list_backups(_data_dir() / "sicherungen")
 
     @app.post("/backups", dependencies=guard, status_code=201)
     def create_backup() -> dict[str, Any]:
         try:
-            path = snapshot(_data_dir() / "self-model.sqlite3", _data_dir() / "sicherungen")
+            result = create_backup_set(
+                _data_dir(),
+                _data_dir() / "sicherungen",
+            )
         except BackupError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return {"path": str(path), "name": path.name}
+        return result.to_dict()
 
     @app.post("/backups/restore", dependencies=guard)
     def restore_backup(body: RestoreIn) -> dict[str, Any]:
@@ -1886,46 +2074,67 @@ def create_app(
         Zeitplan legt bei jedem Lauf einen Snapshot an, und am Tag, an dem man
         ihn braucht, käme man nicht heran.
 
-        `restore()` legt den bestehenden Stand vorher zur Seite, statt ihn zu
-        überschreiben — eine Wiederherstellung, die den aktuellen Stand
-        vernichtet, wäre ein zweiter Weg, alles zu verlieren.
+        Vor der Aktivierung entsteht ein vollständiger Recovery-Satz des
+        bestehenden Stands. Scheitert Aktivierung oder Reopen, werden alle
+        sieben Stores gemeinsam zurückgerollt.
 
         Nur ein Name, kein Pfad: Sonst wäre dies ein Weg, jede beliebige Datei
         des Rechners zur Datenbank zu erklären.
         """
         ordner = _data_dir() / "sicherungen"
-        ziel = ordner / Path(body.name).name
-        if not ziel.is_file():
+        if body.name != Path(body.name).name:
             raise HTTPException(
                 status_code=404, detail=f"Keine Sicherung namens {body.name}."
             )
+        bekannte = {entry["name"] for entry in list_backups(ordner)}
+        ziel = ordner / body.name
+        if body.name not in bekannte or not ziel.is_dir() or ziel.is_symlink():
+            raise HTTPException(
+                status_code=404, detail=f"Keine Sicherung namens {body.name}."
+            )
+        lifecycle: _OperationalLifecycle | None = None
+
+        def quiesce() -> None:
+            nonlocal lifecycle
+            current = _close_operational_state(app)
+            # Bei einem Fehler nach der Aktivierung quiesziert der Core vor
+            # dem Datei-Rollback ein zweites Mal. Für die anschließende
+            # Wiederaufnahme zählt weiterhin ausschließlich der Zustand vor
+            # dem ursprünglichen Restore.
+            if lifecycle is None:
+                lifecycle = current
+
+        def reopen() -> None:
+            if lifecycle is None:
+                raise RestoreRollbackError(
+                    "Restore-Lifecycle fehlt; Betriebszustand wird nicht blind gestartet."
+                )
+            _open_operational_state(app, lifecycle=lifecycle)
+
         try:
-            restore(ziel, _data_dir() / "self-model.sqlite3")
+            result = restore_backup_set(
+                ziel,
+                _data_dir(),
+                before_activate=quiesce,
+                final_verify=reopen,
+                after_rollback=reopen,
+            )
+        except RestoreRollbackError as exc:
+            maintenance.fail_closed(
+                "ICARUS bleibt nach einem fehlgeschlagenen Restore-Rollback "
+                "im sicheren Wartungszustand. Bitte Anwendung neu starten."
+            )
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except BackupError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-        # Der Store hält eine offene Verbindung auf die alte Datei. Ohne
-        # Neuaufbau liest die App weiter den Stand, den sie gerade ersetzt hat —
-        # die Wiederherstellung sähe aus, als hätte sie nichts getan.
-        #
-        # Genau so aufgebaut wie beim Start, nicht „irgendein SQLite-Backend":
-        # Mit `SqliteBackend` verlöre ein Nutzer mit cognee still die
-        # semantische Suche, und `subject_id` muss derselbe bleiben, sonst
-        # gehört der wiederhergestellte Bestand plötzlich jemand anderem.
-        #
-        # Nur wenn wir das Backend selbst angelegt haben. Wurde eines von außen
-        # hereingereicht (Tests), gehört es nicht uns.
-        if getattr(app.state, "backend", None) is not None:
-            app.state.backend = CogneeBackend(_data_dir() / "self-model.sqlite3")
-            app.state.store = SelfModelStore(app.state.backend, subject_id="local")
-            _build_agent(app)
-
-        return {
-            "restored": ziel.name,
-            "assertions": len(app.state.store.export().assertions),
-            "detail": "Der vorherige Stand liegt daneben als "
-                      "self-model.vor-wiederherstellung-….sqlite3.",
-        }
+        response = result.to_dict()
+        response["assertions"] = len(app.state.store.export().assertions)
+        response["detail"] = (
+            "Der vorherige vollständige Stand bleibt als Recovery-Satz erhalten."
+            if result.recovery_path
+            else "Der vollständige Backup-Satz wurde wiederhergestellt."
+        )
+        return response
 
     @app.post("/export/file", dependencies=guard)
     def export_file(body: ExportIn) -> dict[str, Any]:

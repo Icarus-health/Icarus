@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
-from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -15,11 +13,7 @@ from icarus_memory.backup import (
     BackupError,
     export_model,
     import_model,
-    list_snapshots,
-    restore,
-    snapshot,
 )
-from icarus_memory.model import now
 from icarus_memory.secrets import KNOWN, Keychain, load_into_env, migrate_env_file
 
 
@@ -34,78 +28,6 @@ def befuellte_db(tmp_path: Path) -> Path:
                  Provenance(source_type=SourceType.EMAIL), supersedes=[alt.id])
     backend.close()
     return path
-
-
-# -- Snapshots -------------------------------------------------------------
-
-
-def test_snapshot_ist_vollstaendig(befuellte_db: Path, tmp_path: Path) -> None:
-    ziel = snapshot(befuellte_db, tmp_path / "sicherungen")
-    assert ziel.is_file()
-
-    # Der Snapshot muss für sich allein lesbar sein.
-    store = SelfModelStore(SqliteBackend(ziel), subject_id="test")
-    assert [a.statement for a in store.usable()] == ["Wohnt in Leipzig."]
-    # Und die Ersetzungskette muss mitgekommen sein.
-    assert len(store.export().assertions) == 2
-
-
-def test_snapshot_waehrend_schreibzugriff(befuellte_db: Path, tmp_path: Path) -> None:
-    """Offene Verbindung: ein blosses Dateikopieren ergäbe hier Bruch."""
-    backend = SqliteBackend(befuellte_db)
-    store = SelfModelStore(backend, subject_id="test")
-    store.record("Noch was.", Kind.EPISODE, Provenance(source_type=SourceType.CHAT))
-
-    ziel = snapshot(befuellte_db, tmp_path / "sicherungen")
-    conn = sqlite3.connect(str(ziel))
-    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-    conn.close()
-    backend.close()
-
-
-def test_rotation_haelt_die_anzahl(befuellte_db: Path, tmp_path: Path) -> None:
-    ordner = tmp_path / "sicherungen"
-    basis = now()
-    for i in range(8):
-        snapshot(befuellte_db, ordner, keep=3, at=basis + timedelta(minutes=i))
-    assert len(list_snapshots(ordner)) == 3
-
-
-# -- Wiederherstellung -----------------------------------------------------
-
-
-def test_wiederherstellung_legt_den_alten_stand_beiseite(
-    befuellte_db: Path, tmp_path: Path
-) -> None:
-    ziel = snapshot(befuellte_db, tmp_path / "sicherungen")
-
-    # Nach dem Snapshot etwas hinzufügen, das verloren gehen soll.
-    backend = SqliteBackend(befuellte_db)
-    SelfModelStore(backend, subject_id="test").record(
-        "Nach der Sicherung.", Kind.EPISODE, Provenance(source_type=SourceType.CHAT))
-    backend.close()
-
-    restore(ziel, befuellte_db)
-
-    store = SelfModelStore(SqliteBackend(befuellte_db), subject_id="test")
-    aussagen = [a.statement for a in store.export().assertions]
-    assert "Nach der Sicherung." not in aussagen
-
-    # Der überschriebene Stand ist nicht weg, sondern beiseitegelegt.
-    beiseite = list(befuellte_db.parent.glob("*vor-wiederherstellung*"))
-    assert len(beiseite) == 1
-
-
-def test_beschaedigter_snapshot_wird_abgelehnt(tmp_path: Path) -> None:
-    kaputt = tmp_path / "kaputt.sqlite3"
-    kaputt.write_bytes(b"das ist keine datenbank")
-    with pytest.raises(BackupError, match="nicht lesbar|beschädigt"):
-        restore(kaputt, tmp_path / "ziel.sqlite3")
-
-
-def test_fehlender_snapshot(tmp_path: Path) -> None:
-    with pytest.raises(BackupError, match="Kein Snapshot"):
-        restore(tmp_path / "gibtsnicht.sqlite3", tmp_path / "ziel.sqlite3")
 
 
 # -- Export ----------------------------------------------------------------

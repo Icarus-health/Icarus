@@ -126,13 +126,16 @@ es prüfen können, statt es glauben zu müssen.
 
 Der katastrophale Fehlerfall eines Langzeitgedächtnisses ist simpel: Es ist weg.
 
-**Snapshots** über SQLites Backup-Schnittstelle — konsistent auch bei laufendem
-Schreibzugriff. Ein `cp` der Datei ergäbe unter Last eine beschädigte Kopie.
-Rotation hält die Anzahl begrenzt.
+**Vollständige Sätze** sichern alle sieben operativen Stores über SQLites
+Backup-Schnittstelle — pro Datei konsistent auch bei laufendem Schreibzugriff.
+Ein `cp` während eines offenen WAL wäre nicht sicher. Manifest, SHA-256,
+Integritäts- und Versionsprüfung machen fehlende oder manipulierte Teile vor
+der Veröffentlichung sichtbar.
 
-**Wiederherstellung** prüft den Snapshot vorher auf Lesbarkeit und legt den
-aktuellen Stand beiseite, statt ihn zu überschreiben. Eine Wiederherstellung,
-die den bisherigen Stand vernichtet, ist ein zweiter Weg, alles zu verlieren.
+**Wiederherstellung** prüft den gesamten Satz vor jeder aktiven Änderung,
+migriert nur temporäre Kopien und hält den bisherigen vollständigen Stand als
+Recovery-Satz. Scheitert Aktivierung oder Reopen, werden alle Stores gemeinsam
+zurückgerollt. Details: [`22-backup-restore.md`](22-backup-restore.md).
 
 **Export** als offenes JSON gegen das Schema, optional verschlüsselt
 (PBKDF2-SHA256 mit 600.000 Runden, HMAC-SHA256 gegen Veränderung). Bewusst ohne

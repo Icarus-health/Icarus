@@ -2938,8 +2938,8 @@ async function renderSchedule(panel) {
 // unbenutzbar — ein Sicherungsnetz ohne Griff ist eine Beruhigung ohne Deckung.
 //
 // Das Zurückspielen ersetzt den aktuellen Stand, also wird gefragt. Es ist aber
-// nicht unumkehrbar: Der ersetzte Stand landet daneben, nicht im Nichts. Genau
-// das steht auch in der Rückfrage — sonst klingt sie schlimmer als sie ist.
+// nicht unumkehrbar: Der ersetzte vollständige Stand bleibt als eigener
+// Recovery-Satz erhalten. Genau das steht auch in der Rückfrage.
 
 async function renderBackups(panel) {
   const block = document.createElement("section");
@@ -2953,7 +2953,7 @@ async function renderBackups(panel) {
   note.textContent =
     "Ein Gedächtnis, das Jahre halten soll, hat genau einen katastrophalen " +
     "Fehlerfall. Beim Zurückspielen wird der aktuelle Stand nicht gelöscht, " +
-    "sondern danebengelegt.";
+    "sondern als vollständiger Recovery-Satz erhalten.";
 
   const ergebnis = document.createElement("p");
   ergebnis.className = "meta";
@@ -2985,8 +2985,8 @@ async function renderBackups(panel) {
         // nichts verloren geht. Ohne das lehnt jeder vernünftige Mensch ab.
         const ok = window.confirm(
           `Den Stand von ${lesbarerZeitpunkt(s.name)} zurückspielen?\n\n` +
-          "Der aktuelle Stand wird nicht gelöscht — er landet als eigene " +
-          "Datei daneben."
+          "Der aktuelle Stand wird nicht gelöscht — er bleibt als eigener " +
+          "vollständiger Recovery-Satz erhalten."
         );
         if (!ok) return;
         zurueck.disabled = true;
@@ -3202,7 +3202,7 @@ function baueDienste() {
   return block;
 }
 
-/** „self-model-20260802T122954Z.sqlite3" → „2.8.2026, 12:29". */
+/** „icarus-backup-20260802T122954Z-a1b2c3d4" → „2.8.2026, 12:29". */
 function lesbarerZeitpunkt(name) {
   const m = /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(name);
   if (!m) return name;

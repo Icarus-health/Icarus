@@ -110,13 +110,11 @@ Episodes, Aufgaben oder Kommunikation werden nicht protokolliert.
 
 Unterstützt werden ausschließlich Vorwärtsmigrationen. Es gibt keine
 automatischen Downgrades. Recovery erfolgt mit einer kompatibleren neueren
-ICARUS-Version oder über Backup/Restore. Vollständige lokale Backup-Sätze sind
-bewusst der separate nächste Schritt P2b.
-
-Ein Restore kann heute eine syntaktisch intakte, aber für die laufende Version
-zu neue Self-Model-Datei zunächst an die Zielstelle kopieren; der anschließende
-Store-Aufbau weist sie fail-closed ab. Der versionsbewusste Preflight vor dem
-Austausch gehört zusammen mit vollständigen Recovery-Sätzen in P2b.
+ICARUS-Version oder über Backup/Restore. P2b verwendet denselben Vertrag vor
+jeder Aktivierung: Future- und negative Versionen werden im Preflight
+abgewiesen; unterstützte ältere Versionen werden ausschließlich auf temporären
+Kopien migriert. Das unveränderte Backup-Original bleibt erhalten. Details
+stehen in `docs/22-backup-restore.md`.
 
 ## Tests
 

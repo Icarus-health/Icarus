@@ -251,12 +251,12 @@ migrated = migrate_env_file(Path('.env'), kc); \
 print('Übernommen:', ', '.join(migrated) or 'nichts'); \
 print('Die .env kann nun bereinigt werden.') if migrated else None"
 
-backup: ## Snapshot des Selbstmodells anlegen
+backup: ## Vollständigen lokalen Backup-Satz anlegen
 	@$(BIN)/python -c "\
 import os; from pathlib import Path; \
-from icarus_memory.backup import snapshot; \
+from icarus_memory.backup import create_backup; \
 d = Path(os.environ.get('ICARUS_DATA_DIR', './.icarus-data')); \
-print('Snapshot:', snapshot(d / 'self-model.sqlite3', d / 'sicherungen'))"
+print('Backup:', create_backup(d, d / 'sicherungen').path)"
 
 clean: ## Build-Artefakte entfernen
 	rm -rf build $(VENV) app/src-tauri/target app/src-tauri/binaries/icarus-sidecar

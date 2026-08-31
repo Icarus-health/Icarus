@@ -46,6 +46,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    IndexContract,
+    Migration,
+    run_migrations,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import Provenance, SourceType, ensure_aware, now
 
 
@@ -158,7 +165,7 @@ class Note:
         }
 
 
-_SCHEMA = """
+_CREATE_PROJECTS = """
 CREATE TABLE IF NOT EXISTS projects (
     id         TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
@@ -167,10 +174,10 @@ CREATE TABLE IF NOT EXISTS projects (
     deadline   TEXT,
     name       TEXT NOT NULL,
     document   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-CREATE INDEX IF NOT EXISTS idx_projects_area   ON projects(area);
+)
+"""
 
+_CREATE_NOTES = """
 CREATE TABLE IF NOT EXISTS notes (
     id         TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
@@ -180,10 +187,72 @@ CREATE TABLE IF NOT EXISTS notes (
     title      TEXT NOT NULL,
     body       TEXT NOT NULL,
     document   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id);
-CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);
+)
 """
+
+_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)",
+    "CREATE INDEX IF NOT EXISTS idx_projects_area ON projects(area)",
+    "CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project_id)",
+    "CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at)",
+)
+_INDEX_CONTRACTS = {
+    "idx_projects_status": IndexContract("projects", ("status",)),
+    "idx_projects_area": IndexContract("projects", ("area",)),
+    "idx_notes_project": IndexContract("notes", ("project_id",)),
+    "idx_notes_updated": IndexContract("notes", ("updated_at",)),
+}
+_SCHEMA_CONTRACT = {
+    "projects": {
+        "id",
+        "created_at",
+        "status",
+        "area",
+        "deadline",
+        "name",
+        "document",
+    },
+    "notes": {
+        "id",
+        "created_at",
+        "updated_at",
+        "kind",
+        "project_id",
+        "title",
+        "body",
+        "document",
+    },
+}
+_PRIMARY_KEYS = {"projects": {"id"}, "notes": {"id"}}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="workspace",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_PROJECTS)
+    connection.execute(_CREATE_NOTES)
+    for statement in _INDEXES:
+        connection.execute(statement)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
 
 
 class WorkspaceError(Exception):
@@ -214,9 +283,17 @@ class WorkspaceStore:
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+        try:
+            with self._lock:
+                run_migrations(
+                    self._conn,
+                    store="workspace",
+                    path=self._path,
+                    migrations=_MIGRATIONS,
+                )
+        except Exception:
+            self._conn.close()
+            raise
 
     # -- Projekte ----------------------------------------------------------
 

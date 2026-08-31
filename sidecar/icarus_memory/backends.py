@@ -24,6 +24,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    IndexContract,
+    Migration,
+    run_migrations,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import (
     Assertion,
     Kind,
@@ -158,7 +165,7 @@ def ensure_content_unchanged(old: Assertion, new: Assertion) -> None:
         raise ImmutableContentError(f"Die Herkunft von {old.id} ist unveränderlich.")
 
 
-_SCHEMA = """
+_CREATE_ASSERTIONS = """
 CREATE TABLE IF NOT EXISTS assertions (
     id          TEXT PRIMARY KEY,
     recorded_at TEXT NOT NULL,
@@ -166,16 +173,23 @@ CREATE TABLE IF NOT EXISTS assertions (
     kind        TEXT NOT NULL,
     statement   TEXT NOT NULL,
     document    TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_assertions_status ON assertions(status);
-CREATE INDEX IF NOT EXISTS idx_assertions_kind   ON assertions(kind);
+)
 """
+
+_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_assertions_status ON assertions(status)",
+    "CREATE INDEX IF NOT EXISTS idx_assertions_kind ON assertions(kind)",
+)
+_INDEX_CONTRACTS = {
+    "idx_assertions_status": IndexContract("assertions", ("status",)),
+    "idx_assertions_kind": IndexContract("assertions", ("kind",)),
+}
 
 # Die Regel gilt auch für jeden, der die Bibliothek umgeht: sqlite3 auf der
 # Kommandozeile, ein anderes Programm, ein späterer Codeweg. Deshalb sitzt sie
 # zusätzlich in der Datenbank — dasselbe Muster, mit dem das Audit-Log
 # unveränderlich ist.
-_TRIGGERS = """
+_TRIGGER_CONTENT = """
 CREATE TRIGGER IF NOT EXISTS assertions_inhalt_unveraenderlich
 BEFORE UPDATE ON assertions
 FOR EACH ROW
@@ -193,7 +207,9 @@ BEGIN
     SELECT RAISE(ABORT,
         'assertions: Inhalt ist unveraenderlich - eine Korrektur ist eine neue Aussage');
 END;
+"""
 
+_TRIGGER_DELETE = """
 CREATE TRIGGER IF NOT EXISTS assertions_kein_loeschen
 BEFORE DELETE ON assertions
 FOR EACH ROW
@@ -202,6 +218,47 @@ BEGIN
         'assertions: Loeschen ist nicht erlaubt - nutze redact() fuer den Widerruf');
 END;
 """
+
+_LEGACY_SCHEMA = {
+    "assertions": {"id", "recorded_at", "status", "kind", "statement", "document"}
+}
+_PRIMARY_KEYS = {"assertions": {"id"}}
+_TRIGGER_CONTRACTS = {
+    "assertions_inhalt_unveraenderlich": _TRIGGER_CONTENT,
+    "assertions_kein_loeschen": _TRIGGER_DELETE,
+}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="self_model",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_LEGACY_SCHEMA,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_triggers=_TRIGGER_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_ASSERTIONS)
+    for statement in _INDEXES:
+        connection.execute(statement)
+    connection.execute(_TRIGGER_CONTENT)
+    connection.execute(_TRIGGER_DELETE)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_LEGACY_SCHEMA,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_triggers=_TRIGGER_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
 
 
 class SqliteBackend:
@@ -222,11 +279,17 @@ class SqliteBackend:
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            # Auch eine Datei aus der Zeit vor dieser Regel wird nachgezogen.
-            self._conn.executescript(_TRIGGERS)
-            self._conn.commit()
+        try:
+            with self._lock:
+                run_migrations(
+                    self._conn,
+                    store="self_model",
+                    path=self._path,
+                    migrations=_MIGRATIONS,
+                )
+        except Exception:
+            self._conn.close()
+            raise
 
     @property
     def path(self) -> Path:

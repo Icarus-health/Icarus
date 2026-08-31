@@ -30,6 +30,12 @@ from .backends import CogneeBackend, MemoryBackend, SqliteBackend
 from .consolidation import ConsolidationReport, Consolidator
 from .episodes import Episode, EpisodeKind, EpisodeState, EpisodeStore, digest_of
 from .ingest import IngestReport, ingest_directory
+from .migrations import (
+    IncompatibleLegacySchema,
+    InvalidDatabaseVersion,
+    MigrationError,
+    UnsupportedDatabaseVersion,
+)
 from .proposals import Proposal, ProposalKind, ProposalState, ProposalStore
 from .model import (
     SCHEMA_VERSION,
@@ -69,8 +75,11 @@ __all__ = [
     "EpisodeState",
     "EpisodeStore",
     "IngestReport",
+    "IncompatibleLegacySchema",
+    "InvalidDatabaseVersion",
     "Kind",
     "MemoryBackend",
+    "MigrationError",
     "Note",
     "NoteKind",
     "Priority",
@@ -92,6 +101,7 @@ __all__ = [
     "Task",
     "TaskStatus",
     "TaskStore",
+    "UnsupportedDatabaseVersion",
     "WorkspaceError",
     "WorkspaceStore",
     "__version__",

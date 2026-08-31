@@ -26,6 +26,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    IndexContract,
+    Migration,
+    run_migrations,
+    table_columns,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import Provenance, SourceType, ensure_aware, now
 
 
@@ -114,25 +122,79 @@ class Task:
         }
 
 
-_SCHEMA = """
+_CREATE_TASKS = """
 CREATE TABLE IF NOT EXISTS tasks (
     id         TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
     status     TEXT NOT NULL,
     due        TEXT,
     title      TEXT NOT NULL,
-    document   TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_due    ON tasks(due);
+    document   TEXT NOT NULL,
+    project_id TEXT
+)
 """
 
-# Nachgezogen für Dateien, die vor der Projektebene entstanden sind. Der
-# Inhalt liegt ohnehin im JSON-Dokument; die Spalte ist nur der Index darauf.
-_MIGRATIONS = [
-    "ALTER TABLE tasks ADD COLUMN project_id TEXT",
+_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id)",
-]
+)
+_INDEX_CONTRACTS = {
+    "idx_tasks_status": IndexContract("tasks", ("status",)),
+    "idx_tasks_due": IndexContract("tasks", ("due",)),
+    "idx_tasks_project": IndexContract("tasks", ("project_id",)),
+}
+_LEGACY_SCHEMA = {
+    "tasks": {"id", "created_at", "status", "due", "title", "document"}
+}
+_CURRENT_SCHEMA = {
+    "tasks": {
+        "id",
+        "created_at",
+        "status",
+        "due",
+        "title",
+        "document",
+        "project_id",
+    }
+}
+_PRIMARY_KEYS = {"tasks": {"id"}}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="tasks",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_LEGACY_SCHEMA,
+        allowed_column_sets={
+            "tasks": (_LEGACY_SCHEMA["tasks"], _CURRENT_SCHEMA["tasks"])
+        },
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_TASKS)
+    # Bekannter Legacy-Bestand aus der Zeit vor der Projektebene. Anders als
+    # bisher wird nur die erwartete fehlende Spalte behandelt; andere
+    # OperationalErrors werden nicht verschluckt.
+    if "project_id" not in table_columns(connection, "tasks"):
+        connection.execute("ALTER TABLE tasks ADD COLUMN project_id TEXT")
+    for statement in _INDEXES:
+        connection.execute(statement)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_CURRENT_SCHEMA,
+        expected_indexes=_INDEX_CONTRACTS,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -149,16 +211,17 @@ class TaskStore:
         self._conn = sqlite3.connect(str(self._path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
-        with self._lock:
-            self._conn.executescript(_SCHEMA)
-            for statement in _MIGRATIONS:
-                try:
-                    self._conn.execute(statement)
-                except sqlite3.OperationalError:
-                    # Spalte existiert bereits — der Normalfall bei jedem
-                    # Start nach dem ersten.
-                    pass
-            self._conn.commit()
+        try:
+            with self._lock:
+                run_migrations(
+                    self._conn,
+                    store="tasks",
+                    path=self._path,
+                    migrations=_MIGRATIONS,
+                )
+        except Exception:
+            self._conn.close()
+            raise
 
     # -- Schreiben ---------------------------------------------------------
 

@@ -35,6 +35,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .migrations import (
+    Migration,
+    run_migrations,
+    validate_legacy_or_empty,
+    verify_schema,
+)
 from .model import now
 
 #: Worauf eine Regel eine Stufe senken darf. `deny` steht nicht darin: etwas
@@ -96,6 +102,55 @@ class RegelFehler(Exception):
     pass
 
 
+_CREATE_REGELN = """
+CREATE TABLE IF NOT EXISTS regeln (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    tool TEXT NOT NULL,
+    stufe TEXT NOT NULL,
+    passt_auf TEXT NOT NULL,
+    angelegt_am TEXT NOT NULL,
+    widerrufen_am TEXT
+)
+"""
+_SCHEMA_CONTRACT = {
+    "regeln": {
+        "id",
+        "name",
+        "tool",
+        "stufe",
+        "passt_auf",
+        "angelegt_am",
+        "widerrufen_am",
+    }
+}
+_PRIMARY_KEYS = {"regeln": {"id"}}
+
+
+def _migrate_v1(connection: sqlite3.Connection) -> None:
+    validate_legacy_or_empty(
+        connection,
+        store="rules",
+        path=connection.execute("PRAGMA database_list").fetchone()[2],
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+    connection.execute(_CREATE_REGELN)
+
+
+def _verify_v1(connection: sqlite3.Connection) -> None:
+    verify_schema(
+        connection,
+        expected_tables=_SCHEMA_CONTRACT,
+        expected_primary_keys=_PRIMARY_KEYS,
+    )
+
+
+_MIGRATIONS = (
+    Migration(1, "initial_explicit_version", _migrate_v1, _verify_v1),
+)
+
+
 class RegelStore:
     """Dauerregeln, dauerhaft.
 
@@ -108,21 +163,20 @@ class RegelStore:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self._path, check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS regeln (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                tool TEXT NOT NULL,
-                stufe TEXT NOT NULL,
-                passt_auf TEXT NOT NULL,
-                angelegt_am TEXT NOT NULL,
-                widerrufen_am TEXT
+        try:
+            # Future-Versionen werden abgewiesen, bevor journal_mode die Datei
+            # verändern kann.
+            run_migrations(
+                self._conn,
+                store="rules",
+                path=self._path,
+                migrations=_MIGRATIONS,
             )
-            """
-        )
-        self._conn.commit()
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.commit()
+        except Exception:
+            self._conn.close()
+            raise
 
     def anlegen(
         self,

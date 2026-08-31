@@ -97,8 +97,10 @@ Deletion-Verhalten und eine nachvollziehbare Understanding-Pipeline.
   Kompositionsverantwortungen.
 - Operativer Zustand liegt in sieben SQLite-Dateien: Selbstmodell, Episoden,
   Aufgaben, Workspace, Vorschläge, Regeln und Audit.
-- Es gibt keine gemeinsame, versionierte Migrationsschicht oder atomare
-  Transaktion über diese Stores.
+- Zum Audit-Zeitpunkt gab es keine gemeinsame, versionierte Migrationsschicht.
+  P2a führt inzwischen einen gemeinsamen Runner mit atomaren Migrationen je
+  SQLite-Datei ein; eine storeübergreifende Transaktion ist ausdrücklich nicht
+  Teil dieser Phase.
 - Backup und Restore sichern derzeit nur `self-model.sqlite3`; Aufgaben,
   Projekte, Episoden, Regeln, Vorschläge und Audit sind nicht Teil eines
   konsistenten Wiederherstellungssatzes.
@@ -536,7 +538,8 @@ Rollback. UI-PRs enthalten Browser-Verifikation und Screenshots.
 
    `decision`, `disputed`, `disputed_with`, Statuswechselzeit und echter
    Exporttest.
-4. **P2a — Versionierte SQLite-Migrationen**  
+4. **P2a — Versionierte SQLite-Migrationen — dieser PR**
+
    Migration Runner, `user_version`, atomare Upgrades, Downgrade Guard und
    Recovery-Tests.
 5. **P2b — Vollständige lokale Backup-Sätze**  
@@ -703,6 +706,29 @@ zunehmend von operativen Daten ab.
 **Reason:** Ein Chief of Staff ohne wiederherstellbaren aktuellen Zustand
 verletzt das Eigentums- und Dauerhaftigkeitsversprechen.  
 **Consequences:** zwei kleine Foundation-PRs vor der breiten Domainnutzung.
+
+### A-20.6 — Neue und bestehende SQLite-Schemata nutzen denselben Runner
+
+**Decision:** Jeder operative SQLite-Store registriert geordnete Migrationen;
+leere und bekannte unversionierte Bestände durchlaufen denselben Schritt von
+Version 0 auf die aktuelle Version.
+
+**Context:** Getrennte Pfade für Schemaerzeugung und Bestandsmigration würden
+mit jeder neuen Domain auseinanderlaufen. Die sieben bestehenden Stores hatten
+bisher implizite `CREATE TABLE IF NOT EXISTS`-Initialisierung; Tasks besaß
+zusätzlich einen eigenen, Fehler pauschal ignorierenden ALTER-Pfad.
+
+**Alternatives:** neue Datenbanken direkt mit dem aktuellen Schema erzeugen;
+pro Store unabhängige Ad-hoc-Migrationen; sofortige Datenbankkonsolidierung.
+
+**Reason:** Ein gemeinsamer kleiner Runner macht Version, Reihenfolge,
+Atomarität, Legacy-Prüfung und Future-Version-Guard testbar, ohne die bewährte
+Aufteilung der Dateien zu verändern.
+
+**Consequences:** `PRAGMA user_version` ist der explizite Vertrag. Version 0
+bedeutet leer oder validierter Legacy-Bestand; neuere Versionen werden
+fail-closed abgewiesen. Upgrades werden unterstützt, Downgrades nicht. Die
+Atomaritätsgarantie gilt je Migration und SQLite-Datei, nicht über alle Stores.
 
 ## 15. Definition of Done für eine Phase
 

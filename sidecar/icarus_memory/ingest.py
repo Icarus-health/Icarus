@@ -33,13 +33,14 @@ neu ist.
 from __future__ import annotations
 
 import csv
+import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-from .episodes import EpisodeKind, EpisodeStore
+from .episodes import EpisodeKind, EpisodeStore, SourceIdentity
 from .model import Provenance, SourceType
 from .security import resolve_readable_dir
 
@@ -482,27 +483,41 @@ def ingest_directory(
             continue
 
         try:
-            episode, is_new = store.record(
+            captured_at = datetime.now().astimezone()
+            # Der freigegebene Wurzelpfad wird nicht als Klartext-Konto
+            # gespeichert. Sein stabiler Digest trennt gleichnamige Dateien
+            # unterschiedlicher lokaler Quellen, ohne unnötige Pfaddetails zu
+            # vervielfachen.
+            account = "local-file:" + hashlib.sha256(
+                str(root.resolve()).encode("utf-8")
+            ).hexdigest()[:16]
+            result = store.upsert_source_event(
+                identity=SourceIdentity("local_file", account, item.source_ref),
                 kind=item.kind,
+                event_type=("document.imported" if item.kind is EpisodeKind.DOCUMENT
+                            else "file.imported"),
                 title=item.title,
                 body=item.body,
                 provenance=Provenance(
                     source_type=SourceType.DOCUMENT,
                     source_ref=item.source_ref,
                     extracted_by=f"icarus/ingest/{adapter}",
-                    captured_at=datetime.now().astimezone(),
+                    captured_at=captured_at,
                 ),
                 occurred_at=item.occurred_at,
+                captured_at=captured_at,
                 participants=item.participants,
                 tags=item.tags,
+                trust="imported_document",
+                raw_metadata={"adapter": adapter},
             )
         except Exception as exc:  # noqa: BLE001 - eine Datei darf den Lauf nicht kippen
             report.errors.append(f"{item.source_ref}: {exc}")
             continue
 
-        if is_new:
+        if result.status != "unchanged":
             report.recorded += 1
-            report.episode_ids.append(episode.id)
+            report.episode_ids.append(result.event.id)
         else:
             report.duplicates += 1
 

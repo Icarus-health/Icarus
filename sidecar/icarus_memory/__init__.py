@@ -28,7 +28,10 @@ sie schreibt nicht.
 
 from .backends import CogneeBackend, MemoryBackend, SqliteBackend
 from .consolidation import ConsolidationReport, Consolidator
-from .episodes import Episode, EpisodeKind, EpisodeState, EpisodeStore, digest_of
+from .episodes import (
+    EPISODES_SCHEMA_VERSION, Episode, EpisodeArtifact, EpisodeKind, EpisodeState,
+    EpisodeStore, EventIngestResult, Participant, SourceIdentity, canonical_digest, digest_of,
+)
 from .ingest import IngestReport, ingest_directory
 from .migrations import (
     IncompatibleLegacySchema,
@@ -71,9 +74,12 @@ __all__ = [
     "ConsolidationReport",
     "Consolidator",
     "Episode",
+    "EpisodeArtifact",
     "EpisodeKind",
     "EpisodeState",
     "EpisodeStore",
+    "EPISODES_SCHEMA_VERSION",
+    "EventIngestResult",
     "IngestReport",
     "IncompatibleLegacySchema",
     "InvalidDatabaseVersion",
@@ -83,6 +89,7 @@ __all__ = [
     "Note",
     "NoteKind",
     "Priority",
+    "Participant",
     "Project",
     "ProjectStatus",
     "Proposal",
@@ -96,6 +103,7 @@ __all__ = [
     "SelfModelStore",
     "Sensitivity",
     "SourceType",
+    "SourceIdentity",
     "SqliteBackend",
     "Status",
     "Task",
@@ -106,5 +114,6 @@ __all__ = [
     "WorkspaceStore",
     "__version__",
     "digest_of",
+    "canonical_digest",
     "ingest_directory",
 ]

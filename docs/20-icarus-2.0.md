@@ -1,6 +1,6 @@
 # ICARUS 2.0 — Produkt-, UX- und Architekturplan
 
-Stand: 2026-08-29
+Stand: 2026-08-31
 
 Audit-Ausgangspunkt: `main` auf `c4716d6`, einschließlich PR #53
 „Vom Gedächtnis zum Stabschef — fünf Etappen“. Aktualisierter Planungsstand:
@@ -104,10 +104,11 @@ Deletion-Verhalten und eine nachvollziehbare Understanding-Pipeline.
 - Zum Audit-Zeitpunkt sicherten Backup und Restore nur `self-model.sqlite3`.
   P2b führt inzwischen versionierte vollständige Sätze für alle sieben
   operativen Stores mit Hash-, Integritäts-, Versions- und Rollback-Vertrag ein.
-- Episoden werden heute global über den SHA-256-Digest ihres Textkörpers
-  dedupliziert. Zwei verschiedene Nachrichten mit identischem Inhalt können
-  dadurch kollabieren; Events benötigen stattdessen eine Idempotenz aus Quelle,
-  Account und nativer Quell-ID. Der Digest bleibt Integritätsmerkmal.
+- Zum Audit-Zeitpunkt wurden Episodes global über ihren SHA-256-Digest
+  dedupliziert; zwei verschiedene Nachrichten mit identischem Inhalt konnten
+  dadurch kollabieren. P2c hat dies inzwischen durch eine eindeutige
+  Quellidentität aus Typ, Account und nativer Quell-ID sowie nachvollziehbare
+  Revisionen ersetzt. Der Digest bleibt Integritätsmerkmal.
 - Pending Approvals liegen nur im Prozessspeicher und verschwinden beim
   Neustart. Vor langlebigen Hintergrundaktionen braucht dieser Zustand einen
   sicheren, ablaufenden und weiterhin zentralen Persistenzpfad.
@@ -541,11 +542,12 @@ Rollback. UI-PRs enthalten Browser-Verifikation und Screenshots.
 
    Migration Runner, `user_version`, atomare Upgrades, Downgrade Guard und
    Recovery-Tests.
-5. **P2b — Vollständige lokale Backup-Sätze — dieser PR**
+5. **P2b — Vollständige lokale Backup-Sätze — abgeschlossen durch PR #58**
    Alle sieben operativen Stores als kontrollierten Satz sichern, vor dem
    Restore vollständig prüfen und bei Aktivierungsfehler gemeinsam zurückrollen.
-6. **P2c — Canonical Event Contract auf Episodes**  
-   additive Felder, Legacy-Backfill, Idempotenz- und Provenienztests.
+6. **P2c — Canonical Event Contract auf Episodes — dieser PR**
+   additive Schema-v2-Felder, Legacy-Backfill, source-identity-basierte
+   Idempotenz, Revisionen und Raw-vs-Derived-Provenienztests.
 7. **P2d — Connector Adapter Contract**  
    Cursor, Retry, Dedup, Trust, Scope, Raw Reference und Deletion; noch keine
    breite Connector-Migration.

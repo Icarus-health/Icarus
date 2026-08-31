@@ -20,6 +20,9 @@ from typing import Any
 
 import httpx
 
+from ..episodes import EpisodeKind, Participant, SourceIdentity
+from ..model import Provenance, SourceType, now
+
 
 class CalendarError(Exception):
     pass
@@ -64,6 +67,38 @@ class Event:
             "attendees": list(self.attendees),
             "all_day": self.all_day,
         }
+
+
+def canonical_event(event: Event, *, source_account: str, captured_at: datetime | None = None) -> dict[str, Any]:
+    """Normalisiert einen realen CalDAV-`Event` für `upsert_source_event`.
+
+    Der Kalender schreibt in P2c noch nicht automatisch in den Store; diese
+    Adaptergrenze macht den späteren Sync aber providerunabhängig und ohne LLM
+    möglich.
+    """
+    if not source_account.strip() or not event.uid.strip():
+        raise CalendarError("Kalender-Event benötigt Konto und UID für die Source Identity.")
+    captured = captured_at or now()
+    participants = [Participant(role="attendee", address=value) for value in event.attendees if value]
+    return {
+        "identity": SourceIdentity("caldav", source_account, event.uid),
+        "kind": EpisodeKind.EVENT,
+        "event_type": "calendar.event",
+        "title": event.summary or "(ohne Titel)",
+        "body": event.location,
+        "provenance": Provenance(
+            source_type=SourceType.CALENDAR,
+            source_ref=f"caldav:{event.uid}",
+            captured_at=captured,
+        ),
+        "occurred_at": event.start,
+        "captured_at": captured,
+        "participants": list(event.attendees),
+        "participant_details": participants,
+        "trust": "direct_source",
+        "raw_metadata": {"end": event.end.astimezone(timezone.utc).isoformat() if event.end else None,
+                         "location": event.location, "all_day": event.all_day},
+    }
 
 
 # -- iCalendar -------------------------------------------------------------
@@ -228,6 +263,7 @@ __all__ = [
     "CalendarConnector",
     "CalendarError",
     "Event",
+    "canonical_event",
     "build_event",
     "parse_events",
 ]

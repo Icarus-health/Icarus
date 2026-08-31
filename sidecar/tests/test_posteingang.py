@@ -277,6 +277,9 @@ def test_eine_mail_wird_rohmaterial_kein_wissen(client: TestClient) -> None:
     assert episode["provenance"]["source_type"] == SourceType.EMAIL.value
     assert episode["provenance"]["source_ref"] == "<abc123@example.com>"
     assert "meier@example.com" in episode["participants"][0]
+    assert episode["event_type"] == "email.received"
+    assert episode["source_identity"]["native_source_id"] == "<abc123@example.com>"
+    assert episode["artifact"] == "source"
 
     # Und der Bestand ist unberührt.
     assert client.get("/assertions").json() == vorher
@@ -293,6 +296,7 @@ def test_der_zeitpunkt_ist_der_der_mail(client: TestClient) -> None:
     und die Alterungsurteile wären wertlos."""
     episode = client.post("/mail/1/remember").json()["episode"]
     assert episode["occurred_at"].startswith("2026-07-30")
+    assert episode["captured_at"] != episode["occurred_at"]
 
 
 def test_eine_mail_mit_angriff_wird_material_kein_auftrag(

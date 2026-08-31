@@ -9,7 +9,7 @@ Jeder Konnektor ist optional. Ist er nicht eingerichtet, fehlt sein Bereich im
 Dashboard mit einem Hinweis — die App funktioniert weiter.
 """
 
-from .calendar import CalendarConfig, CalendarConnector, CalendarError, Event
+from .calendar import CalendarConfig, CalendarConnector, CalendarError, Event, canonical_event
 from .mail import MailConfig, MailConnector, MailError, Message
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "CalendarConnector",
     "CalendarError",
     "Event",
+    "canonical_event",
     "MailConfig",
     "MailConnector",
     "MailError",

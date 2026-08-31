@@ -56,7 +56,9 @@ from .scheduler import (
 )
 from .summaries import MIN_EPISODES, Summarizer
 from .connectors import CalendarConfig, CalendarConnector, MailConfig, MailConnector
-from .episodes import EpisodeError, EpisodeKind, EpisodeState, EpisodeStore
+from .episodes import (
+    EpisodeError, EpisodeKind, EpisodeState, EpisodeStore, Participant, SourceIdentity,
+)
 from .ingest import ADAPTERS, TEXT_SUFFIXES, ingest_directory
 from .model import Kind, Provenance, RedactionReason, Sensitivity, SourceType
 from .policy import Policy, PolicyError
@@ -1232,19 +1234,32 @@ def create_app(
         und jedes Stück davon ginge später als Material ins Modell.
         """
         nachricht = _mail_or_404().message(uid)
-        episode, neu = app.state.episodes.record(
-            EpisodeKind.MESSAGE,
-            nachricht.subject or "(kein Betreff)",
-            nachricht.body or nachricht.preview,
-            Provenance(
+        captured_at = datetime.now().astimezone()
+        account = getattr(_mail_or_404(), "source_account_id", "imap:configured")
+        details = []
+        if nachricht.sender:
+            details.append(Participant(role="sender", display_name=nachricht.sender))
+        details.extend(Participant(role="recipient", address=value) for value in nachricht.recipients)
+        details.extend(Participant(role="cc", address=value) for value in nachricht.cc)
+        result = app.state.episodes.upsert_source_event(
+            identity=SourceIdentity("imap", account, nachricht.message_id or f"uid:{uid}"),
+            kind=EpisodeKind.MESSAGE,
+            event_type="email.received",
+            title=nachricht.subject or "(kein Betreff)",
+            body=nachricht.body or nachricht.preview,
+            provenance=Provenance(
                 source_type=SourceType.EMAIL,
                 source_ref=nachricht.message_id or f"imap:{uid}",
-                captured_at=nachricht.date,
+                captured_at=captured_at,
             ),
             occurred_at=nachricht.date,
             participants=[nachricht.sender] if nachricht.sender else [],
+            participant_details=details,
+            captured_at=captured_at,
+            trust="direct_source",
+            raw_metadata={"mailbox": "INBOX", "uid": str(uid)},
         )
-        return {"episode": episode.to_dict(), "new": neu}
+        return {"episode": result.event.to_dict(), "new": result.status == "created", "status": result.status}
 
     # -- Audit -------------------------------------------------------------
 
@@ -1821,8 +1836,8 @@ def create_app(
             occurred_at=body.occurred_at, project_id=body.project_id,
             participants=body.participants, tags=body.tags,
         )
-        # 200 statt 201, wenn der Digest schon bekannt war: Der Aufrufer soll
-        # unterscheiden können, ob er etwas erzeugt hat oder nur wiedergefunden.
+        # Manuelle Eingaben erhalten eigene lokale Source Identities: Gleicher
+        # Text ist nicht automatisch derselbe reale Vorgang.
         return {**episode.to_dict(), "created": is_new}
 
     @app.get("/episodes/{episode_id}", dependencies=guard)

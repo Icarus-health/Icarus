@@ -189,4 +189,7 @@ Keine dieser Mutationen ist Teil des eingecheckten Codes.
 
 Neue operative SQLite-Domains müssen in derselben `STORE_SPECS`-Registry, im
 Manifestvertrag sowie in Backup-, Restore-, Manipulations- und Rollbacktests
-ergänzt werden. P2c bleibt der nächste getrennte Schritt.
+ergänzt werden. P2c hat den bestehenden Episode-Store auf Schema v2 erweitert;
+Format 1 bleibt unverändert, weil Backup-Format und Store-Schema-Version
+getrennte Verträge sind. Ein Episode-v1-Backup wird weiterhin nur auf einer
+temporären Restore-Kopie nach v2 migriert.

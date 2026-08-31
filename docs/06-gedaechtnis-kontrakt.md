@@ -140,12 +140,13 @@ Ehrlich benannt, nach Wirkung geordnet. Keiner dieser Punkte ist heute durch
 einen Test gedeckt.
 
 **Kein Digest an der Quelle — teilweise geschlossen.** `Provenance` hat weiterhin
-keinen Hash. Die neue Episodenschicht trägt ihn jedoch: `Episode.digest` ist ein
-SHA-256 des Rohinhalts, und die Entdopplung hängt an einem UNIQUE-Index darauf,
-nicht an einer Prüfung im Code (`episodes.py`, `tests/test_episoden.py`). Damit
+keinen Hash. Canonical Episodes tragen jedoch einen SHA-256 ihres kanonisch
+gespeicherten Inhaltszustands. Die Idempotenz hängt ausdrücklich **nicht** am
+Digest, sondern an der eindeutigen Quellidentität aus Typ, Konto und nativer
+Kennung; zwei verschiedene Quellen mit demselben Text bleiben getrennt. Damit
 ist der Digest für alles vorhanden, was über die Aufnahme kommt. Offen bleibt er
 für Aussagen, die auf anderem Weg entstehen, und die Neuprüfung darauf ist noch
-nicht gebaut. Siehe [`08-gedaechtnisschichten.md`](08-gedaechtnisschichten.md).
+nicht gebaut. Siehe [`23-canonical-events.md`](23-canonical-events.md).
 
 **Keine Neuprüfung vor der folgenreichen Aktion.** `Policy.grant()` vergleicht
 die getippte Bestätigungsphrase. Die Quelle wird nicht erneut geöffnet. Ein

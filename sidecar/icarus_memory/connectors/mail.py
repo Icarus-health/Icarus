@@ -17,10 +17,11 @@ from __future__ import annotations
 import email
 import email.header
 import email.utils
+import hashlib
 import imaplib
 import smtplib
 import ssl
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from email.message import EmailMessage
 from typing import Any
@@ -93,6 +94,9 @@ class Message:
     reply_to: str = ""
     """`Reply-To`, wo gesetzt. Sonst ist der Absender gemeint."""
 
+    recipients: list[str] = field(default_factory=list)
+    cc: list[str] = field(default_factory=list)
+
     def answer_address(self) -> str:
         """An wen eine Antwort geht. `Reply-To` gewinnt — dafür steht er da."""
         return self.reply_to or self.sender
@@ -108,6 +112,8 @@ class Message:
             "body": self.body,
             "message_id": self.message_id,
             "answer_to": self.answer_address(),
+            "to": list(self.recipients),
+            "cc": list(self.cc),
         }
 
 
@@ -143,6 +149,12 @@ class MailConnector:
 
     def __init__(self, config: MailConfig) -> None:
         self._config = config
+
+    @property
+    def source_account_id(self) -> str:
+        """Stabile, nicht geheime Kennung eines IMAP-Kontos."""
+        raw = f"{self._config.imap_host}\0{self._config.username}".encode("utf-8")
+        return "imap:" + hashlib.sha256(raw).hexdigest()[:16]
 
     # -- Lesen -------------------------------------------------------------
 
@@ -223,6 +235,8 @@ class MailConnector:
                     body=text,
                     message_id=(parsed.get("Message-ID") or "").strip(),
                     reply_to=_decode(parsed.get("Reply-To")),
+                    recipients=[addr for _, addr in email.utils.getaddresses(parsed.get_all("To", [])) if addr],
+                    cc=[addr for _, addr in email.utils.getaddresses(parsed.get_all("Cc", [])) if addr],
                 )
         except (imaplib.IMAP4.error, OSError, ssl.SSLError) as exc:
             raise MailError(f"IMAP-Zugriff fehlgeschlagen: {exc}") from exc

@@ -6,15 +6,21 @@ Zustand statt Löschen. Alles andere ist Ablage.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier
 
 import pytest
 
 from icarus_memory.episodes import (
+    EpisodeArtifact,
     EpisodeError,
     EpisodeKind,
     EpisodeState,
     EpisodeStore,
+    Participant,
+    SourceIdentity,
+    canonical_digest,
     digest_of,
 )
 from icarus_memory.model import Provenance, SourceType, now
@@ -44,8 +50,14 @@ def test_jede_episode_traegt_einen_digest(store: EpisodeStore) -> None:
     episode, _ = _record(store, "Angebot", "Wir liefern bis Freitag.")
 
     assert episode.digest.startswith("sha256:")
-    assert episode.digest == digest_of("Wir liefern bis Freitag.")
+    assert episode.digest != digest_of("Wir liefern bis Freitag.")
     assert store.get(episode.id).digest == episode.digest
+
+
+def test_manuelle_episode_hat_kanonischen_inhaltsdigest(store: EpisodeStore) -> None:
+    episode, _ = _record(store, "Angebot", "Wir liefern bis Freitag.")
+
+    assert episode.digest == canonical_digest(episode)
 
 
 def test_geaenderte_quelle_hat_einen_anderen_digest() -> None:
@@ -56,45 +68,181 @@ def test_geaenderte_quelle_hat_einen_anderen_digest() -> None:
 # -- Entdopplung ------------------------------------------------------------
 
 
-def test_derselbe_inhalt_wird_nicht_zweimal_aufgenommen(store: EpisodeStore) -> None:
-    """Ohne das ist kein Prozess denkbar, der dauerhaft mitläuft."""
-    erste, neu1 = _record(store, "Angebot", "Wir liefern bis Freitag.")
-    zweite, neu2 = _record(store, "Angebot (Kopie)", "Wir liefern bis Freitag.")
-
-    assert neu1 is True
-    assert neu2 is False
-    assert zweite.id == erste.id
-    assert len(store.all_episodes()) == 1
-
-
-def test_wiederholte_aufnahme_erhaelt_zustand_und_herleitung(
-    store: EpisodeStore,
-) -> None:
-    """Der bestehende Eintrag bleibt stehen — sonst käme die Episode erneut in
-    die Verdichtung, und der Nutzer bekäme Vorschläge vorgelegt, die er längst
-    entschieden hat."""
-    episode, _ = _record(store, "Angebot", "Wir liefern bis Freitag.")
-    store.mark_consolidated(episode.id, produced=["a-1"])
-
-    wieder, neu = _record(store, "Angebot", "Wir liefern bis Freitag.")
-
-    assert neu is False
-    assert wieder.state is EpisodeState.CONSOLIDATED
-    assert wieder.produced == ["a-1"]
+def _source_event(store: EpisodeStore, identity: SourceIdentity, body: str, **overrides):
+    values = {
+        "identity": identity, "kind": EpisodeKind.MESSAGE,
+        "event_type": "email.received", "title": "Angebot", "body": body,
+        "provenance": _prov(identity.native_source_id),
+    }
+    values.update(overrides)
+    return store.upsert_source_event(**values)
 
 
-def test_entdopplung_haengt_am_index_nicht_am_code(store: EpisodeStore) -> None:
-    """Ein zweiter Aufnahmeweg könnte die Prüfung vergessen; der Index nicht."""
+def test_quellidentitaet_ist_idempotent_und_erhaelt_zustand(store: EpisodeStore) -> None:
+    identity = SourceIdentity("imap", "account-a", "message-1")
+    erste = _source_event(store, identity, "Wir liefern bis Freitag.")
+    store.mark_consolidated(erste.event.id, produced=["a-1"])
+    zweite = _source_event(store, identity, "Wir liefern bis Freitag.")
+
+    assert erste.status == "created"
+    assert zweite.status == "unchanged"
+    assert zweite.event.id == erste.event.id
+    assert zweite.event.state is EpisodeState.CONSOLIDATED
+    assert zweite.event.produced == ["a-1"]
+    assert len(store.revisions(erste.event.id)) == 1
+
+
+def test_gleicher_text_aber_andere_source_identity_bleibt_getrennt(store: EpisodeStore) -> None:
+    erste = _source_event(store, SourceIdentity("imap", "account-a", "one"), "Danke.")
+    zweite = _source_event(store, SourceIdentity("imap", "account-a", "two"), "Danke.")
+
+    assert erste.event.digest == zweite.event.digest
+    assert erste.event.id != zweite.event.id
+    assert len(store.raw_events()) == 2
+
+
+def test_gleiches_native_id_in_zwei_konten_bleibt_getrennt(store: EpisodeStore) -> None:
+    erste = _source_event(store, SourceIdentity("imap", "account-a", "123"), "Danke.")
+    zweite = _source_event(store, SourceIdentity("imap", "account-b", "123"), "Danke.")
+
+    assert erste.event.id != zweite.event.id
+    assert len(store.raw_events()) == 2
+
+
+def test_source_identity_wird_auch_auf_datenbankebene_erzwungen(store: EpisodeStore) -> None:
     import sqlite3
 
-    _record(store, "Angebot", "Wir liefern bis Freitag.")
+    result = _source_event(store, SourceIdentity("imap", "account-a", "message-1"), "Text")
+    episode = result.event
     with pytest.raises(sqlite3.IntegrityError):
-        store._conn.execute(  # noqa: SLF001 - genau die Umgehung ist der Test
-            "INSERT INTO episodes (id, digest, kind, state, recorded_at, "
-            "title, body, document) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("e-vorbei", digest_of("Wir liefern bis Freitag."), "message", "new",
-             now().isoformat(), "Am Code vorbei", "egal", "{}"),
+        store._conn.execute(  # noqa: SLF001 - Umgehung prueft den Indexvertrag
+            "INSERT INTO episodes (id, digest, kind, state, recorded_at, occurred_at, project_id, title, body, "
+            "source_type, source_account, native_source_id, event_type, captured_at, source_updated_at, artifact, "
+            "scope_id, trust, raw_metadata, revision, source_state, document) "
+            "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, ?, '{}', 1, 'active', '{}')",
+            ("e-vorbei", episode.digest, "message", "new", now().isoformat(), "Kopie", "Text",
+             "imap", "account-a", "message-1", "email.received", now().isoformat(), "source", "direct_source"),
         )
+
+
+def test_geaenderter_quellvorgang_erzeugt_revision_keinen_neuen_event(store: EpisodeStore) -> None:
+    identity = SourceIdentity("imap", "account-a", "message-1")
+    erste = _source_event(store, identity, "Bis Freitag.")
+    zweite = _source_event(store, identity, "Bis Montag.")
+
+    assert zweite.status == "updated"
+    assert zweite.event.id == erste.event.id
+    assert zweite.event.revision == 2
+    assert zweite.previous_revision == 1
+    history = store.revisions(erste.event.id)
+    assert [item.body for item in history] == ["Bis Freitag.", "Bis Montag."]
+    assert history[0].digest != history[1].digest
+
+
+def test_revision_write_rollt_bei_fehler_komplett_zurueck(
+    store: EpisodeStore, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = SourceIdentity("imap", "account-a", "message-atomic")
+    first = _source_event(store, identity, "Vorher")
+    original = store._write_revision_locked  # noqa: SLF001 - gezielte Failure Injection
+
+    def fail(_: object) -> None:
+        raise RuntimeError("Revision fehlgeschlagen")
+
+    monkeypatch.setattr(store, "_write_revision_locked", fail)
+    with pytest.raises(RuntimeError, match="Revision"):
+        _source_event(store, identity, "Nachher")
+
+    assert store.get(first.event.id).body == "Vorher"
+    assert [item.revision for item in store.revisions(first.event.id)] == [1]
+    monkeypatch.setattr(store, "_write_revision_locked", original)
+    retry = _source_event(store, identity, "Nachher")
+    assert retry.status == "updated" and retry.event.revision == 2
+
+
+def _parallel_source_events(
+    stores: list[EpisodeStore],
+    identities_and_bodies: list[tuple[SourceIdentity, str]],
+):
+    barrier = Barrier(len(stores))
+
+    def run(
+        store: EpisodeStore, identity_and_body: tuple[SourceIdentity, str],
+    ):
+        barrier.wait()
+        identity, body = identity_and_body
+        return _source_event(store, identity, body)
+
+    with ThreadPoolExecutor(max_workers=len(stores)) as executor:
+        futures = [
+            executor.submit(run, store, identity_and_body)
+            for store, identity_and_body in zip(stores, identities_and_bodies, strict=True)
+        ]
+        return [future.result(timeout=10) for future in futures]
+
+
+def test_parallel_ingest_gleicher_identity_und_inhalt_ist_idempotent(tmp_path) -> None:
+    path = tmp_path / "parallel-same.sqlite3"
+    stores = [EpisodeStore(path), EpisodeStore(path)]
+    identity = SourceIdentity("imap", "account-a", "parallel-same")
+    try:
+        results = _parallel_source_events(
+            stores, [(identity, "Gleicher Inhalt"), (identity, "Gleicher Inhalt")],
+        )
+
+        assert sorted(result.status for result in results) == ["created", "unchanged"]
+        assert len({result.event.id for result in results}) == 1
+        assert len(stores[0].raw_events()) == 1
+        assert len(stores[0].revisions(results[0].event.id)) == 1
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_parallel_ingest_gleicher_identity_und_anderer_inhalt_bleibt_konsistent(
+    tmp_path,
+) -> None:
+    path = tmp_path / "parallel-update.sqlite3"
+    stores = [EpisodeStore(path), EpisodeStore(path)]
+    identity = SourceIdentity("imap", "account-a", "parallel-update")
+    try:
+        results = _parallel_source_events(
+            stores, [(identity, "Inhalt A"), (identity, "Inhalt B")],
+        )
+
+        assert sorted(result.status for result in results) == ["created", "updated"]
+        assert len({result.event.id for result in results}) == 1
+        event_id = results[0].event.id
+        history = stores[0].revisions(event_id)
+        current = stores[0].get(event_id)
+        assert [item.revision for item in history] == [1, 2]
+        assert {item.body for item in history} == {"Inhalt A", "Inhalt B"}
+        assert current.to_dict() == history[-1].to_dict()
+        assert all(item.digest == canonical_digest(item) for item in history)
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_parallel_ingest_unterschiedlicher_identity_bleibt_getrennt(tmp_path) -> None:
+    path = tmp_path / "parallel-distinct.sqlite3"
+    stores = [EpisodeStore(path), EpisodeStore(path)]
+    identities = [
+        SourceIdentity("imap", "account-a", "parallel-one"),
+        SourceIdentity("imap", "account-a", "parallel-two"),
+    ]
+    try:
+        results = _parallel_source_events(
+            stores, [(identities[0], "Danke."), (identities[1], "Danke.")],
+        )
+
+        assert [result.status for result in results] == ["created", "created"]
+        assert len({result.event.id for result in results}) == 2
+        assert len(stores[0].raw_events()) == 2
+        assert all(len(stores[0].revisions(result.event.id)) == 1 for result in results)
+    finally:
+        for store in stores:
+            store.close()
 
 
 # -- Zustand ----------------------------------------------------------------
@@ -223,10 +371,71 @@ def test_episoden_haengen_an_projekten(store: EpisodeStore) -> None:
     assert store.by_project("p-1") == []
 
 
+def test_operativer_project_link_veraendert_nicht_den_source_digest(store: EpisodeStore) -> None:
+    event = _source_event(store, SourceIdentity("imap", "account-a", "project-link"), "Text").event
+    digest = event.digest
+    store.link_project(event.id, "p-1")
+
+    assert store.get(event.id).digest == digest
+    assert len(store.revisions(event.id)) == 1
+
+
 def test_beteiligte_werden_festgehalten(store: EpisodeStore) -> None:
     """Die Rohdaten für Kontakte und Verläufe."""
     episode, _ = _record(store, "Mail", "Text", participants=["meier@example.com"])
     assert store.get(episode.id).participants == ["meier@example.com"]
+
+
+def test_structured_participants_bleiben_rohdaten_ohne_person_merge(store: EpisodeStore) -> None:
+    result = _source_event(
+        store, SourceIdentity("imap", "account-a", "message-1"), "Text",
+        participant_details=[Participant(role="sender", display_name="Claudia", address="claudia@example.com")],
+    )
+
+    event = store.get(result.event.id)
+    assert event.participants == ["Claudia"]
+    assert event.participant_details[0].to_dict() == {
+        "role": "sender", "display_name": "Claudia", "address": "claudia@example.com",
+    }
+
+
+def test_summary_ist_derived_und_raw_query_sieht_sie_nicht(store: EpisodeStore) -> None:
+    source, _ = _record(store, "Quelle", "Rohtext")
+    summary = store.record_summary("Rückblick", "Zusammenfassung", "2026-08", [source.id])
+
+    assert source.artifact is EpisodeArtifact.SOURCE
+    assert summary.artifact is EpisodeArtifact.DERIVED
+    assert [event.id for event in store.raw_events()] == [source.id]
+    assert [event.id for event in store.derived_artifacts()] == [summary.id]
+    assert summary not in store.pending()
+
+
+def test_geloeschte_summary_entfernt_auch_ihre_revisionen(store: EpisodeStore) -> None:
+    source, _ = _record(store, "Quelle", "Rohtext")
+    summary = store.record_summary("Rückblick", "Zusammenfassung", "2026-08", [source.id])
+
+    assert store.delete_summary(summary.id) == 1
+    with pytest.raises(EpisodeError, match="Unbekannte"):
+        store.revisions(summary.id)
+
+
+def test_inconsistent_source_category_is_rejected(store: EpisodeStore) -> None:
+    with pytest.raises(EpisodeError, match="passt nicht"):
+        store.upsert_source_event(
+            identity=SourceIdentity("imap", "account-a", "bad-category"),
+            kind=EpisodeKind.MESSAGE,
+            event_type="calendar.event",
+            title="Falsch", body="Text", provenance=_prov("bad-category"),
+        )
+
+
+def test_invalid_source_identity_fails_closed(store: EpisodeStore) -> None:
+    with pytest.raises(EpisodeError, match="source_account"):
+        _source_event(store, SourceIdentity("imap", " ", "message-1"), "Text")
+    with pytest.raises(EpisodeError, match="kontrollierter Connector"):
+        SourceIdentity("unbekannter typ", "account-a", "message-1")
+    with pytest.raises(EpisodeError, match="Steuerzeichen"):
+        SourceIdentity("imap", "account-a", "message\n1")
 
 
 def test_ueberleben_des_neustarts(tmp_path) -> None:

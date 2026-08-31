@@ -33,7 +33,7 @@ from typing import Any, Callable
 from .audit import AuditLog
 from .backends import SqliteBackend
 from .crypto import KDF_ITERATIONS, DecryptionError, seal_json, unseal_json
-from .episodes import EpisodeStore
+from .episodes import EPISODES_SCHEMA_VERSION, EpisodeStore
 from .migrations import MigrationError
 from .proposals import ProposalStore
 from .regeln import RegelStore
@@ -109,7 +109,7 @@ def _open_self_model(path: Path) -> SqliteBackend:
 
 STORE_SPECS = (
     StoreSpec("self_model", "self-model.sqlite3", 1, _open_self_model),
-    StoreSpec("episodes", "episodes.sqlite3", 1, EpisodeStore),
+    StoreSpec("episodes", "episodes.sqlite3", EPISODES_SCHEMA_VERSION, EpisodeStore),
     StoreSpec("tasks", "tasks.sqlite3", 1, TaskStore),
     StoreSpec("workspace", "workspace.sqlite3", 1, WorkspaceStore),
     StoreSpec("proposals", "proposals.sqlite3", 1, ProposalStore),

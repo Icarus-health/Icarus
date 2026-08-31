@@ -17,7 +17,8 @@ from fastapi.testclient import TestClient
 from icarus_memory import MemoryBackend, Provenance, SelfModelStore, SourceType
 from icarus_memory.agent import Agent
 from icarus_memory.audit import AuditLog
-from icarus_memory.connectors.calendar import build_event, parse_events
+from icarus_memory.connectors.calendar import build_event, canonical_event, parse_events
+from icarus_memory.episodes import EpisodeStore
 from icarus_memory.connectors.mail import Message, _decode
 from icarus_memory.model import now
 from icarus_memory.policy import ActionClass, ApprovalLevel, Policy
@@ -128,6 +129,30 @@ def test_teilnehmer_und_ort() -> None:
     events = {e.uid: e for e in parse_events(ICAL)}
     assert events["evt-2"].attendees == ["anna@example.com", "bo@example.com"]
     assert events["evt-1"].location == "Praxis Dr. Meier"
+
+
+def test_kalender_event_normalisiert_deterministisch_ohne_sync(tmp_path: Path) -> None:
+    event = {item.uid: item for item in parse_events(ICAL)}["evt-2"]
+    captured = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
+    store = EpisodeStore(tmp_path / "episodes.sqlite3")
+
+    first = store.upsert_source_event(**canonical_event(
+        event, source_account="caldav:account-a", captured_at=captured,
+    ))
+    unchanged = store.upsert_source_event(**canonical_event(
+        event, source_account="caldav:account-a", captured_at=captured,
+    ))
+    changed_event = parse_events(ICAL.replace("Team-Runde", "Team-Runde verschoben"))[0]
+    changed = store.upsert_source_event(**canonical_event(
+        changed_event, source_account="caldav:account-a", captured_at=captured,
+    ))
+
+    assert first.event.event_type == "calendar.event"
+    assert first.event.occurred_at == event.start != first.event.captured_at
+    assert [p.address for p in first.event.participant_details] == event.attendees
+    assert unchanged.status == "unchanged"
+    assert changed.status == "updated"
+    assert changed.event.id == first.event.id and changed.event.revision == 2
 
 
 def test_ganztagstermin() -> None:

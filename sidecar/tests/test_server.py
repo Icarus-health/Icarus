@@ -144,14 +144,14 @@ def test_episode_anlegen_und_lesen(voller_client: TestClient) -> None:
     assert r.json()["participants"] == ["Meier"]
 
 
-def test_gleicher_inhalt_meldet_sich_als_bekannt(voller_client: TestClient) -> None:
+def test_gleicher_manueller_inhalt_bleibt_getrennter_vorgang(voller_client: TestClient) -> None:
     body = {"title": "Anruf", "body": "Derselbe Wortlaut."}
     erste = voller_client.post("/episodes", json=body).json()
     zweite = voller_client.post("/episodes", json=body).json()
 
     assert erste["created"] is True
-    assert zweite["created"] is False
-    assert zweite["id"] == erste["id"]
+    assert zweite["created"] is True
+    assert zweite["id"] != erste["id"]
 
 
 def test_offene_episoden_werden_gefiltert(voller_client: TestClient) -> None:

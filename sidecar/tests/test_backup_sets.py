@@ -20,6 +20,7 @@ from typing import Any, Callable
 import pytest
 
 from icarus_memory import (
+    EPISODES_SCHEMA_VERSION,
     EpisodeKind,
     EpisodeStore,
     Kind,
@@ -62,6 +63,8 @@ STORE_FILES = {
     "audit": "audit.sqlite3",
     "rules": "regeln.sqlite3",
 }
+STORE_VERSIONS = {name: (EPISODES_SCHEMA_VERSION if name == "episodes" else 1)
+                  for name in STORE_FILES}
 
 
 def _sha256(path: Path) -> str:
@@ -310,7 +313,7 @@ def test_vollstaendiger_backup_satz_bewahrt_alle_store_daten(
         item = entries[name]
         path = result.path / "stores" / filename
         assert item["file"] == f"stores/{filename}"
-        assert item["schema_version"] == _version(path) == 1
+        assert item["schema_version"] == _version(path) == STORE_VERSIONS[name]
         assert item["sha256"] == _sha256(path)
         assert _integrity(path) == ["ok"]
         assert _raw_snapshot(path) == before[name]
@@ -425,7 +428,62 @@ def test_restore_in_leeren_zustand_stellt_alle_stores_wieder_her(
     assert result.status == "restored"
     assert set(result.stores) == set(STORE_FILES)
     assert _state(empty) == expected
-    assert all(_version(empty / filename) == 1 for filename in STORE_FILES.values())
+    assert all(_version(empty / filename) == STORE_VERSIONS[name]
+               for name, filename in STORE_FILES.items())
+
+
+def test_restore_migriert_episode_v1_nur_auf_temporarer_kopie(
+    backup_set: Path, tmp_path: Path,
+) -> None:
+    """Ein älterer Episode-Satz darf sich im Restore öffnen, nie im Backup ändern."""
+    target = backup_set / "stores" / STORE_FILES["episodes"]
+    connection = sqlite3.connect(target)
+    row = connection.execute("SELECT * FROM episodes LIMIT 1").fetchone()
+    columns = [item[1] for item in connection.execute("PRAGMA table_info(episodes)")]
+    connection.close()
+    assert row is not None
+    values = dict(zip(columns, row))
+    document = json.loads(values["document"])
+    for key in ("source_identity", "source_type", "source_account", "native_source_id",
+                "event_type", "captured_at", "source_updated_at", "artifact", "scope_id",
+                "trust", "raw_metadata", "participant_details", "revision", "source_state"):
+        document.pop(key, None)
+
+    legacy = tmp_path / "episodes-v1.sqlite3"
+    connection = sqlite3.connect(legacy)
+    connection.execute(
+        "CREATE TABLE episodes (id TEXT PRIMARY KEY, digest TEXT NOT NULL, kind TEXT NOT NULL, "
+        "state TEXT NOT NULL, recorded_at TEXT NOT NULL, occurred_at TEXT, project_id TEXT, "
+        "title TEXT NOT NULL, body TEXT NOT NULL, document TEXT NOT NULL)"
+    )
+    connection.execute("CREATE UNIQUE INDEX idx_episodes_digest ON episodes(digest)")
+    connection.execute("CREATE INDEX idx_episodes_state ON episodes(state)")
+    connection.execute("CREATE INDEX idx_episodes_occurred ON episodes(occurred_at)")
+    connection.execute("CREATE INDEX idx_episodes_project ON episodes(project_id)")
+    connection.execute(
+        "INSERT INTO episodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        tuple(values[name] if name != "document" else json.dumps(document, ensure_ascii=False)
+              for name in ("id", "digest", "kind", "state", "recorded_at", "occurred_at",
+                           "project_id", "title", "body", "document")),
+    )
+    connection.execute("PRAGMA user_version = 1")
+    connection.commit()
+    connection.close()
+    os.replace(legacy, target)
+
+    manifest_path = backup_set / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entry = next(item for item in manifest["stores"] if item["name"] == "episodes")
+    entry.update({"schema_version": 1, "bytes": target.stat().st_size, "sha256": _sha256(target)})
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    original_hash = _sha256(target)
+
+    restored = tmp_path / "restored"
+    result = restore_backup(backup_set, restored)
+
+    assert result.migrations["episodes"] == (1, EPISODES_SCHEMA_VERSION)
+    assert _version(restored / STORE_FILES["episodes"]) == EPISODES_SCHEMA_VERSION
+    assert _version(target) == 1 and _sha256(target) == original_hash
 
 
 def test_restore_ersetzt_einen_spaeter_veraenderten_gesamtzustand(

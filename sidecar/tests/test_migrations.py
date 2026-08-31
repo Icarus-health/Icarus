@@ -13,6 +13,8 @@ from typing import Callable
 import pytest
 
 from icarus_memory import (
+    EPISODES_SCHEMA_VERSION,
+    Episode,
     EpisodeKind,
     EpisodeStore,
     Kind,
@@ -76,27 +78,45 @@ def _snapshot(path: Path) -> dict[str, list[tuple]]:
         connection.close()
 
 
+def _legacy_episodes(path: Path) -> None:
+    """Der echte v1-Vertrag, gezielt für v2-Migrations- und Sabotagetests."""
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE episodes (id TEXT PRIMARY KEY, digest TEXT NOT NULL, kind TEXT NOT NULL, "
+        "state TEXT NOT NULL, recorded_at TEXT NOT NULL, occurred_at TEXT, project_id TEXT, "
+        "title TEXT NOT NULL, body TEXT NOT NULL, document TEXT NOT NULL)"
+    )
+    connection.execute("CREATE UNIQUE INDEX idx_episodes_digest ON episodes(digest)")
+    connection.execute("CREATE INDEX idx_episodes_state ON episodes(state)")
+    connection.execute("CREATE INDEX idx_episodes_occurred ON episodes(occurred_at)")
+    connection.execute("CREATE INDEX idx_episodes_project ON episodes(project_id)")
+    connection.execute("PRAGMA user_version = 1")
+    connection.commit()
+    connection.close()
+
+
 StoreFactory = Callable[[Path], object]
 
 
-STORE_SPECS: tuple[tuple[str, StoreFactory, set[str]], ...] = (
-    ("self_model", SqliteBackend, {"assertions"}),
-    ("episodes", EpisodeStore, {"episodes"}),
-    ("tasks", TaskStore, {"tasks"}),
-    ("workspace", WorkspaceStore, {"projects", "notes"}),
-    ("proposals", ProposalStore, {"proposals"}),
-    ("audit", AuditLog, {"audit"}),
-    ("rules", RegelStore, {"regeln"}),
+STORE_SPECS: tuple[tuple[str, StoreFactory, set[str], int], ...] = (
+    ("self_model", SqliteBackend, {"assertions"}, 1),
+    ("episodes", EpisodeStore, {"episodes", "episode_revisions"}, EPISODES_SCHEMA_VERSION),
+    ("tasks", TaskStore, {"tasks"}, 1),
+    ("workspace", WorkspaceStore, {"projects", "notes"}, 1),
+    ("proposals", ProposalStore, {"proposals"}, 1),
+    ("audit", AuditLog, {"audit"}, 1),
+    ("rules", RegelStore, {"regeln"}, 1),
 )
 
 
-@pytest.mark.parametrize(("name", "factory", "expected"), STORE_SPECS)
+@pytest.mark.parametrize(("name", "factory", "expected", "version"), STORE_SPECS)
 @pytest.mark.parametrize("preexisting_empty", [False, True])
 def test_neue_datenbank_laeuft_ueber_migration_null_auf_eins(
     tmp_path: Path,
     name: str,
     factory: StoreFactory,
     expected: set[str],
+    version: int,
     preexisting_empty: bool,
 ) -> None:
     path = tmp_path / f"{name}.sqlite3"
@@ -106,16 +126,17 @@ def test_neue_datenbank_laeuft_ueber_migration_null_auf_eins(
     store = factory(path)
     store.close()  # type: ignore[attr-defined]
 
-    assert _version(path) == 1
+    assert _version(path) == version
     assert _tables(path) == expected
 
 
-@pytest.mark.parametrize(("name", "factory", "_expected"), STORE_SPECS)
+@pytest.mark.parametrize(("name", "factory", "_expected", "target_version"), STORE_SPECS)
 def test_future_version_wird_vor_jeder_aenderung_abgewiesen(
     tmp_path: Path,
     name: str,
     factory: StoreFactory,
     _expected: set[str],
+    target_version: int,
 ) -> None:
     path = tmp_path / f"{name}.sqlite3"
     connection = sqlite3.connect(path)
@@ -136,13 +157,14 @@ def test_future_version_wird_vor_jeder_aenderung_abgewiesen(
     assert not path.with_name(path.name + "-wal").exists()
 
 
-@pytest.mark.parametrize(("name", "factory", "_expected"), STORE_SPECS)
+@pytest.mark.parametrize(("name", "factory", "_expected", "target_version"), STORE_SPECS)
 @pytest.mark.parametrize("invalid_version", [-1, -999])
 def test_negative_version_wird_ohne_python_negativindex_abgewiesen(
     tmp_path: Path,
     name: str,
     factory: StoreFactory,
     _expected: set[str],
+    target_version: int,
     invalid_version: int,
 ) -> None:
     path = tmp_path / f"{name}.sqlite3"
@@ -164,12 +186,13 @@ def test_negative_version_wird_ohne_python_negativindex_abgewiesen(
     assert not path.with_name(path.name + "-wal").exists()
 
 
-@pytest.mark.parametrize(("name", "factory", "_expected"), STORE_SPECS)
+@pytest.mark.parametrize(("name", "factory", "_expected", "target_version"), STORE_SPECS)
 def test_unbekanntes_legacy_schema_wird_nicht_markiert(
     tmp_path: Path,
     name: str,
     factory: StoreFactory,
     _expected: set[str],
+    target_version: int,
 ) -> None:
     path = tmp_path / f"{name}.sqlite3"
     connection = sqlite3.connect(path)
@@ -349,7 +372,7 @@ def test_zwei_verbindungen_initialisieren_dieselbe_datei_sicher(
 
 def test_legacy_bestand_aller_stores_bleibt_unveraendert(tmp_path: Path) -> None:
     provenance = Provenance(source_type=SourceType.CHAT, source_ref="chat:legacy")
-    paths = {name: tmp_path / f"{name}.sqlite3" for name, _, _ in STORE_SPECS}
+    paths = {name: tmp_path / f"{name}.sqlite3" for name, _, _, _ in STORE_SPECS}
 
     backend = SqliteBackend(paths["self_model"])
     model = SelfModelStore(backend, subject_id="test")
@@ -365,6 +388,23 @@ def test_legacy_bestand_aller_stores_bleibt_unveraendert(tmp_path: Path) -> None
         at=T0,
     )
     episodes.close()
+    # Für den übergreifenden Legacy-Test braucht Episodes einen echten v1-
+    # Bestand, nicht nur eine moderne Datei mit zurückgesetztem PRAGMA.
+    paths["episodes"].unlink()
+    _legacy_episodes(paths["episodes"])
+    connection = sqlite3.connect(paths["episodes"])
+    connection.execute(
+        "INSERT INTO episodes VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)",
+        (episode.id, episode.digest, episode.kind.value, episode.state.value,
+         T0.isoformat(), episode.title, episode.body,
+         json.dumps({key: value for key, value in episode.to_dict().items()
+                     if key not in {"source_identity", "source_type", "source_account", "native_source_id",
+                                    "event_type", "captured_at", "source_updated_at", "artifact", "scope_id",
+                                    "trust", "raw_metadata", "participant_details", "revision", "source_state"}},
+                    ensure_ascii=False)),
+    )
+    connection.commit()
+    connection.close()
 
     tasks = TaskStore(paths["tasks"])
     tasks.add("Legacy Aufgabe", provenance, at=T0)
@@ -401,16 +441,18 @@ def test_legacy_bestand_aller_stores_bleibt_unveraendert(tmp_path: Path) -> None
     before: dict[str, dict[str, list[tuple]]] = {}
     for name, path in paths.items():
         connection = sqlite3.connect(path)
-        connection.execute("PRAGMA user_version = 0")
+        if name != "episodes":
+            connection.execute("PRAGMA user_version = 0")
         connection.commit()
         connection.close()
         before[name] = _snapshot(path)
 
-    for name, factory, _ in STORE_SPECS:
+    for name, factory, _, version in STORE_SPECS:
         store = factory(paths[name])
         store.close()  # type: ignore[attr-defined]
-        assert _version(paths[name]) == 1
-        assert _snapshot(paths[name]) == before[name]
+        assert _version(paths[name]) == version
+        if name != "episodes":
+            assert _snapshot(paths[name]) == before[name]
 
 
 def test_bekannte_alte_task_tabelle_wird_gezielt_migriert(tmp_path: Path) -> None:
@@ -452,23 +494,60 @@ def test_bekannte_alte_task_tabelle_wird_gezielt_migriert(tmp_path: Path) -> Non
         connection.close()
 
 
+def test_episodes_v1_werden_ohne_inhaltsverlust_zu_canonical_events(tmp_path: Path) -> None:
+    path = tmp_path / "episodes-v1.sqlite3"
+    _legacy_episodes(path)
+    recorded = T0.isoformat()
+    source = Episode(
+        id="e-legacy", kind=EpisodeKind.DOCUMENT, title="Alt", body="Rohtext",
+        provenance=Provenance(source_type=SourceType.DOCUMENT, source_ref="vault:alt.md"),
+        recorded_at=T0, occurred_at=T0, participants=["Claudia"], project_id="p-1",
+    )
+    summary = Episode(
+        id="z-legacy", kind=EpisodeKind.SUMMARY, title="Rückblick", body="Abgeleitet",
+        provenance=Provenance(source_type=SourceType.INFERENCE), recorded_at=T0,
+    )
+    connection = sqlite3.connect(path)
+    for item in (source, summary):
+        connection.execute(
+            "INSERT INTO episodes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (item.id, item.digest, item.kind.value, item.state.value, recorded,
+             item.occurred_at.isoformat() if item.occurred_at else None, item.project_id,
+             item.title, item.body, json.dumps(item.to_dict(), ensure_ascii=False)),
+        )
+    connection.commit()
+    connection.close()
+
+    store = EpisodeStore(path)
+    migrated = store.get("e-legacy")
+    migrated_summary = store.get("z-legacy")
+    store.close()
+
+    assert _version(path) == EPISODES_SCHEMA_VERSION
+    assert migrated.id == source.id and migrated.body == source.body
+    assert migrated.occurred_at == source.occurred_at
+    assert migrated.participants == ["Claudia"] and migrated.project_id == "p-1"
+    assert migrated.source_identity.native_source_id == "e-legacy"
+    assert migrated_summary.artifact.value == "derived"
+    assert len(EpisodeStore(path).revisions("e-legacy")) == 1
+
+
 def test_legacy_index_mit_richtigem_namen_aber_falschem_vertrag_wird_abgewiesen(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "episodes-wrong-index.sqlite3"
-    store = EpisodeStore(path)
-    store.close()
+    _legacy_episodes(path)
     connection = sqlite3.connect(path)
     connection.execute("DROP INDEX idx_episodes_digest")
     connection.execute("CREATE INDEX idx_episodes_digest ON episodes(state)")
-    connection.execute("PRAGMA user_version = 0")
+    connection.execute("PRAGMA user_version = 1")
     connection.commit()
     connection.close()
 
-    with pytest.raises(IncompatibleLegacySchema):
+    with pytest.raises(MigrationError):
         EpisodeStore(path)
 
-    assert _version(path) == 0
+    assert _version(path) == 1
     connection = sqlite3.connect(path)
     try:
         index = connection.execute(
@@ -487,22 +566,21 @@ def test_partieller_unique_index_wird_nicht_als_voller_vertrag_akzeptiert(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "episodes-partial-index.sqlite3"
-    store = EpisodeStore(path)
-    store.close()
+    _legacy_episodes(path)
     connection = sqlite3.connect(path)
     connection.execute("DROP INDEX idx_episodes_digest")
     connection.execute(
         "CREATE UNIQUE INDEX idx_episodes_digest ON episodes(digest) "
         "WHERE state = 'pending'"
     )
-    connection.execute("PRAGMA user_version = 0")
+    connection.execute("PRAGMA user_version = 1")
     connection.commit()
     connection.close()
 
-    with pytest.raises(IncompatibleLegacySchema):
+    with pytest.raises(MigrationError):
         EpisodeStore(path)
 
-    assert _version(path) == 0
+    assert _version(path) == 1
 
 
 def test_unbekannte_pflichtspalte_im_legacy_schema_wird_abgewiesen(

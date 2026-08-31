@@ -177,6 +177,22 @@ def test_herkunft_zeigt_auf_die_datei(store: EpisodeStore, vault, tmp_path) -> N
 
     assert episode.provenance.source_ref == "vault:10 Projekte/Icarus/Uebersicht.md"
     assert episode.provenance.extracted_by == "icarus/ingest/obsidian"
+    assert episode.source_identity.source_type == "local_file"
+    assert episode.source_identity.native_source_id.endswith("Uebersicht.md")
+    assert episode.event_type == "document.imported"
+
+
+def test_gleicher_text_in_zwei_dateien_bleibt_getrennt(store: EpisodeStore, tmp_path) -> None:
+    vault = tmp_path / "Vault"
+    vault.mkdir()
+    (vault / "eins.md").write_text("Danke.", encoding="utf-8")
+    (vault / "zwei.md").write_text("Danke.", encoding="utf-8")
+
+    ingest_directory(store, vault, "obsidian", roots=[tmp_path])
+
+    events = store.raw_events()
+    assert len(events) == 2
+    assert len({event.source_identity.native_source_id for event in events}) == 2
 
 
 # -- Notion -----------------------------------------------------------------
@@ -238,7 +254,7 @@ def test_zweiter_lauf_nimmt_nichts_doppelt_auf(
     assert len(store.all_episodes()) == 2
 
 
-def test_geaenderte_datei_wird_neu_aufgenommen(
+def test_geaenderte_datei_aktualisiert_denselben_source_event_mit_revision(
     store: EpisodeStore, vault, tmp_path
 ) -> None:
     ingest_directory(store, vault, "obsidian", roots=[tmp_path])
@@ -249,7 +265,14 @@ def test_geaenderte_datei_wird_neu_aufgenommen(
     zweiter = ingest_directory(store, vault, "obsidian", roots=[tmp_path])
 
     assert zweiter.recorded == 1
-    assert len(store.all_episodes()) == 3  # die alte Fassung bleibt erhalten
+    assert len(store.all_episodes()) == 2
+    event = next(e for e in store.all_episodes() if e.title == "Uebersicht")
+    assert event.revision == 2
+    assert [revision.body for revision in store.revisions(event.id)] == [
+        "Icarus soll ein Gedächtnis mit Provenienz bekommen.\n"
+        "Verantwortlich ist [[Dr. Meier]], zweiter Kontakt [[Frau Schulz]].",
+        "Doch ganz anders.",
+    ]
 
 
 def test_bericht_trennt_neu_von_bekannt(store: EpisodeStore, vault, tmp_path) -> None:

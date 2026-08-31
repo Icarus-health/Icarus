@@ -1,6 +1,6 @@
 # Versionierte SQLite-Migrationen
 
-Stand: 2026-08-30. Verbindlich für die von `sidecar/icarus_memory` verwalteten
+Stand: 2026-08-31. Verbindlich für die von `sidecar/icarus_memory` verwalteten
 SQLite-Dateien.
 
 ## Vertrag
@@ -53,7 +53,7 @@ führt einen inzwischen abgeschlossenen Schritt nicht ein zweites Mal aus.
 | Datei | Store | Tabellen | Persistenzbesonderheit |
 | --- | --- | --- | --- |
 | `self-model.sqlite3` | `SqliteBackend` | `assertions` | vollständige Assertion als JSON; zwei Append-only-/Redaction-Trigger |
-| `episodes.sqlite3` | `EpisodeStore` | `episodes` | vollständige Episode als JSON; Digest ist eindeutig |
+| `episodes.sqlite3` | `EpisodeStore` | `episodes`, `episode_revisions` | vollständige Episode als JSON; Schema v2: Quellidentität ist eindeutig, Digest ist Inhaltsmerkmal und Revisionen erhalten Source-Updates |
 | `tasks.sqlite3` | `TaskStore` | `tasks` | vollständige Task als JSON; bekanntes Legacy-Schema ohne `project_id` |
 | `workspace.sqlite3` | `WorkspaceStore` | `projects`, `notes` | vollständige Project-/Note-Dokumente als JSON |
 | `proposals.sqlite3` | `ProposalStore` | `proposals` | vollständiger Vorschlag samt Evidence als JSON |
